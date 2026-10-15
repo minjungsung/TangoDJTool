@@ -50,6 +50,7 @@ const pairs = {
   'Open on YouTube': ['YouTube에서 열기', 'Abrir en YouTube'], 'Replace video link': ['영상 링크 교체', 'Cambiar enlace'], 'Retry video': ['영상 다시 재생', 'Reintentar video'], 'Skip unavailable video': ['재생 불가 영상 건너뛰기', 'Saltar video no disponible'],
   'YouTube video unavailable': ['YouTube 영상을 재생할 수 없습니다', 'Video de YouTube no disponible'],
   'This video is private, removed, or unavailable in your region.': ['비공개·삭제된 영상이거나 현재 지역에서 볼 수 없습니다.', 'Este video es privado, fue eliminado o no está disponible en tu región.'],
+  'YouTube blocked embedded playback. This may be a video restriction or a website origin issue.': ['YouTube가 웹사이트 내 재생을 차단했습니다. 영상 제한 또는 사이트 주소 문제일 수 있습니다.', 'YouTube bloqueó la reproducción integrada. Puede ser una restricción del video o un problema con el origen del sitio.'],
   'The uploader does not allow playback on other websites.': ['업로더가 다른 웹사이트에서의 재생을 허용하지 않습니다.', 'El autor no permite reproducir este video en otros sitios.'],
   'YouTube could not identify this website. Try opening the app normally and allow its referrer.': ['YouTube가 사이트를 확인하지 못했습니다. 앱을 일반 브라우저에서 열고 리퍼러 차단 설정을 확인하세요.', 'YouTube no pudo identificar este sitio. Abre la app en el navegador y permite el encabezado de referencia.'],
   'YouTube playback failed. Retry, replace the link, or open the video on YouTube.': ['YouTube 재생에 실패했습니다. 다시 재생하거나 링크를 바꾸거나 YouTube에서 열어보세요.', 'Falló la reproducción. Reintenta, cambia el enlace o abre el video en YouTube.'],

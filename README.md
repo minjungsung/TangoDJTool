@@ -91,10 +91,16 @@ A save indicator reports pending, successful, and failed saves. **Request persis
 
 ## YouTube playback recovery
 
-The embedded player starts with an explicit video ID and origin, with a referrer policy that identifies the site. The app displays YouTube's error code and appropriate recovery actions: retry, open on YouTube, replace the URL, attach a local recording, or skip to the next queue entry. Error 100 indicates an unavailable video, 101/150 indicates blocked embedding, and 153 indicates missing site identification. A video's oEmbed title being available does not guarantee embedded playback. Local audio is the reliable playback option when the provider blocks embeds.
+The embedded player starts with an explicit video ID and origin, with a referrer policy that identifies the site. The app displays YouTube's error code and appropriate recovery actions: retry, open on YouTube, replace the URL, attach a local recording, or skip to the next queue entry. Error 100 indicates an unavailable video, 101/150 indicates blocked embedded playback (video restrictions or an origin issue), and 153 indicates missing site identification. A video's oEmbed title being available does not guarantee embedded playback. Local audio is the reliable playback option when the provider blocks embeds.
 
 ## Everyday workspace
 
 The main screen opens directly onto the library, set builder, and player. The toolbar provides **Example sets**, **User guide**, **Settings**, **Import set**, and **Export set**. Examples and help are available in dialogs and do not occupy the working area. Settings contains the language selector and detailed browser storage controls. Successful action messages disappear automatically; errors remain visible.
 
 Adding an example imports six editable tandas and their cortinas. Normal reloads restore your edits, queue, and preferences without playing audio or adding removed groups again. The legacy `?practice=1` link imports the example once and removes that query parameter from the URL. Use the normal site URL for everyday work.
+
+### Local YouTube origin
+
+Use `http://localhost` with the port printed by Vite for local development. In a direct comparison, the same embeddable video returned `UNPLAYABLE` / error 150 at the numeric loopback origin `127.0.0.1`, while `localhost` returned `OK` and progressed through playback. Error 150 therefore cannot be attributed only to the uploader.
+
+Numeric loopback visits transfer the saved workspace, audio blobs, and preferences to the corresponding `localhost` origin before redirecting. The transfer verifies the exact message origin and sending frame; old-origin data remains intact. If storage transfer fails, the original workspace remains accessible for backup. Use a normal HTTPS hostname in production.

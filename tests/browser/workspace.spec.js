@@ -211,7 +211,7 @@ test('YouTube errors expose recovery and a replacement link is saved', async ({ 
   await page.locator('#open-examples').click();
   await page.locator('#real-sample-play').click();
   await expect(page.locator('#youtube-error')).toBeVisible();
-  await expect(page.locator('#youtube-error-message')).toContainText('does not allow');
+  await expect(page.locator('#youtube-error-message')).toContainText('blocked embedded playback');
   await expect(page.locator('#youtube-open')).toHaveAttribute('href', /c9UaO1KQwpI/);
   await page.locator('#youtube-replace').click();
   await page.locator('[name="videoUrl"]').fill('https://youtu.be/abcdefghijk');
@@ -220,4 +220,23 @@ test('YouTube errors expose recovery and a replacement link is saved', async ({ 
   await page.goto('/');
   await page.locator('[data-action="edit"][data-id="real-tango-1"]').click();
   await expect(page.locator('[name="videoUrl"]')).toHaveValue('https://www.youtube.com/watch?v=abcdefghijk');
+});
+test('numeric loopback workspace migrates audio and preferences to localhost', async ({ page, baseURL }) => {
+  await page.goto('/');
+  const numericURL = baseURL.replace('localhost', '127.0.0.1');
+  // Populate the old origin directly, as an existing installation would have done.
+  await page.route(numericURL + '/legacy', route => route.fulfill({ contentType: 'text/html', body: '<html><body>Legacy workspace</body></html>' }));
+  await page.goto(numericURL + '/legacy');
+  await page.evaluate(async () => {
+    const storage = await import('/src/storage.js');
+    await storage.saveFile('legacy-track', new Blob(['preserved audio'], { type: 'audio/wav' }));
+    await storage.saveState({ tracks: [{ id: 'legacy-track', source: 'local', title: 'My tango' }], groups: [] });
+    localStorage.setItem('studio-language', 'es');
+  });
+  await page.goto(numericURL + '/');
+  await page.waitForURL(baseURL + '/');
+  await expect(page.locator('#library-count')).toHaveText('1');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es');
+  await expect(page.locator('.missing')).toHaveCount(0);
+  expect(await page.evaluate(async () => (await (await import('/src/storage.js')).getFile('legacy-track')).text())).toBe('preserved audio');
 });

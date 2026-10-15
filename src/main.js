@@ -92,7 +92,7 @@ const player = new Player((position, duration) => {
   if (limit && position >= limit && !timedEnd) { timedEnd = true; player.stop(); if ($('#auto-next').checked) void next(); else notify('Cortina finished. Press Next to continue.'); }
 }, () => { if ($('#auto-next').checked) void next(); }, error => {
   if (error?.type !== 'youtube') { notify(error, true); return; }
-  const reason = error.code === 100 ? 'This video is private, removed, or unavailable in your region.' : [101,150].includes(error.code) ? 'The uploader does not allow playback on other websites.' : error.code === 153 ? 'YouTube could not identify this website. Try opening the app normally and allow its referrer.' : 'YouTube playback failed. Retry, replace the link, or open the video on YouTube.';
+  const reason = error.code === 100 ? 'This video is private, removed, or unavailable in your region.' : [101,150].includes(error.code) ? 'YouTube blocked embedded playback. This may be a video restriction or a website origin issue.' : error.code === 153 ? 'YouTube could not identify this website. Try opening the app normally and allow its referrer.' : 'YouTube playback failed. Retry, replace the link, or open the video on YouTube.';
   $('#youtube-error').hidden = false; $('#youtube-error-message').textContent = t(reason) + ` (${error.code})`;
   $('#youtube-open').href = `https://www.youtube.com/watch?v=${error.track.videoId}`;
   notify(reason, true);
