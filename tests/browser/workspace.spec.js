@@ -44,6 +44,68 @@ test('local recordings persist, support editing, analysis, set playback and expo
   await expect(page.locator('.group li')).toHaveCount(2);
   expect(errors).toEqual([]);
 });
+
+test('an exported mixed set transfers to another browser with cues, holds and local-file recovery', async ({ page, browser }) => {
+  const downloadSet = async target => {
+    const pending = target.waitForEvent('download'); await target.locator('#export-set').click();
+    const artifact = await pending, stream = await artifact.createReadStream(), chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    return Buffer.concat(chunks);
+  };
+  await page.goto('/?practice=1');
+  await page.locator('#file-input').setInputFiles({ name: 'transfer-tango.wav', mimeType: 'audio/wav', buffer: wav() });
+  await expect(page.locator('#library-count')).toHaveText('29');
+  await page.locator('#add-tanda').click();
+  await page.getByRole('button', { name: 'Add transfer-tango to selected group', exact: true }).click();
+  await page.locator('[data-cortina-start]').first().fill('35'); await page.locator('[data-cortina-start]').first().dispatchEvent('change');
+  await page.locator('[data-cortina-end]').first().fill('50'); await page.locator('[data-cortina-end]').first().dispatchEvent('change');
+  await page.locator('[data-cortina-hold]').first().check();
+  await page.locator('[data-group-action="track-down"][data-id="real-group-tango"][data-index="0"]').click();
+  const exported = await downloadSet(page), original = JSON.parse(exported);
+  expect(original.groups[0].trackIds.slice(0, 2)).toEqual(['real-tango-2', 'real-tango-1']);
+  expect(original.groups[1]).toMatchObject({ startSeconds: 35, limitSeconds: 15, holdAfter: true });
+  const context = await browser.newContext(), other = await context.newPage();
+  try {
+    await other.goto('/'); await expect(other.locator('#library-count')).toHaveText('0');
+    other.on('dialog', dialog => dialog.accept());
+    await other.locator('#set-input').setInputFiles({ name: 'exported-set.json', mimeType: 'application/json', buffer: exported });
+    await expect(other.locator('#library-count')).toHaveText('29'); await expect(other.locator('.group')).toHaveCount(13);
+    await expect(other.locator('[data-cortina-start]').first()).toHaveValue('35');
+    await expect(other.locator('[data-cortina-end]').first()).toHaveValue('50');
+    await expect(other.locator('[data-cortina-hold]').first()).toBeChecked();
+    await expect(other.locator('.missing')).toHaveCount(1);
+    expect(JSON.parse(await downloadSet(other))).toEqual(original);
+    const local = original.tracks.find(track => track.source === 'local');
+    await other.locator(`[data-action="relink"][data-id="${local.id}"]`).click();
+    await other.locator('#relink-input').setInputFiles({ name: 'transfer-tango.wav', mimeType: 'audio/wav', buffer: wav() });
+    await expect(other.locator('.missing')).toHaveCount(0);
+    await other.locator(`[data-action="play"][data-id="${local.id}"]`).click();
+    await expect(other.locator('#playing-title')).toHaveText('transfer-tango');
+    await expect(other.locator('#position')).toHaveText(/^0:0[1-7] \/ 0:08$/);
+    await expect(other.locator('#save-status')).toHaveText('Saved in this browser');
+    await other.reload(); await expect(other.locator('.missing')).toHaveCount(0);
+    await expect(other.locator('[data-cortina-start]').first()).toHaveValue('35');
+    await expect(other.locator('[data-cortina-hold]').first()).toBeChecked();
+    await expect(page.locator('#library-count')).toHaveText('29');
+  } finally { await context.close(); }
+});
+
+test('canceling or rejecting a set import preserves the current library and saved audio', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'kept-tango.wav', mimeType: 'audio/wav', buffer: wav() });
+  await expect(page.locator('#library-count')).toHaveText('1');
+  await page.locator('#add-tanda').click(); await page.locator('[data-action="add"]').click();
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  page.on('dialog', dialog => dialog.dismiss());
+  await page.locator('#set-input').setInputFiles({ name: 'replacement.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ version: 1, tracks: [], groups: [] })) });
+  await expect(page.locator('#library-count')).toHaveText('1');
+  await page.locator('#set-input').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{ invalid json') });
+  await expect(page.locator('#notice')).toContainText('Import failed');
+  await expect(page.locator('.group li')).toHaveCount(1);
+  await page.reload(); await expect(page.locator('.missing')).toHaveCount(0);
+  await page.locator('[data-action="play"]').click(); await expect(page.locator('#playing-title')).toHaveText('kept-tango');
+  await expect(page.locator('#position')).toHaveText(/^0:0[1-7] \/ 0:08$/);
+});
 test('YouTube import and missing-file recovery work without external services', async ({ page }) => {
   await page.route('https://www.youtube.com/oembed?**', route => route.fulfill({ json: { title: 'Tango video', author_name: 'Test channel' } }));
   await page.goto('/');

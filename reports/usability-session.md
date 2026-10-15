@@ -61,6 +61,10 @@ All sessions completed. The baseline and revised DJ session each reached the fin
 
 The [completed snapshot](snapshots/2026-10-15T07-59-44Z/README.md) preserves reports and source provenance. The [earlier snapshot](snapshots/2026-10-15T07-17-50Z/README.md) remains as intermediate evidence; it did not establish a completed two-hour validation.
 
+## Export/import follow-up
+
+The actual exported mixed set was imported into an independent browser context. All 29 recordings, 13 groups, reordered recording references, a 35–50 second cortina interval, and its hold setting were preserved. Re-export before relinking matched the original JSON exactly. Local audio correctly required relinking; after relinking, playback advanced and reload retained the file and cue settings. Canceling a replacement import and rejecting malformed JSON both preserved the existing library, group, and playable stored audio. Five related browser tests passed in 5.9 seconds, including two new regressions. Export includes library metadata and group structure, not audio blobs, language/volume preferences, or the live queue/playhead.
+
 ## Practical recommendation
 
 The current workflow supports personal preparation, teaching/practice, small milongas, and announcement breaks with held cortinas. Live events benefit from prepared local recordings. Independent headphone cueing and offline cold startup remain the most useful next additions for larger-event operation. YouTube loading and embed restrictions remain provider-dependent, and pending browser saves need time to commit before reload. No physical listening, audience-response, or venue-audio validation is claimed.
