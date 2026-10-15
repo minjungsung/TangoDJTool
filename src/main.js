@@ -600,6 +600,10 @@ renderProgress();
 try {
   const saved = await loadState(); if (saved) { revision = saved.revision || 0; state = validateSet({ version: 1, ...saved }); selected = saved.selected; loadedSignature = typeof saved.loadedSignature === 'string' ? saved.loadedSignature : null; resumeIndex = Number.isInteger(saved.queueIndex) && saved.queueIndex >= 0 ? saved.queueIndex : 0; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; }
   const migrated = removeOldExamples(state); state = migrated.state;
+  for (const group of state.groups) if (group.samplePack === REAL_SAMPLE_PACK && group.kind === 'cortina') {
+    const defaults = realGroups().find(item => item.id === group.id);
+    if (defaults && [defaults.name + ' · 20-second cortina', defaults.name + ' · Closing cortina'].includes(group.name)) group.name = defaults.name;
+  }
   for (const track of migrated.removed) if (track.source === 'local') await deleteFile(track.id);
   queue = savedQueue.filter(item => state.tracks.some(t => t.id === item.trackId)).map(item => ({ ...item, kind: item.kind || state.groups.find(group => group.id === item.groupId)?.kind, track: structuredClone(state.tracks.find(t => t.id === item.trackId)) }));
   if (saved) { queueIndex = -1; $('#queue-resume').hidden = !queue.length; }

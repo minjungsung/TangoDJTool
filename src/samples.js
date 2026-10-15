@@ -42,17 +42,17 @@ realTracks.push(
 export function realGroups() {
   return [
     ['tango', 'tanda', '01 · Troilo / Fiorentino · Tango · 1941', ['tango-1', 'tango-2', 'tango-3', 'tango-4']],
-    ['cortina-1', 'cortina', 'L-O-V-E · 20-second cortina', ['cortina-1']],
+    ['cortina-1', 'cortina', 'L-O-V-E', ['cortina-1']],
     ['canaro', 'tanda', '02 · Canaro / Maida · Lyrical tango · 1935–1937', ['canaro-1', 'canaro-2', 'canaro-3', 'canaro-4']],
-    ['cortina-2', 'cortina', 'Hit the Road Jack · 20-second cortina', ['cortina-2']],
+    ['cortina-2', 'cortina', 'Hit the Road Jack', ['cortina-2']],
     ['vals', 'tanda', '03 · Canaro / Maida · Vals · 1936–1937', ['vals-1', 'vals-2', 'vals-3']],
-    ['cortina-3', 'cortina', 'Sway · 20-second cortina', ['cortina-3']],
+    ['cortina-3', 'cortina', 'Sway', ['cortina-3']],
     ['instrumental', 'tanda', '04 · Troilo · Instrumental tango · 1941', ['instrumental-1', 'instrumental-2', 'instrumental-3', 'instrumental-4']],
-    ['cortina-4', 'cortina', 'Fly Me to the Moon · 20-second cortina', ['cortina-4']],
+    ['cortina-4', 'cortina', 'Fly Me to the Moon', ['cortina-4']],
     ['rhythmic', 'tanda', '05 · Canaro / Maida · Rhythmic tango · 1937–1938', ['rhythmic-1', 'rhythmic-2', 'rhythmic-3', 'rhythmic-4']],
-    ['cortina-5', 'cortina', 'The Girl from Ipanema · 20-second cortina', ['cortina-5']],
+    ['cortina-5', 'cortina', 'The Girl from Ipanema', ['cortina-5']],
     ['milonga', 'tanda', '06 · Canaro / Maida · Milonga · 1935–1936', ['milonga-1', 'milonga-2', 'milonga-3']],
-    ['cortina-6', 'cortina', 'Stand By Me · Closing cortina', ['cortina-6']],
+    ['cortina-6', 'cortina', 'Stand By Me', ['cortina-6']],
   ].map(([key, kind, name, ids]) => ({ id: `real-group-${key}`, kind, name, trackIds: ids.map(id => `real-${id}`), samplePack: REAL_SAMPLE_PACK,
     ...(kind === 'cortina' ? { limitSeconds: 20 } : {}) }));
 }
