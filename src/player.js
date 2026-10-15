@@ -4,12 +4,17 @@ export class Player {
     this.onUpdate = onUpdate; this.onError = onError; this.volume = 0.85; this.token = 0; this.urls = new Map();
     this.audio.addEventListener('timeupdate', () => onUpdate(this.audio.currentTime, this.audio.duration));
     this.audio.addEventListener('ended', onEnded);
+    for (const event of ['play','pause','ended']) this.audio.addEventListener(event, () => this.onPlaybackState?.());
     this.audio.addEventListener('error', () => onError('This audio format could not be played. Try MP3, WAV, or a supported AAC file.'));
     this.preview.addEventListener('error', () => onError('Preview playback failed.'));
     this.timer = setInterval(() => {
-      if (this.track?.source === 'youtube' && this.youtube?.getCurrentTime) onUpdate(this.youtube.getCurrentTime(), this.youtube.getDuration());
+      if (this.track?.source === 'youtube' && this.youtube?.getCurrentTime && this.matchesVideo()) onUpdate(this.youtube.getCurrentTime(), this.youtube.getDuration());
     }, 500);
     this.onEnded = onEnded; this.youtubeArmed = false;
+  }
+  matchesVideo() {
+    if (!this.youtube?.getVideoUrl) return true;
+    try { return new URL(this.youtube.getVideoUrl()).searchParams.get('v') === this.track?.videoId; } catch { return false; }
   }
   async context() {
     if (!this.ctx) {
@@ -43,6 +48,7 @@ export class Player {
           onStateChange: event => {
             if (this.track?.source !== 'youtube') return;
             if (this.youtube?.getVideoUrl) { try { if (new URL(this.youtube.getVideoUrl()).searchParams.get('v') !== this.track.videoId) return; } catch { return; } }
+            this.onPlaybackState?.();
             if (event.data === 1) this.youtubeArmed = true;
             if (event.data === 0 && this.youtubeArmed && (!this.youtube?.getPlayerState || this.youtube.getPlayerState() === 0)) { this.youtubeArmed = false; this.onEnded(); }
           },

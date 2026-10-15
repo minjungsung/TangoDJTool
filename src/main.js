@@ -5,19 +5,21 @@ import { saveState, loadState, saveFile, getFile, deleteFile } from './storage.j
 import { Player } from './player.js';
 import { REAL_SAMPLE_PACK, realTracks, realGroups, removeOldExamples } from './samples.js';
 import { guideMarkup } from './guide.js';
+import { groupDuration, queueSignature, locateInQueue } from './workspace.js';
 import { t, startI18n, setLanguage, getLanguage } from './i18n.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const time = seconds => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '—';
 let state = { tracks: [], groups: [] }, selected = null, queue = [], queueIndex = -1, current = null, busy = false;
-let playRequest = 0, timedEnd = false;
+let playRequest = 0, timedEnd = false, loadedSignature = null, resumeIndex = 0;
+let undoGroups = null, transitioning = false;
 const files = new Map();
 let saveFailed = false, savedQueue = [];
 let settings = {};
 try { settings = JSON.parse(localStorage.getItem('studio-settings') || '{}'); } catch {}
 let persistence = Promise.resolve();
 function persist() {
-  const snapshot = structuredClone({ ...state, queue: queue.map(item => ({ trackId: item.track.id, groupId: item.groupId, groupName: item.groupName, limitSeconds: item.limitSeconds })), queueIndex, selected });
+  const snapshot = structuredClone({ ...state, queue: queue.map(item => ({ trackId: item.track.id, groupId: item.groupId, groupName: item.groupName, limitSeconds: item.limitSeconds })), queueIndex: queueIndex >= 0 ? queueIndex : resumeIndex, selected });
   $('#save-status').textContent = t('Saving…');
   persistence = persistence.then(() => saveState(snapshot)).then(() => { saveFailed = false; $('#save-status').textContent = t('Saved in this browser'); }).catch(error => { saveFailed = true; $('#save-status').textContent = t('Save failed — export a backup'); notify(`Could not save your library: ${error.message}`, true); });
   return persistence;
@@ -38,7 +40,7 @@ function notify(message, error = false) {
   </aside>
   <main>
     <header class="workspace-header"><div class="workspace-title"><h1>DJ workspace</h1><span id="save-status" role="status">Saved in this browser</span></div><div class="header-actions"><button id="open-examples">Example sets</button><button id="open-guide">User guide</button><button id="open-settings">Settings</button><button id="import-set">Import set</button><button id="export-set">Export set ↗</button></div></header>
-    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <div id="notice" role="status" aria-live="polite" hidden></div><div id="undo-bar" hidden><span>Set changed</span><button id="undo-set">Undo last set edit</button></div>
     <div class="workspace">
       <section id="library" class="panel library">
         <div class="section-head"><div><div class="eyebrow">01 / COLLECTION</div><h2>Music library <span id="library-count">0</span></h2></div><button id="add-files" class="primary">+ Local files</button></div>
@@ -52,22 +54,22 @@ function notify(message, error = false) {
       <section id="set" class="panel set-panel">
         <div class="section-head"><div><div class="eyebrow">02 / THE FLOW</div><h2>Set builder</h2></div><span id="set-duration" class="badge">0:00</span></div>
         <div class="builder-actions"><button id="add-tanda">+ Tanda</button><button id="add-cortina">+ Cortina</button></div>
-        <p class="hint">Select a group, then use + on a recording. Drag recordings into a group to add them.</p>
+        <p id="selected-group" class="selection-summary"></p><p class="hint">Select a group, then use + on a recording. Drag recordings into a group to add them.</p>
         <div id="groups"></div>
         <div id="empty-set" class="empty"><span>▤</span><h3>Give your set a shape</h3><p>Create a tanda, choose its recordings,<br>then add a cortina between groups.</p></div>
-        <button id="start-set" class="primary wide">▶ Load & play set</button>
+        <p id="queue-stale" class="hint" hidden>Set changed. Reload the queue to apply your edits.</p><button id="start-set" class="primary wide">▶ Load & play set</button>
       </section>
     </div>
     <section id="deck" class="panel deck">
       <div class="deck-main"><div class="eyebrow">03 / LIVE DECK</div><div class="now-playing"><div class="record-art">♫</div><div><span id="playing-group" class="eyebrow">READY WHEN YOU ARE</span><h2 id="playing-title">No recording loaded</h2><p id="playing-artist">Play a track or load your prepared set.</p></div></div>
-        <div class="transport"><button id="previous" aria-label="Previous track">⏮</button><button id="play-pause" class="play-button" aria-label="Play or pause">▶ / Ⅱ</button><button id="next" aria-label="Next track">⏭</button><button id="stop" aria-label="Stop playback">■</button><span id="position">0:00 / 0:00</span></div>
+        <div class="transport"><button id="previous" aria-label="Previous track">⏮</button><button id="play-pause" class="play-button" aria-label="Play or pause">▶</button><button id="next" aria-label="Next track">⏭</button><button id="stop" aria-label="Stop playback">■</button><span id="position">0:00 / 0:00</span></div>
         <input id="seek" type="range" min="0" max="100" value="0" aria-label="Playback position">
         <div class="deck-settings"><label>Volume <input id="volume" type="range" min="0" max="100" value="85"></label><label>Fade <select id="fade"><option value="0">Off</option><option value="1">1 sec</option><option value="2" selected>2 sec</option><option value="4">4 sec</option></select></label><label><input id="normalize" type="checkbox"> Level local audio</label><label><input id="auto-next" type="checkbox" checked> Auto next</label></div>
         <p class="hint">Preview uses the same audio output as the live deck. Fades and level adjustment apply to local audio. YouTube uses its own player controls.</p>
         <div id="preview-status" class="preview-status" hidden><span></span><button id="stop-preview">Stop preview</button></div>
         <div id="youtube-wrap" hidden><div id="youtube-player"></div><div id="youtube-error" hidden><strong>YouTube video unavailable</strong><p id="youtube-error-message"></p><div class="video-recovery"><a id="youtube-open" target="_blank" rel="noopener noreferrer">Open on YouTube</a><button id="youtube-retry">Retry video</button><button id="youtube-replace">Replace video link</button><button id="youtube-local">Use my local recording</button><button id="youtube-skip">Skip unavailable video</button></div></div><p class="hint">If automatic playback is blocked, press play in the video.</p></div>
       </div>
-      <div class="queue-panel"><div class="section-head"><h3>Play queue</h3><span id="queue-count" class="badge">0</span></div><div id="queue"><p class="hint">Load a set or play a library track.</p></div></div>
+      <div class="queue-panel"><div class="section-head"><h3>Play queue</h3><span id="queue-count" class="badge">0</span></div><p id="queue-resume" class="hint" hidden>Queue restored. Press Play to resume your last recording.</p><div id="queue"><p class="hint">Load a set or play a library track.</p></div></div>
     </section>
     <footer>Made for the music between people.<span>Library & files saved locally · Export sets for backup</span></footer>
   </main>
@@ -86,10 +88,19 @@ $('#example-actions').append($('#load-real-samples'), $('#real-sample-play'));
 function closePanels() { for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close(); }
 
 const player = new Player((position, duration) => {
-  $('#position').textContent = `${time(position)} / ${time(duration)}`;
+  const track = player.track;
+  if (track?.source === 'youtube' && Number.isFinite(duration) && duration > 0) {
+    const original = state.tracks.find(t => t.id === track.id);
+    if (original && Math.abs((original.duration || 0) - duration) > 1) {
+      original.duration = duration; for (const item of queue) if (item.track.id === track.id) item.track.duration = duration;
+      void persist(); renderLibrary(); renderGroups();
+    }
+  }
+  const clipLimit = queue[queueIndex]?.limitSeconds;
+  $('#position').textContent = `${time(clipLimit ? Math.min(position, clipLimit) : position)} / ${time(clipLimit || duration)}`;
   $('#seek').value = Number.isFinite(duration) && duration > 0 ? position / duration * 100 : 0;
   const limit = queue[queueIndex]?.limitSeconds;
-  if (limit && position >= limit && !timedEnd) { timedEnd = true; player.stop(); if ($('#auto-next').checked) void next(); else notify('Cortina finished. Press Next to continue.'); }
+  if (!transitioning && limit && position >= limit && !timedEnd) { timedEnd = true; player.stop(); if ($('#auto-next').checked) void next(); else notify('Cortina finished. Press Next to continue.'); }
 }, () => { if ($('#auto-next').checked) void next(); }, error => {
   if (error?.type !== 'youtube') { notify(error, true); return; }
   const reason = error.code === 100 ? 'This video is private, removed, or unavailable in your region.' : [101,150].includes(error.code) ? 'YouTube blocked embedded playback. This may be a video restriction or a website origin issue.' : error.code === 153 ? 'YouTube could not identify this website. Try opening the app normally and allow its referrer.' : 'YouTube playback failed. Retry, replace the link, or open the video on YouTube.';
@@ -112,6 +123,7 @@ if (['0','1','2','4'].includes(settings.fade)) $('#fade').value = settings.fade;
 if (typeof settings.normalize === 'boolean') $('#normalize').checked = settings.normalize;
 if (typeof settings.autoNext === 'boolean') $('#auto-next').checked = settings.autoNext;
 player.setVolume(Number($('#volume').value) / 100, $('#normalize').checked);
+player.onPlaybackState = updateTransport;
 async function storageDetails() {
   try { const estimate = await navigator.storage?.estimate(); const persistent = await navigator.storage?.persisted(); $('#storage-details').textContent = `${t('Browser storage')}: ${Math.round((estimate?.usage || 0) / 1024 / 1024)} MB · ${getLanguage() === 'ko' ? (persistent ? '유지 허용됨' : '브라우저 기본 정책') : getLanguage() === 'es' ? (persistent ? 'persistente' : 'política del navegador') : (persistent ? 'persistent' : 'browser default')}`; } catch {}
 }
@@ -130,14 +142,18 @@ function renderLibrary() {
   $('#library-summary').textContent = `${state.tracks.length} recordings · ${time(state.tracks.reduce((s, t) => s + (t.duration || 0), 0))} known duration`;
 }
 function renderGroups() {
-  $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${g.kind.toUpperCase()}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${i === 0 ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${i === state.groups.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div><ol>${g.trackIds.map((id, j) => { const t = state.tracks.find(t => t.id === id); return `<li><span>${esc(t?.title || 'Missing track')}</span><div><button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select and use +</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(g.trackIds.reduce((sum, id) => sum + (state.tracks.find(t => t.id === id)?.duration || 0), 0))} known duration</div></article>`).join('');
+  $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${g.kind.toUpperCase()}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${i === 0 ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${i === state.groups.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div><ol>${g.trackIds.map((id, j) => { const t = state.tracks.find(t => t.id === id); return `<li><span>${esc(t?.title || 'Missing track')}</span><div><button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<label class="cortina-length">${t('Cortina length')} <input type="number" min="1" max="3600" step="1" value="${g.limitSeconds || 20}" data-cortina-length="${esc(g.id)}" aria-label="${t('Cortina length')}"> ${t('seconds')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select and use +</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
   $('#empty-set').hidden = state.groups.length > 0;
-  $('#set-duration').textContent = time(flattenSet(state.groups, state.tracks).reduce((s, item) => s + (item.track.duration || 0), 0));
+  $('#set-duration').textContent = time(state.groups.reduce((s, group) => s + groupDuration(group, state.tracks), 0));
   $('#start-set').disabled = !flattenSet(state.groups, state.tracks).length;
+  const chosen = state.groups.find(g => g.id === selected);
+  $('#selected-group').textContent = chosen ? `${t('Adding to')}: ${chosen.name}` : t('Select a tanda to add recordings');
+  $('#queue-stale').hidden = !loadedSignature || loadedSignature === queueSignature(state.groups, state.tracks);
 }
 function renderQueue() {
+  updateTransport();
   $('#queue-count').textContent = queue.length;
-  $('#queue').innerHTML = queue.length ? queue.map((item, i) => `<button class="queue-item ${i === queueIndex ? 'playing' : ''}" data-queue-index="${i}"><span>${i === queueIndex ? '▶' : String(i + 1).padStart(2, '0')}</span><div><strong>${esc(item.track.title)}</strong><small>${esc(item.groupName || item.track.artist || 'Library track')}</small></div><span>${time(item.track.duration)}</span></button>`).join('') : '<p class="hint">Load a set or play a library track.</p>';
+  $('#queue').innerHTML = queue.length ? queue.map((item, i) => `<button class="queue-item ${i === queueIndex ? 'playing' : ''}" data-queue-index="${i}"><span>${i === queueIndex ? '▶' : String(i + 1).padStart(2, '0')}</span><div><strong>${esc(item.track.title)}</strong><small>${esc(item.groupName || item.track.artist || 'Library track')}</small></div><span>${time(item.limitSeconds || item.track.duration)}</span></button>`).join('') : '<p class="hint">Load a set or play a library track.</p>';
 }
 function render() { renderLibrary(); renderGroups(); renderQueue(); }
 
@@ -223,25 +239,40 @@ async function runAnalysis(tracks) {
     notify(`${completed} tracks analyzed. BPM is an estimate; review it by ear.${errors.length ? ` ${errors.length} failed: ${errors[0]}` : ''}`, errors.length > 0);
   } finally { busy = false; $('#analyze-all').disabled = false; }
 }
+function updateTransport() {
+  const playing = player.track?.source === 'youtube' ? player.youtube?.getPlayerState?.() === 1 : !player.audio.paused;
+  $('#play-pause').textContent = transitioning ? '…' : playing ? 'Ⅱ' : '▶';
+  $('#previous').disabled = transitioning || queueIndex <= 0;
+  $('#next').disabled = transitioning || !queue.length || queueIndex >= queue.length - 1;
+  $('#stop').disabled = !current && !player.track;
+  $('#play-pause').disabled = transitioning || (!queue.length && !player.track);
+}
+function rememberSetEdit() { undoGroups = { groups: structuredClone(state.groups), selected }; $('#undo-bar').hidden = false; }
+$('#undo-set').onclick = () => {
+  if (!undoGroups) return;
+  state.groups = undoGroups.groups.map(group => ({ ...group, trackIds: group.trackIds.filter(id => state.tracks.some(track => track.id === id)) })); selected = undoGroups.selected; undoGroups = null;
+  $('#undo-bar').hidden = true; void persist(); renderGroups();
+};
 async function playIndex(index) {
   if (index < 0 || index >= queue.length) return;
-  const request = ++playRequest, item = queue[index];
+  const request = ++playRequest, item = queue[index]; transitioning = true; updateTransport();
   try {
     $('#youtube-error').hidden = true;
     if (!await player.play(item.track, files.get(item.track.id), Number($('#fade').value), $('#normalize').checked)) return;
     if (request !== playRequest) return;
-    queueIndex = index; current = item.track; timedEnd = false; void persist();
+    queueIndex = index; resumeIndex = index; current = item.track; timedEnd = false; $('#queue-resume').hidden = true; void persist();
     $('#playing-title').textContent = current.title; $('#playing-artist').textContent = [current.artist, current.singer, current.year].filter(Boolean).join(' · ') || (current.source === 'youtube' ? 'YouTube video' : 'Local recording');
     $('#playing-group').textContent = item.groupName || 'LIBRARY TRACK'; $('#preview-status').hidden = true;
     renderQueue(); markStep('play'); notify(`Playing ${current.title}`);
   } catch (error) { if (request === playRequest) notify(error.message, true); }
+  finally { if (request === playRequest) { transitioning = false; updateTransport(); } }
 }
 async function next() { if (queueIndex + 1 < queue.length) await playIndex(queueIndex + 1); else { notify('End of play queue.'); } }
 function addToGroup(id, groupId = selected) {
   const group = state.groups.find(g => g.id === groupId);
   if (!group) { notify('Create or select a tanda or cortina first.'); return; }
   if (!state.tracks.some(t => t.id === id)) return;
-  group.trackIds.push(id); selected = group.id; void persist(); renderGroups(); markStep('build');
+  rememberSetEdit(); group.trackIds.push(id); selected = group.id; void persist(); renderGroups(); markStep('build');
 }
 function editTrack(track) {
   const form = $('#metadata-form');
@@ -267,8 +298,13 @@ $('#tracks').onclick = async event => {
   const track = state.tracks.find(t => t.id === button.dataset.id); if (!track) return;
   try {
     switch (button.dataset.action) {
-      case 'play': queue = [{ track }]; queueIndex = -1; renderQueue(); await playIndex(0); break;
-      case 'preview': await player.previewTrack(track, files.get(track.id)); $('#preview-status span').textContent = `Preview: ${track.title} · same output`; $('#preview-status').hidden = false; markStep('preview'); break;
+      case 'play': {
+        const existingIndex = locateInQueue(queue, track.id, queueIndex);
+        if (existingIndex >= 0) await playIndex(existingIndex);
+        else { queue.push({ track: structuredClone(track) }); loadedSignature = null; renderQueue(); await playIndex(queue.length - 1); }
+        $('#deck').scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+      }
+      case 'preview': await player.previewTrack(track, files.get(track.id)); $('#preview-status span').textContent = `Preview: ${track.title} · same output`; $('#preview-status').hidden = false; markStep('preview'); $('#deck').scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
       case 'analyze': await runAnalysis([track]); break;
       case 'edit': editTrack(track); break;
       case 'add': addToGroup(track.id); break;
@@ -304,12 +340,13 @@ $('#metadata-form').onsubmit = event => {
   void persist(); render(); markStep('edit'); $('#metadata-dialog').close();
 };
 $('#close-metadata').onclick = () => $('#metadata-dialog').close();
-function addGroup(kind) { const group = { id: uid(), kind, name: `${kind === 'tanda' ? 'Tanda' : 'Cortina'} ${state.groups.filter(g => g.kind === kind).length + 1}`, trackIds: [] }; state.groups.push(group); selected = group.id; void persist(); renderGroups(); }
+function addGroup(kind) { rememberSetEdit(); const group = { id: uid(), kind, name: `${kind === 'tanda' ? 'Tanda' : 'Cortina'} ${state.groups.filter(g => g.kind === kind).length + 1}`, trackIds: [], ...(kind === 'cortina' ? { limitSeconds: 20 } : {}) }; state.groups.push(group); selected = group.id; void persist(); renderGroups(); }
 $('#add-tanda').onclick = () => addGroup('tanda'); $('#add-cortina').onclick = () => addGroup('cortina');
 $('#groups').onclick = event => {
   const button = event.target.closest('[data-group-action]'); if (!button) return;
   const group = state.groups.find(g => g.id === button.dataset.id); if (!group) return;
   const i = state.groups.indexOf(group), j = Number(button.dataset.index);
+  if (button.dataset.groupAction !== 'select') rememberSetEdit();
   switch (button.dataset.groupAction) {
     case 'select': selected = group.id; break;
     case 'rename': { const name = prompt(t('Group name'), group.name); if (name?.trim()) group.name = name.trim(); break; }
@@ -322,14 +359,21 @@ $('#groups').onclick = event => {
   }
   void persist(); renderGroups();
 };
+$('#groups').onchange = event => {
+  const id = event.target.dataset.cortinaLength; if (!id) return;
+  const value = Number(event.target.value), group = state.groups.find(g => g.id === id);
+  if (!group) return;
+  if (!Number.isInteger(value) || value < 1 || value > 3600) { event.target.value = group.limitSeconds || 20; return; }
+  rememberSetEdit(); group.limitSeconds = value; void persist(); renderGroups();
+};
 $('#groups').ondragover = event => { if (event.target.closest('[data-group]')) event.preventDefault(); };
 $('#groups').ondrop = event => { const group = event.target.closest('[data-group]'); if (group) { event.preventDefault(); addToGroup(event.dataTransfer.getData('text/plain'), group.dataset.group); } };
-$('#start-set').onclick = () => { queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
+$('#start-set').onclick = () => { loadedSignature = queueSignature(state.groups, state.tracks); queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
 $('#queue').onclick = event => { const item = event.target.closest('[data-queue-index]'); if (item) void playIndex(Number(item.dataset.queueIndex)); };
-$('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(0); else await player.toggle(); } catch (error) { notify(error.message, true); } };
+$('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); } catch (error) { notify(error.message, true); } };
 $('#next').onclick = next; $('#previous').onclick = () => playIndex(queueIndex - 1);
-$('#stop').onclick = () => { ++playRequest; player.stop(); notify('Playback stopped.'); };
-$('#seek').oninput = () => { const duration = current?.source === 'youtube' ? player.youtube?.getDuration() : player.audio.duration; if (Number.isFinite(duration)) player.seek(Number($('#seek').value) / 100 * duration); };
+$('#stop').onclick = () => { ++playRequest; player.stop(); transitioning = false; updateTransport(); notify('Playback stopped.'); };
+$('#seek').oninput = () => { const duration = queue[queueIndex]?.limitSeconds || (current?.source === 'youtube' ? player.youtube?.getDuration() : player.audio.duration); if (Number.isFinite(duration)) player.seek(Number($('#seek').value) / 100 * duration); };
 for (const id of ['volume', 'normalize']) $(`#${id}`).oninput = () => player.setVolume(Number($('#volume').value) / 100, $('#normalize').checked);
 $('#stop-preview').onclick = () => { player.preview.pause(); $('#preview-status').hidden = true; };
 player.preview.addEventListener('ended', () => { $('#preview-status').hidden = true; });
@@ -417,11 +461,11 @@ $('#real-sample-select').onclick = async () => { if (await loadRealSamples()) { 
 renderProgress();
 
 try {
-  const saved = await loadState(); if (saved) { state = validateSet({ version: 1, ...saved }); selected = saved.selected; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; }
+  const saved = await loadState(); if (saved) { state = validateSet({ version: 1, ...saved }); selected = saved.selected; resumeIndex = Number.isInteger(saved.queueIndex) && saved.queueIndex >= 0 ? saved.queueIndex : 0; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; }
   const migrated = removeOldExamples(state); state = migrated.state;
   for (const track of migrated.removed) if (track.source === 'local') await deleteFile(track.id);
   queue = savedQueue.filter(item => state.tracks.some(t => t.id === item.trackId)).map(item => ({ ...item, track: structuredClone(state.tracks.find(t => t.id === item.trackId)) }));
-  if (saved) await persist();
+  if (saved) { queueIndex = -1; $('#queue-resume').hidden = !queue.length; }
   for (const track of state.tracks.filter(t => t.source === 'local')) { const file = await getFile(track.id); if (file) files.set(track.id, file); }
   selected = state.groups.some(g => g.id === selected) ? selected : state.groups[0]?.id || null;
 } catch (error) { notify(`Could not restore your library: ${error.message}`, true); }

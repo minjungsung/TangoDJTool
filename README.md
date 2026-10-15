@@ -104,3 +104,13 @@ Adding an example imports six editable tandas and their cortinas. Normal reloads
 Use `http://localhost` with the port printed by Vite for local development. In a direct comparison, the same embeddable video returned `UNPLAYABLE` / error 150 at the numeric loopback origin `127.0.0.1`, while `localhost` returned `OK` and progressed through playback. Error 150 therefore cannot be attributed only to the uploader.
 
 Numeric loopback visits transfer the saved workspace, audio blobs, and preferences to the corresponding `localhost` origin before redirecting. The transfer verifies the exact message origin and sending frame; old-origin data remains intact. If storage transfer fails, the original workspace remains accessible for backup. Use a normal HTTPS hostname in production.
+
+## Playback and editing improvements
+
+- Playing a library recording selects its entry in the existing queue. A recording outside the queue is appended; the prepared queue is preserved.
+- The play button shows play or pause state, and previous/next controls are disabled while switching recordings or at queue boundaries.
+- Reload restores the last selected queue recording without autoplay. Press Play to start that recording again from its beginning.
+- The set builder shows the destination group for additions. Group and recording order edits have a one-step undo while the page is open.
+- Editing the set after loading a queue shows a reminder to reload it. The current queue stays stable during performance.
+- New cortinas default to 20 seconds. Each cortina group has an editable length, and its displayed duration follows that limit.
+- YouTube duration is recorded when the player supplies it. Missing durations remain excluded from known runtime totals.

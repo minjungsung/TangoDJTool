@@ -240,3 +240,38 @@ test('numeric loopback workspace migrates audio and preferences to localhost', a
   await expect(page.locator('.missing')).toHaveCount(0);
   expect(await page.evaluate(async () => (await (await import('/src/storage.js')).getFile('legacy-track')).text())).toBe('preserved audio');
 });
+test('DJ edits preserve queue, can be undone, and resume the last track after reload', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.YT = { Player: class {
+      constructor(id, options) { this.state = 2; window.testYouTube = this; setTimeout(() => options.events.onReady(), 0); }
+      loadVideoById(id) { this.videoId = id; this.state = 1; }
+      getCurrentTime() { return 0; } getDuration() { return 180; } getPlayerState() { return this.state; }
+      setVolume() {} pauseVideo() { this.state = 2; } playVideo() { this.state = 1; }
+    } };
+  });
+  await page.goto('/?practice=1');
+  await expect(page.locator('#set-duration')).toHaveText('2:00');
+  await page.locator('#start-set').click();
+  await expect(page.locator('#queue-count')).toHaveText('28');
+  await page.locator('[data-action="play"][data-id="real-vals-1"]').click();
+  await expect(page.locator('#playing-title')).toHaveText('Cofrecito');
+  await expect(page.locator('#queue-count')).toHaveText('28');
+  await expect(page.locator('#play-pause')).toHaveText('Ⅱ');
+  await page.locator('#play-pause').click();
+  await expect(page.locator('#play-pause')).toHaveText('▶');
+  await page.locator('#add-cortina').click();
+  await expect(page.locator('.cortina-length input').last()).toHaveValue('20');
+  await page.locator('[data-action="add"][data-id="real-cortina-1"]').click();
+  await expect(page.locator('#selected-group')).toContainText('Cortina 7');
+  await expect(page.locator('#queue-stale')).toBeVisible();
+  await page.locator('#undo-set').click();
+  await expect(page.locator('.group').last().locator('li')).toHaveCount(0);
+  await page.locator('.cortina-length input').first().fill('30');
+  await page.locator('.cortina-length input').first().dispatchEvent('change');
+  await expect(page.locator('.group[data-group="real-group-cortina-1"] .group-duration')).toContainText('0:30');
+  await page.reload();
+  await expect(page.locator('#queue-resume')).toBeVisible();
+  await page.locator('#play-pause').click();
+  await expect(page.locator('#playing-title')).toHaveText('Cofrecito');
+  await expect(page.locator('#queue-count')).toHaveText('28');
+});
