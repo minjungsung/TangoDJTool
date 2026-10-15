@@ -17,7 +17,7 @@ export function youtubeId(input) {
 export function flattenSet(groups, tracks) {
   const library = new Map(tracks.map(t => [t.id, t]));
   return groups.flatMap(group => group.trackIds.filter(id => library.has(id)).map(id => ({
-    track: library.get(id), groupId: group.id, kind: group.kind, groupName: group.name, ...(group.limitSeconds ? { limitSeconds: group.limitSeconds } : {}),
+    track: library.get(id), groupId: group.id, kind: group.kind, groupName: group.name, ...(group.limitSeconds ? { limitSeconds: group.limitSeconds } : {}), ...(group.startSeconds ? { startSeconds: group.startSeconds } : {}), ...(group.holdAfter ? { holdAfter: true } : {}),
   })));
 }
 
@@ -41,6 +41,8 @@ export function validateSet(value) {
   for (const group of value.groups) {
     if (!group || typeof group.id !== 'string' || groupIds.has(group.id) || typeof group.name !== 'string' || !['tanda', 'cortina'].includes(group.kind) || !Array.isArray(group.trackIds) || group.trackIds.some(id => !ids.has(id))) throw new Error('Invalid tanda data.');
     if (group.limitSeconds != null && (!Number.isFinite(group.limitSeconds) || group.limitSeconds <= 0 || group.limitSeconds > 3600)) throw new Error('Invalid group playback limit.');
+    if (group.startSeconds != null && (!Number.isFinite(group.startSeconds) || group.startSeconds < 0 || group.startSeconds > 86400)) throw new Error('Invalid group start position.');
+    if (group.holdAfter != null && typeof group.holdAfter !== 'boolean') throw new Error('Invalid group hold setting.');
     groupIds.add(group.id);
   }
   return { tracks: value.tracks, groups: value.groups };

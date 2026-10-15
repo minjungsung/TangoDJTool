@@ -30,7 +30,7 @@ test('local recordings persist, support editing, analysis, set playback and expo
   await expect(page.locator('#playing-title')).toHaveText('Evening tango');
   await expect(page.locator('#position')).not.toHaveText('0:00 / 0:00');
   await expect(page.locator('#queue-count')).toHaveText('2');
-  await page.getByRole('button', { name: 'Next track', exact: true }).click();
+  await page.locator('#next').click();
   await expect(page.locator('#playing-group')).toHaveText('Cortina 1');
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export set' }).click();
@@ -260,14 +260,14 @@ test('DJ edits preserve queue, can be undone, and resume the last track after re
   await page.locator('#play-pause').click();
   await expect(page.locator('#play-pause')).toHaveText('▶');
   await page.locator('#add-cortina').click();
-  await expect(page.locator('.cortina-length input').last()).toHaveValue('20');
+  await expect(page.locator('[data-cortina-end]').last()).toHaveValue('20');
   await page.locator('[data-action="add"][data-id="real-cortina-1"]').click();
   await expect(page.locator('#selected-group')).toContainText('Cortina 7');
   await expect(page.locator('#queue-stale')).toBeVisible();
   await page.locator('#undo-set').click();
   await expect(page.locator('.group').last().locator('li')).toHaveCount(0);
-  await page.locator('.cortina-length input').first().fill('30');
-  await page.locator('.cortina-length input').first().dispatchEvent('change');
+  await page.locator('[data-cortina-end]').first().fill('30');
+  await page.locator('[data-cortina-end]').first().dispatchEvent('change');
   await expect(page.locator('.group[data-group="real-group-cortina-1"] .group-duration')).toContainText('0:30');
   await page.reload();
   await expect(page.locator('#queue-resume')).toBeVisible();
@@ -311,4 +311,238 @@ test('completed cortina can be replayed without bypassing its limit', async ({ p
   expect(await page.evaluate(() => window.testYouTube.loads)).toBe(loads + 1);
   expect(await page.evaluate(() => window.testYouTube.position)).toBe(0);
   await expect(page.locator('#playing-title')).toHaveText('L-O-V-E');
+});
+
+async function simulatedDeck(page) {
+  await page.addInitScript(() => {
+    window.YT = { Player: class {
+      constructor(id, options) { this.options = options; this.state = 2; this.position = 0; this.loads = 0; window.testYouTube = this; setTimeout(() => options.events.onReady(), 0); }
+      loadVideoById(id) { this.videoId = typeof id === 'object' ? id.videoId : id; this.state = 1; this.position = typeof id === 'object' ? id.startSeconds || 0 : 0; this.loads++; this.options.events.onStateChange({ data: 1 }); }
+      getCurrentTime() { return this.position; } getDuration() { return 180; } getPlayerState() { return this.state; }
+      getVideoUrl() { return `https://www.youtube.com/watch?v=${this.videoId}`; }
+      setVolume() {} pauseVideo() { this.state = 2; } playVideo() { this.state = 1; }
+      seekTo(value) { this.position = value; }
+    } };
+  });
+}
+
+test('pause resumes while Stop rewinds and Space leaves text editing alone', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1'); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.evaluate(() => { window.testYouTube.position = 12; });
+  await page.locator('#play-pause').click(); await page.locator('#play-pause').click();
+  expect(await page.evaluate(() => window.testYouTube.position)).toBe(12);
+  await page.locator('#stop').click(); await expect(page.locator('#position')).toContainText('0:00 /');
+  await page.locator('#play-pause').click(); expect(await page.evaluate(() => window.testYouTube.position)).toBe(0);
+  await page.locator('body').click({ position: { x: 2, y: 2 } }); await page.keyboard.press('Space');
+  await expect(page.locator('#play-pause')).toHaveText('▶');
+  await page.locator('#search').fill('Troilo'); await page.keyboard.press('Space');
+  await expect(page.locator('#search')).toHaveValue('Troilo '); await expect(page.locator('#play-pause')).toHaveText('▶');
+});
+
+test('cortina seek uses its playable segment and edited queue warning survives reload', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1'); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.locator('[data-queue-index="4"]').click();
+  await page.locator('#seek').fill('50'); await page.locator('#seek').dispatchEvent('input');
+  expect(await page.evaluate(() => window.testYouTube.position)).toBe(10);
+  await expect(page.locator('#position')).toHaveText('0:10 / 0:20');
+  await page.locator('[data-cortina-end]').first().fill('30'); await page.locator('[data-cortina-end]').first().dispatchEvent('change');
+  await expect(page.locator('#queue-stale')).toBeVisible(); await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  await page.reload(); await expect(page.locator('#queue-stale')).toBeVisible();
+});
+
+test('changing the playing video stops the old source and Play loads the replacement', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1'); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.locator('[data-action="edit"][data-id="real-tango-1"]').click();
+  await page.locator('[name="videoUrl"]').fill('https://youtu.be/abcdefghijk'); await page.locator('#metadata-form button[type="submit"]').click();
+  await expect(page.locator('#play-pause')).toHaveText('▶'); await page.locator('#play-pause').click();
+  expect(await page.evaluate(() => window.testYouTube.videoId)).toBe('abcdefghijk');
+});
+
+test('importing a set clears the old deck and Undo cannot restore the previous set', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1'); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango'); await page.locator('#add-tanda').click();
+  page.on('dialog', dialog => dialog.accept());
+  const imported = { version: 1, tracks: [{ id: 'new', source: 'youtube', videoId: 'abcdefghijk', title: 'New tango' }], groups: [{ id: 'new-group', kind: 'tanda', name: 'New tanda', trackIds: ['new'] }] };
+  await page.locator('#set-input').setInputFiles({ name: 'set.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(imported)) });
+  await expect(page.locator('#playing-title')).toHaveText('No recording loaded'); await expect(page.locator('#play-pause')).toBeDisabled();
+  await expect(page.locator('#undo-bar')).toBeHidden(); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('New tango');
+});
+
+test('cortina cue starts at the saved offset, seeks within it, then enters the next tanda first recording', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1');
+  const group = page.locator('[data-group="real-group-cortina-1"]');
+  await group.locator('[data-cortina-start]').fill('35'); await group.locator('[data-cortina-start]').dispatchEvent('change');
+  await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.locator('[data-queue-index="4"]').click(); await expect(page.locator('#playing-title')).toHaveText('L-O-V-E');
+  expect(await page.evaluate(() => window.testYouTube.position)).toBe(35);
+  await page.locator('#seek').fill('50'); await page.locator('#seek').dispatchEvent('input');
+  expect(await page.evaluate(() => window.testYouTube.position)).toBe(45);
+  await expect(page.locator('#position')).toHaveText('0:10 / 0:20');
+  await page.evaluate(() => { window.testYouTube.position = 55.2; });
+  await expect(page.locator('#playing-title')).toHaveText('Poema');
+  await expect(page.locator('.queue-item.playing')).toHaveAttribute('data-queue-index', '5');
+  await page.reload(); await expect(group.locator('[data-cortina-start]')).toHaveValue('35');
+});
+
+test('local cortina cue also starts and restarts at the chosen offset', async ({ page }) => {
+  await page.goto('/'); await page.locator('#fade').selectOption('0');
+  await page.locator('#file-input').setInputFiles({ name: 'test-cortina.wav', mimeType: 'audio/wav', buffer: wav() });
+  await expect(page.locator('#tracks tr')).toHaveCount(1); await page.locator('#add-cortina').click(); await page.locator('[data-action="add"]').click();
+  await page.locator('[data-cortina-start]').fill('3'); await page.locator('[data-cortina-start]').dispatchEvent('change');
+  await page.locator('[data-cortina-end]').fill('5'); await page.locator('[data-cortina-end]').dispatchEvent('change');
+  await page.locator('#auto-next').uncheck(); await page.locator('#start-set').click();
+  await expect(page.locator('#position')).toHaveText('0:00 / 0:02'); await expect(page.locator('#notice')).toContainText('Cortina finished');
+  await page.locator('#play-pause').click(); await expect(page.locator('#position')).toHaveText('0:00 / 0:02');
+});
+
+test('DJ can hold after a cortina and explicitly start the next tanda', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1');
+  await page.locator('[data-cortina-hold]').first().check(); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.locator('[data-queue-index="4"]').click(); await expect(page.locator('#playing-title')).toHaveText('L-O-V-E');
+  await expect(page.locator('#up-next')).toContainText('Poema');
+  await page.evaluate(() => { window.testYouTube.position = 20.1; }); await expect(page.locator('#notice')).toContainText('Cortina finished');
+  await expect(page.locator('.queue-item.playing')).toHaveAttribute('data-queue-index', '4'); await page.locator('#next').click();
+  await expect(page.locator('#playing-title')).toHaveText('Poema'); await expect(page.locator('#recording-number')).toHaveText('Recording 1 / 4');
+});
+
+test('mobile library actions stay visible and floating deck controls work while preparing music', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await simulatedDeck(page); await page.goto('/?practice=1');
+  const firstPlay = page.locator('[data-action="play"]').first(); await firstPlay.scrollIntoViewIfNeeded();
+  const box = await firstPlay.boundingBox(); expect(box.x + box.width).toBeLessThanOrEqual(390);
+  await firstPlay.click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.locator('#start-set').click(); await expect(page.locator('#queue-count')).toHaveText('28');
+  await page.locator('#library').scrollIntoViewIfNeeded(); await expect(page.locator('#mini-deck')).toBeVisible();
+  await page.locator('#mini-play').click(); await expect(page.locator('#mini-play')).toHaveText('▶');
+  await page.locator('#mini-next').click(); await expect(page.locator('#playing-title')).toHaveText('Te aconsejo que me olvides');
+  await page.locator('#mini-open').click(); await expect(page.locator('#mini-deck')).toBeHidden();
+});
+
+test('older tabs cannot overwrite newer saved workspace edits', async ({ page, context }) => {
+  await page.goto('/?practice=1'); await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  const other = await context.newPage(); await other.goto('/'); await expect(other.locator('.group')).toHaveCount(12);
+  await page.locator('#add-tanda').click(); await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  await other.locator('#add-cortina').click(); await expect(other.locator('#save-status')).toHaveText('Save failed — export a backup');
+  await expect(other.locator('#notice')).toContainText('another tab');
+  await page.reload(); await expect(page.locator('.group')).toHaveCount(13);
+  await expect(page.locator('.group').last()).toContainText('Tanda 7'); await other.close();
+});
+
+test('failed workspace saves keep stored audio safe when a stale tab removes a recording', async ({ page, context }) => {
+  await page.goto('/'); await page.locator('#file-input').setInputFiles({name:'saved-tango.wav',mimeType:'audio/wav',buffer:wav()});
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser'); await expect(page.locator('#tracks tr')).toHaveCount(1);
+  const other = await context.newPage(); await other.goto('/'); await expect(other.locator('#tracks tr')).toHaveCount(1);
+  await page.locator('#add-tanda').click(); await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  other.on('dialog',d=>d.accept()); await other.locator('[data-action="delete"]').click(); await expect(other.locator('#save-status')).toHaveText('Save failed — export a backup');
+  await page.reload(); await expect(page.locator('#tracks tr')).toHaveCount(1); await expect(page.locator('.missing')).toHaveCount(0); await other.close();
+});
+
+test('YouTube initialization failure leaves the chosen recording ready to retry', async ({ page }) => {
+  await page.addInitScript(() => {
+    let calls = 0;
+    window.YT = { Player: class {
+      constructor(id, options) { if (++calls === 1) throw new Error('Connection interrupted'); this.state = 2; window.retryYouTube = this; setTimeout(() => options.events.onReady(), 0); }
+      loadVideoById(id) { this.videoId = id; this.state = 1; }
+      getCurrentTime() { return 0; } getDuration() { return 180; } getPlayerState() { return this.state; }
+      setVolume() {} pauseVideo() { this.state = 2; }
+    } };
+  });
+  await page.goto('/?practice=1'); await page.locator('#start-set').click();
+  await expect(page.locator('#notice')).toContainText('Connection interrupted'); await expect(page.locator('#play-pause')).toBeEnabled();
+  await page.locator('#play-pause').click(); await expect(page.locator('#play-pause')).toHaveText('Ⅱ');
+  expect(await page.evaluate(() => window.retryYouTube.videoId)).toBe('c9UaO1KQwpI');
+});
+
+test('upcoming queue refresh applies edits without restarting the live recording', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1'); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.evaluate(() => { window.testYouTube.position = 40; });
+  await page.locator('[data-cortina-start]').first().fill('35'); await page.locator('[data-cortina-start]').first().dispatchEvent('change');
+  await page.locator('[data-cortina-hold]').first().check();
+  const loads = await page.evaluate(() => window.testYouTube.loads);
+  await page.locator('#refresh-queue').click(); await expect(page.locator('#queue-stale')).toBeHidden();
+  expect(await page.evaluate(() => window.testYouTube.loads)).toBe(loads); expect(await page.evaluate(() => window.testYouTube.position)).toBe(40);
+  await page.locator('[data-queue-index="4"]').click(); await expect(page.locator('#playing-title')).toHaveText('L-O-V-E');
+  expect(await page.evaluate(() => window.testYouTube.position)).toBe(35);
+  await page.evaluate(() => { window.testYouTube.position = 55.1; }); await expect(page.locator('#notice')).toContainText('Cortina finished');
+  await expect(page.locator('.queue-item.playing')).toHaveAttribute('data-queue-index', '4');
+});
+
+
+test('cortina interval rejects reversed endpoints and keeps a valid segment when moving its start', async ({ page }) => {
+  await page.goto('/?practice=1');
+  const group = page.locator('[data-group="real-group-cortina-1"]');
+  await group.locator('[data-cortina-start]').fill('35'); await group.locator('[data-cortina-start]').dispatchEvent('change');
+  await expect(group.locator('[data-cortina-end]')).toHaveValue('55');
+  await group.locator('[data-cortina-end]').fill('30'); await group.locator('[data-cortina-end]').dispatchEvent('change');
+  await expect(group.locator('[data-cortina-end]')).toHaveValue('55');
+  await group.locator('[data-cortina-end]').fill('50'); await group.locator('[data-cortina-end]').dispatchEvent('change');
+  await expect(group.locator('.group-duration')).toContainText('0:15');
+});
+
+test('editing a cortina interval keeps keyboard focus and updates its endpoint without replacing controls', async ({ page }) => {
+  await page.goto('/?practice=1');
+  const start = page.locator('[data-cortina-start]').first(), end = page.locator('[data-cortina-end]').first();
+  await start.fill('35'); await page.keyboard.press('Tab'); await expect(end).toBeFocused(); await expect(end).toHaveValue('55');
+  await end.fill('60'); await page.keyboard.press('Tab');
+  await expect(page.locator('[data-group-action="cue-position"]').first()).not.toBeFocused();
+  await expect(page.locator('[data-group-action="cue-play"]').first()).toBeFocused();
+  await expect(page.locator('.group-duration').filter({hasText:'0:25'})).toHaveCount(1);
+});
+
+test('stale tab relinking does not replace newer stored audio or metadata', async ({ page, context }) => {
+  await page.goto('/'); await page.locator('#file-input').setInputFiles({name:'original-tango.wav',mimeType:'audio/wav',buffer:wav()});
+  await expect(page.locator('#tracks tr')).toHaveCount(1); await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  const id = await page.locator('#tracks tr').getAttribute('data-track');
+  const other = await context.newPage(); await other.goto('/'); await expect(other.locator('#tracks tr')).toHaveCount(1);
+  await page.locator('#add-tanda').click(); await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  // Use the storage API directly to verify the transaction cannot commit either store on conflict.
+  const result = await other.evaluate(async ({id,bytes}) => {
+    const storage = await import('/src/storage.js'), state = await storage.loadState();
+    try { await storage.replaceRecording(id,new Blob([new Uint8Array(bytes)]), {...state,tracks:[]},state.revision-1); return 'unexpected success'; }
+    catch(error){ return error.message; }
+  },{id,bytes:[1,2,3]});
+  expect(result).toContain('another tab');
+  expect(await page.evaluate(async id => (await (await import('/src/storage.js')).getFile(id)).size,id)).toBe(wav().length);
+  await page.reload(); await expect(page.locator('.track-title')).toHaveText('original-tango'); await expect(page.locator('.missing')).toHaveCount(0); await other.close();
+});
+
+test('language changes translate the live countdown and tanda position immediately', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1'); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.evaluate(() => { window.testYouTube.position = 30; }); await expect(page.locator('#remaining-time')).toHaveText('Remaining: 2:30');
+  await page.locator('#open-settings').click(); await page.locator('#language').selectOption('ko');
+  await expect(page.locator('#remaining-time')).toHaveText('남은 시간: 2:30'); await expect(page.locator('#recording-number')).toHaveText('곡 1 / 4');
+  await page.locator('#language').selectOption('es'); await expect(page.locator('#remaining-time')).toHaveText('Tiempo restante: 2:30');
+  await expect(page.locator('#recording-number')).toHaveText('Grabación 1 / 4');
+});
+
+test('small Spanish cortina controls retain readable input widths', async ({ page }) => {
+  await page.setViewportSize({width:320,height:700}); await page.goto('/?practice=1');
+  await page.locator('#open-settings').click(); await page.locator('#language').selectOption('es'); await page.locator('[data-close="settings-dialog"]').click();
+  const dimensions = await page.locator('.cortina-range').first().evaluate(el=>({client:el.clientWidth,scroll:el.scrollWidth,widths:[...el.querySelectorAll('input')].map(input=>input.getBoundingClientRect().width)}));
+  expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client); expect(Math.min(...dimensions.widths)).toBeGreaterThanOrEqual(60);
+});
+
+test('changing metadata during playback preserves the source and playhead', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1'); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.evaluate(() => { window.testYouTube.position = 40; });
+  const loads = await page.evaluate(() => window.testYouTube.loads);
+  await page.locator('[data-action="edit"][data-id="real-tango-1"]').click(); await page.locator('[name="title"]').fill('Yo soy el tango (edited)');
+  await page.locator('#metadata-form button[type="submit"]').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango (edited)');
+  expect(await page.evaluate(() => window.testYouTube.loads)).toBe(loads); expect(await page.evaluate(() => window.testYouTube.position)).toBe(40);
+});
+
+test('YouTube buffering is visible and retry preserves the current source position', async ({ page }) => {
+  await page.addInitScript(() => {
+    const realNow = Date.now; let offset = 0; Date.now = () => realNow() + offset;
+    window.advanceStallClock = () => { offset += 16000; };
+    window.YT = {Player:class {
+      constructor(id,o){this.state=2;this.position=0;window.stallPlayer=this;setTimeout(()=>o.events.onReady(),0);}
+      loadVideoById(value){this.id=typeof value==='object'?value.videoId:value;this.position=typeof value==='object'?value.startSeconds:0;this.state=1;}
+      getCurrentTime(){return this.position;}getDuration(){return 180;}getPlayerState(){return this.state;}
+      setVolume(){}pauseVideo(){this.state=2;}seekTo(position){this.position=position;}
+    }};
+  });
+  await page.goto('/?practice=1');await page.locator('#start-set').click();await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.evaluate(()=>window.stallPlayer.position=30);await expect(page.locator('#position')).toHaveText('0:30 / 3:00');
+  await page.evaluate(()=>{window.stallPlayer.state=3;window.advanceStallClock();});await expect(page.locator('#playback-stall')).toBeVisible();
+  await page.locator('#resume-video').click();expect(await page.evaluate(()=>window.stallPlayer.position)).toBe(30);await expect(page.locator('#playback-stall')).toBeHidden();
+  await page.locator('#stop').click();await page.evaluate(()=>window.advanceStallClock());await expect(page.locator('#playback-stall')).toBeHidden();
 });

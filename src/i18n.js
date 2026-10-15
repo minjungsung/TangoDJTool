@@ -1,4 +1,18 @@
 const pairs = {
+  'Playback is waiting for YouTube. Check your connection or retry from the current position.': ['YouTube 재생이 멈춰 기다리는 중입니다. 인터넷을 확인하거나 현재 지점에서 다시 시도하세요.', 'La reproducción está esperando a YouTube. Comprueba la conexión o reintenta desde la posición actual.'], 'Retry here': ['현재 지점 재시도', 'Reintentar aquí'],
+  'From': ['시작', 'Desde'], 'To': ['끝', 'Hasta'], 'Cortina end position': ['코르티나 끝 지점', 'Final de la cortina'],
+  'Update upcoming queue': ['이후 대기열 반영', 'Actualizar próximas grabaciones'],
+  'Upcoming queue updated. Current recording keeps playing.': ['이후 대기열을 반영했습니다. 현재 곡은 계속 재생됩니다.', 'Cola actualizada. La grabación actual sigue sonando.'],
+  'The current recording is no longer in the edited set. Finish it before loading another set.': ['현재 곡이 수정된 세트에 없습니다. 이 곡을 마친 뒤 다른 세트를 불러오세요.', 'La grabación actual ya no está en la sesión editada. Termina antes de cargar otra sesión.'],
+  'This workspace changed in another tab. Export your edits, then reload to use the latest saved workspace.': ['다른 탭에서 작업 공간이 변경되었습니다. 수정 내용을 내보낸 뒤 새로고침하여 최신 저장 상태를 불러오세요.', 'Este espacio cambió en otra pestaña. Exporta tus cambios y recarga para usar la última versión guardada.'],
+  'YouTube player did not become ready. Check your connection and try again.': ['YouTube 플레이어를 준비하지 못했습니다. 인터넷 연결을 확인하고 다시 시도하세요.', 'El reproductor de YouTube no está listo. Comprueba tu conexión e inténtalo de nuevo.'],
+  'Dismiss notification': ['알림 닫기', 'Cerrar notificación'],
+  'Wait before the next tanda': ['다음 탄다 시작 전 대기', 'Esperar antes de la siguiente tanda'],
+  'Remaining': ['남은 시간', 'Tiempo restante'], 'Up next': ['다음 곡', 'A continuación'], 'Recording': ['곡', 'Grabación'],
+  'Start at': ['시작 지점', 'Empezar en'], 'Cortina start position': ['코르티나 시작 지점', 'Inicio de la cortina'],
+  'Use deck position': ['현재 재생 지점 사용', 'Usar posición actual'], 'Play this cortina': ['이 코르티나 재생', 'Reproducir esta cortina'],
+  'Plays on the live output': ['주 재생 출력으로 들립니다', 'Se escucha por la salida principal'],
+  'Recording source changed. Press Play to use the updated recording.': ['음악 소스가 변경되었습니다. 재생을 눌러 변경한 곡을 들으세요.', 'La fuente cambió. Pulsa reproducir para escuchar la grabación actualizada.'],
   'YOUR WORKSPACE': ['내 작업 공간', 'TU ESPACIO'],
   'Music library': ['음악 라이브러리', 'Biblioteca musical'], 'Set builder': ['탄다 구성', 'Crear tandas'], 'Live deck': ['재생 데크', 'Reproductor'],
   'Local-first workspace': ['내 브라우저 작업 공간', 'Espacio en este navegador'],
@@ -41,7 +55,7 @@ const pairs = {
   'Load milonga playlist': ['밀롱가 목록 불러오기', 'Cargar lista de milonga'], 'Play milonga set': ['밀롱가 세트 재생', 'Reproducir sesión de milonga'], 'Hide walkthrough': ['사용 안내 접기', 'Ocultar guía'], 'Show walkthrough': ['사용 안내 펼치기', 'Mostrar guía'], 'Reset walkthrough': ['안내 진행 초기화', 'Reiniciar guía'],
   'Bring in music': ['음악 가져오기', 'Importa música'], 'Find and describe a recording': ['곡 검색과 정보 정리', 'Busca y describe una grabación'], 'Listen before adding': ['추가 전 미리 듣기', 'Escucha antes de añadir'], 'Check tempo and level': ['템포와 음량 확인', 'Revisa el tempo y el nivel'], 'Build the musical flow': ['탄다 흐름 구성', 'Construye el ambiente musical'], 'Play a set': ['세트 재생', 'Reproduce una sesión'], 'Mix local files and YouTube': ['로컬 파일과 YouTube 함께 쓰기', 'Combina archivos locales y YouTube'], 'Save and move your set': ['세트 저장과 이동', 'Guarda y traslada tu sesión'],
   'Import my tango recordings': ['내 탱고 파일 가져오기', 'Importar mis grabaciones'], 'Edit Yo soy el tango': ['Yo soy el tango 정보 수정', 'Editar Yo soy el tango'], 'Preview a local tango recording': ['로컬 탱고 곡 미리 듣기', 'Escuchar una grabación local'], 'Analyze my local recordings': ['내 로컬 곡 분석', 'Analizar mis archivos locales'], 'Select Troilo Tango tanda': ['Troilo 탱고 탄다 선택', 'Seleccionar tanda de Troilo'], 'Play real recordings': ['실제 녹음 재생', 'Reproducir grabaciones'], 'Fill an example video link': ['예제 영상 링크 입력', 'Insertar enlace de ejemplo'], 'Export my set': ['내 세트 내보내기', 'Exportar mi sesión'], '✓ Tried': ['✓ 체험 완료', '✓ Probado'], 'Library buttons': ['라이브러리 버튼', 'Botones de biblioteca'],
-  'Cortina length': ['코르티나 길이', 'Duración de cortina'], 'seconds': ['초', 'segundos'], 'Adding to': ['추가할 탄다', 'Añadir a'], 'Select a tanda to add recordings': ['곡을 추가할 탄다를 선택하세요', 'Selecciona una tanda para añadir grabaciones'], 'Set changed': ['세트 수정됨', 'Sesión modificada'], 'Undo last set edit': ['마지막 세트 수정 되돌리기', 'Deshacer último cambio'], 'Set changed. Reload the queue to apply your edits.': ['세트가 바뀌었습니다. 전체 세트 재생으로 대기열에 반영하세요.', 'La sesión cambió. Recarga la cola para aplicar los cambios.'], 'Queue restored. Press Play to resume your last recording.': ['대기열이 복원되었습니다. 재생을 누르면 마지막 곡부터 시작합니다.', 'Cola restaurada. Pulsa Reproducir para continuar desde la última grabación.'],
+  'Cortina length': ['코르티나 길이', 'Duración de cortina'], 'seconds': ['초', 'segundos'], 'Adding to': ['추가할 탄다', 'Añadir a'], 'Select a tanda to add recordings': ['곡을 추가할 탄다를 선택하세요', 'Selecciona una tanda para añadir grabaciones'], 'Set changed': ['세트 수정됨', 'Sesión modificada'], 'Undo last set edit': ['마지막 세트 수정 되돌리기', 'Deshacer último cambio'], 'Set changed. Update upcoming queue to keep the current recording, or load the whole set from the start.': ['세트가 바뀌었습니다. 이후 대기열 반영으로 현재 곡을 유지하거나 전체 세트를 처음부터 재생하세요.', 'La sesión cambió. Actualiza las próximas grabaciones o carga la sesión desde el inicio.'], 'Queue restored. Press Play to resume your last recording.': ['대기열이 복원되었습니다. 재생을 누르면 마지막 곡부터 시작합니다.', 'Cola restaurada. Pulsa Reproducir para continuar desde la última grabación.'],
   'DJ workspace': ['DJ 작업 공간', 'Espacio DJ'], 'Example sets': ['예제 세트', 'Sesiones de ejemplo'], 'User guide': ['사용 안내', 'Guía de uso'], 'Settings': ['설정', 'Ajustes'], 'Close': ['닫기', 'Cerrar'],
   'Six tandas with cortinas. Add this set to your workspace when you need a starting point.': ['코르티나가 연결된 탄다 6개입니다. 시작할 구성이 필요할 때 내 작업 공간에 추가하세요.', 'Seis tandas con cortinas. Añade esta sesión a tu espacio cuando necesites un punto de partida.'],
   'Language': ['언어', 'Idioma'], 'Browser storage': ['브라우저 저장 공간', 'Almacenamiento del navegador'], 'Request persistent storage': ['저장 공간 유지 요청', 'Solicitar almacenamiento persistente'],
@@ -86,7 +100,7 @@ const guide = {
     '미리 듣기는 로컬 곡을 주 재생 대기열을 바꾸지 않고 재생합니다. 재생 데크에서 미리 듣기 중지를 누르면 멈춥니다. 주 재생과 같은 스피커를 씁니다.',
     '직접 가져온 탱고 파일을 분석하면 BPM과 음량을 추정합니다. 수정 창에서 RMS, 피크와 보정량을 확인하세요. BPM은 귀로 확인하고 수정할 수 있습니다. 로컬 음량 보정을 켜면 분석한 보정량이 적용됩니다.',
     '탱고 → 탱고 → 발스 → 탱고 → 탱고 → 밀롱가 순서이며 각 탄다 뒤에 코르티나가 이어집니다. 탄다를 선택하고 곡의 + 추가를 누르거나 곡을 끌어 넣으세요. 화살표로 순서를 바꾸고, ✎로 이름을 고치고, ×로 제거하세요.',
-    '밀롱가 세트 재생으로 예제를 듣거나 전체 세트 재생으로 내 곡까지 모두 재생하세요. 일시정지, 이전·다음 곡, 재생 위치, 음량을 조작할 수 있습니다. 자동 재생은 곡이 끝나면 이어갑니다. 로컬 파일은 2초 페이드를 시험해볼 수 있습니다. 세트 수정 후에는 대기열을 다시 불러오세요.',
+    '밀롱가 세트 재생으로 예제를 듣거나 전체 세트 재생으로 내 곡까지 모두 재생하세요. 일시정지, 이전·다음 곡, 재생 위치, 음량을 조작할 수 있습니다. 자동 재생은 곡이 끝나면 이어갑니다. 로컬 파일은 2초 페이드를 시험해볼 수 있습니다. 이후 대기열 반영은 현재 곡을 유지합니다. 코르티나의 시작·끝 지점과 다음 탄다 전 대기를 설정할 수 있습니다.',
     '예제에는 이미 실제 YouTube 녹음이 있습니다. 다른 영상 링크를 붙여 음악 모음을 늘리세요. 라이브러리의 재생 버튼으로 듣거나 전체 세트로 로컬 곡과 함께 재생하세요. 영상에는 인터넷이 필요하고 영상 안의 재생 버튼을 눌러야 할 수 있습니다.',
     '내 작업은 이 사이트의 이 브라우저에 자동 저장됩니다. 내 세트 내보내기는 곡 정보와 탄다 순서를 JSON으로 내려받습니다. 다른 브라우저에서는 세트 가져오기로 복원할 수 있습니다. 음악 파일은 별도이며, 파일 연결 필요로 표시된 곡에 원본을 연결하세요.',
     '목록은 모두 실제 녹음입니다. 탱고 외 음악은 코르티나로만 사용합니다. 미리 듣기, 페이드, 분석에는 로컬 파일이 필요합니다. YouTube 영상은 인터넷과 임베드 허용이 필요합니다. 실제 행사 전에 각 탄다를 끝까지 들어보세요.',
@@ -98,7 +112,7 @@ const guide = {
     'La escucha previa reproduce un archivo local sin cambiar la cola principal. Pulsa Detener escucha previa en el reproductor para parar. Usa los mismos altavoces que la reproducción principal.',
     'Analiza tus grabaciones locales para estimar BPM y nivel. Abre Editar para ver RMS, pico y ganancia sugerida. Revisa el BPM de oído. Activa Ajustar nivel local para aplicar la ganancia analizada.',
     'La secuencia es Tango → Tango → Vals → Tango → Tango → Milonga, con una cortina después de cada tanda. Selecciona un grupo y pulsa + Añadir en una grabación, o arrástrala al grupo. Usa las flechas para ordenar, ✎ para renombrar y × para quitar.',
-    'Reproduce la sesión de milonga o carga la sesión completa con tus grabaciones. Puedes pausar, cambiar de pista, buscar una posición y ajustar el volumen. El avance automático continúa al terminar. Prueba el fundido de 2 segundos con archivos locales. Recarga la cola después de editar la sesión.',
+    'Reproduce la sesión de milonga o carga la sesión completa con tus grabaciones. Puedes pausar, cambiar de pista, buscar una posición y ajustar el volumen. El avance automático continúa al terminar. Prueba el fundido de 2 segundos con archivos locales. Actualiza las próximas grabaciones sin reiniciar la actual. Cada cortina tiene inicio, duración y espera opcional.',
     'La lista ya contiene grabaciones reales de YouTube. Pega otro enlace para ampliar tu colección. Pulsa Reproducir o carga la sesión completa para combinar videos con archivos locales. YouTube necesita internet y puede requerir un clic dentro del video.',
     'Tu trabajo se guarda automáticamente para este sitio en este navegador. Exportar descarga metadatos y orden de grupos en JSON. En otro navegador, Importar restaura la sesión. El audio es independiente: vincula los archivos marcados como necesarios.',
     'Todas las selecciones son grabaciones reales. La música que no es tango se usa solo en las cortinas. Escucha previa, fundidos y análisis necesitan archivos locales. Los videos necesitan internet y permiso de inserción. Escucha cada tanda completa antes de un evento.',
@@ -114,6 +128,8 @@ export function t(text) {
   if (language === 'en') return text;
   const index = language === 'ko' ? 0 : 1;
   if (pairs[text]) return pairs[text][index];
+  const status = text.match(/^(Remaining|Recording|Cortina · Start at):? (.*)$/);
+  if (status) { const label = status[1] === 'Cortina · Start at' ? `${t('Cortina')} · ${t('Start at')}` : t(status[1]); return `${label}${status[1] === 'Remaining' ? ':' : ''} ${status[2]}`; }
   const prefix = text.match(/^([▶♬⌁✎+↥]\s*)(.+)$/);
   if (prefix && pairs[prefix[2]]) return prefix[1] + pairs[prefix[2]][index];
   const dynamic = [

@@ -19,3 +19,10 @@ test('queue staleness follows order and limits while ignoring discovered duratio
   assert.equal(queueSignature(groups, tracks), before);
   groups[0].trackIds.reverse(); assert.notEqual(queueSignature(groups, tracks), before);
 });
+
+test('cue offsets affect queue freshness and duration clips at the actual recording end', () => {
+  const groups = [{ id: 'g', trackIds: ['a'], limitSeconds: 20 }], tracks = [{ id: 'a', duration: 40 }];
+  const before = queueSignature(groups, tracks); groups[0].startSeconds = 35;
+  assert.notEqual(queueSignature(groups, tracks), before); assert.equal(groupDuration(groups[0], tracks), 5);
+  assert.equal(groupDuration(groups[0], [{ id: 'a' }]), 20);
+});

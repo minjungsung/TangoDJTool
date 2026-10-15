@@ -3,12 +3,22 @@ export class Player {
     this.audio = new Audio(); this.preview = new Audio(); this.audio.preload = 'metadata';
     this.onUpdate = onUpdate; this.onError = onError; this.volume = 0.85; this.token = 0; this.urls = new Map();
     this.audio.addEventListener('timeupdate', () => { if (this.track?.source === 'local' && !this.audio.paused) onUpdate(this.audio.currentTime, this.audio.duration); });
-    this.audio.addEventListener('ended', onEnded);
+    this.audio.addEventListener('ended', () => { if (this.track?.source === 'local' && this.audio.ended) onEnded(); });
     for (const event of ['play','pause','ended']) this.audio.addEventListener(event, () => this.onPlaybackState?.());
     this.audio.addEventListener('error', () => onError('This audio format could not be played. Try MP3, WAV, or a supported AAC file.'));
     this.preview.addEventListener('error', () => onError('Preview playback failed.'));
+    this.lastProgress = Date.now(); this.lastPosition = -1; this.stallNotified = false;
     this.timer = setInterval(() => {
-      if (this.track?.source === 'youtube' && this.youtube?.getPlayerState?.() === 1 && this.youtube?.getCurrentTime && this.matchesVideo()) onUpdate(this.youtube.getCurrentTime(), this.youtube.getDuration());
+      if (this.track?.source !== 'youtube' || !this.youtube?.getCurrentTime || !this.matchesVideo()) return;
+      const position = this.youtube.getCurrentTime(), state = this.youtube.getPlayerState?.();
+      if (Math.abs(position - this.lastPosition) > 0.1 || ![1,3].includes(state)) {
+        this.lastPosition = position; this.lastProgress = Date.now();
+        if (this.stallNotified) { this.stallNotified = false; this.onStall?.(false); }
+      }
+      if ([1,3].includes(state) && Date.now() - this.lastProgress > 15000 && !this.stallNotified) {
+        this.stallNotified = true; this.onStall?.(true);
+      }
+      if (state === 1) onUpdate(position, this.youtube.getDuration());
     }, 500);
     this.onEnded = onEnded; this.youtubeArmed = false;
   }
@@ -41,23 +51,37 @@ export class Player {
         script.onerror = () => { clearTimeout(timeout); reject(new Error('YouTube could not load.')); }; document.head.append(script);
       });
     }
-    this.youtube = await new Promise(resolve => {
-      const player = new window.YT.Player('youtube-player', { videoId, width: '100%', height: '260',
-        playerVars: { playsinline: 1, origin: location.origin, rel: 0 }, events: {
-          onReady: () => resolve(player),
-          onStateChange: event => {
-            if (this.track?.source !== 'youtube') return;
-            if (this.youtube?.getVideoUrl) { try { if (new URL(this.youtube.getVideoUrl()).searchParams.get('v') !== this.track.videoId) return; } catch { return; } }
-            this.onPlaybackState?.();
-            if (event.data === 1) this.youtubeArmed = true;
-            if (event.data === 0 && this.youtubeArmed && (!this.youtube?.getPlayerState || this.youtube.getPlayerState() === 0)) { this.youtubeArmed = false; this.onEnded(); }
+    this.youtube = await new Promise((resolve, reject) => {
+      let player, settled = false;
+      const timeout = setTimeout(() => {
+        settled = true;
+        player?.destroy?.();
+        const wrap = document.querySelector('#youtube-wrap');
+        if (!document.querySelector('#youtube-player')) {
+          const target = document.createElement('div'); target.id = 'youtube-player'; wrap.prepend(target);
+        }
+        reject(new Error('YouTube player did not become ready. Check your connection and try again.'));
+      }, 15000);
+      try {
+        player = new window.YT.Player('youtube-player', { videoId, width: '100%', height: '260',
+          playerVars: { playsinline: 1, origin: location.origin, rel: 0 }, events: {
+            onReady: () => { if (settled) return; settled = true; clearTimeout(timeout); resolve(player); },
+            onStateChange: event => {
+              if (this.track?.source !== 'youtube' || !this.matchesVideo()) return;
+              this.onPlaybackState?.();
+              if (event.data === 1) this.youtubeArmed = true;
+              if (event.data === 0 && this.youtubeArmed && (!this.youtube?.getPlayerState || this.youtube.getPlayerState() === 0)) {
+                this.youtubeArmed = false; this.onEnded();
+              }
+            },
+            onError: event => { if (this.track?.source === 'youtube') this.onError({ type: 'youtube', code: event.data, track: this.track }); },
           },
-          onError: event => { if (this.track?.source === 'youtube') this.onError({ type: 'youtube', code: event.data, track: this.track }); },
-        } });
+        });
+      } catch (error) { settled = true; clearTimeout(timeout); reject(error); }
     });
     return this.youtube;
   }
-  async play(track, file, fade, normalize) {
+  async play(track, file, fade, normalize, startSeconds = 0) {
     if (track.source === 'local' && !file) throw new Error('Relink the local file before playing this track.');
     const token = ++this.token;
     if (this.track?.source === 'local' && !this.audio.paused && fade > 0 && track.source === 'local') {
@@ -68,15 +92,16 @@ export class Player {
       if (token !== this.token) return false;
     }
     this.audio.pause(); this.youtube?.pauseVideo?.(); this.preview.pause();
-    this.youtubeArmed = false; this.track = track; this.normalize = normalize;
+    this.youtubeArmed = false; this.lastProgress = Date.now(); this.lastPosition = -1; this.stallNotified = false; this.onStall?.(false); this.track = structuredClone(track); this.normalize = normalize;
     document.querySelector('#youtube-wrap').hidden = track.source !== 'youtube';
     if (track.source === 'youtube') {
       const yt = await this.loadYouTube(track.videoId); if (token !== this.token) return false;
-      yt.setVolume(this.volume * 100); yt.loadVideoById(track.videoId);
+      yt.setVolume(this.volume * 100); yt.loadVideoById(startSeconds ? { videoId: track.videoId, startSeconds } : track.videoId);
     } else {
       if (!file) throw new Error('Relink the local file before playing this track.');
       await this.context(); if (token !== this.token) return false;
       this.audio.src = this.fileUrl(track.id, file);
+      this.audio.currentTime = startSeconds;
       const target = this.targetGain(); this.gain.gain.cancelScheduledValues(this.ctx.currentTime);
       this.gain.gain.setValueAtTime(fade > 0 ? 0 : target, this.ctx.currentTime);
       if (fade > 0) this.gain.gain.linearRampToValueAtTime(target, this.ctx.currentTime + fade);
@@ -95,9 +120,9 @@ export class Player {
       if (this.youtube?.getPlayerState() === 1) this.youtube.pauseVideo(); else this.youtube?.playVideo();
     } else if (this.track) { await this.context(); if (this.audio.paused) await this.audio.play(); else this.audio.pause(); }
   }
-  seek(seconds) { if (this.track?.source === 'youtube') this.youtube?.seekTo(seconds, true); else if (Number.isFinite(this.audio.duration)) this.audio.currentTime = seconds; }
+  seek(seconds) { if (this.track?.source === 'youtube') this.youtube?.seekTo?.(seconds, true); else if (Number.isFinite(this.audio.duration)) this.audio.currentTime = seconds; }
   stop() {
-    ++this.token; this.youtubeArmed = false; this.audio.pause(); this.youtube?.pauseVideo?.(); this.preview.pause();
+    ++this.token; this.youtubeArmed = false; this.stallNotified = false; this.onStall?.(false); this.audio.pause(); this.youtube?.pauseVideo?.(); this.preview.pause();
     if (this.gain) { this.gain.gain.cancelScheduledValues(this.ctx.currentTime); this.gain.gain.setValueAtTime(this.targetGain(), this.ctx.currentTime); }
   }
   async previewTrack(track, file) {

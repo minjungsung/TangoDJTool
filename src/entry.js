@@ -63,7 +63,7 @@ if (location.hostname === 'localhost' && params.get('workspace-transfer') === '1
     document.body.replaceChildren(); const app = document.createElement('div'); app.id = 'app'; document.body.append(app);
     await import('./main.js');
     document.querySelector('#notice').hidden = false;
-    document.querySelector('#notice').textContent = 'Could not move your workspace to localhost. Export your set and keep your original audio files before opening localhost.';
+    document.querySelector('#notice-message').textContent = 'Could not move your workspace to localhost. Export your set and keep your original audio files before opening localhost.';
   }
 } else {
   await import('./main.js');

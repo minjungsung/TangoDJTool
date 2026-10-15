@@ -63,7 +63,7 @@ YouTube audio is played through the official IFrame API. Videos are not download
 
 - Local codec support varies by browser. MP3 and WAV are good starting points; parsing metadata does not guarantee that a codec can play.
 - Preview shares the main output. Separate headphone routing is not implemented; avoid previewing over a live room output.
-- Fades are sequential fade-out/fade-in transitions, not overlapping crossfades. Groups play full recordings unless they carry a playback limit, as the sample cortinas do. Cue points are not implemented.
+- Fade defaults to Off to preserve recording entrances. When enabled, fades are sequential fade-out/fade-in transitions, not overlapping crossfades. Groups play full recordings unless they carry a playback limit, as the sample cortinas do. Cortina groups support a saved start offset and playback length; general per-recording cue points are not implemented.
 - BPM uses an onset-correlation estimate over up to the first three minutes; old recordings and expressive timing can produce half/double-tempo or inaccurate estimates. Review by ear.
 - RMS and peak are measured over the decoded recording. Suggested gain targets approximately -18 dBFS RMS, caps peak at -1 dBFS, and limits gain to ±12 dB. This is not integrated LUFS normalization or a limiter.
 - Analysis decodes one full recording at a time and may use substantial memory for long files.
@@ -91,11 +91,11 @@ A save indicator reports pending, successful, and failed saves. **Request persis
 
 ## YouTube playback recovery
 
-The embedded player starts with an explicit video ID and origin, with a referrer policy that identifies the site. The app displays YouTube's error code and appropriate recovery actions: retry, open on YouTube, replace the URL, attach a local recording, or skip to the next queue entry. Error 100 indicates an unavailable video, 101/150 indicates blocked embedded playback (video restrictions or an origin issue), and 153 indicates missing site identification. A video's oEmbed title being available does not guarantee embedded playback. Local audio is the reliable playback option when the provider blocks embeds.
+The embedded player starts with an explicit video ID and origin, with a referrer policy that identifies the site. The app displays YouTube's error code and appropriate recovery actions: retry, open on YouTube, replace the URL, attach a local recording, or skip to the next queue entry. Error 100 indicates an unavailable video, 101/150 indicates blocked embedded playback (video restrictions or an origin issue), and 153 indicates missing site identification. A video's oEmbed title being available does not guarantee embedded playback. Local audio is the reliable playback option when the provider blocks embeds. If YouTube stays buffering without advancing for 15 seconds, the deck shows a waiting message and **Retry here** reloads the video at its current source position. The app does not automatically skip the music.
 
 ## Everyday workspace
 
-The main screen opens directly onto the library, set builder, and player. The toolbar provides **Example sets**, **User guide**, **Settings**, **Import set**, and **Export set**. Examples and help are available in dialogs and do not occupy the working area. Settings contains the language selector and detailed browser storage controls. Successful action messages disappear automatically; errors remain visible.
+The main screen opens directly onto the library, set builder, and player. The toolbar provides **Example sets**, **User guide**, **Settings**, **Import set**, and **Export set**. Examples and help are available in dialogs and do not occupy the working area. Settings contains the language selector and detailed browser storage controls. Successful action messages disappear automatically; notifications can also be dismissed. Errors remain visible until dismissed or replaced.
 
 Adding an example imports six editable tandas and their cortinas. Normal reloads restore your edits, queue, and preferences without playing audio or adding removed groups again. The legacy `?practice=1` link imports the example once and removes that query parameter from the URL. Use the normal site URL for everyday work.
 
@@ -112,7 +112,37 @@ Numeric loopback visits transfer the saved workspace, audio blobs, and preferenc
 - Reload restores the last selected queue recording without autoplay. Press Play to start that recording again from its beginning.
 - The set builder shows the destination group for additions. Group and recording order edits have a one-step undo while the page is open.
 - Editing the set after loading a queue shows a reminder to reload it. The current queue stays stable during performance.
-- New cortinas default to 20 seconds. Each cortina group has an editable length, and its displayed duration follows that limit.
+- New cortinas default to a 0–20 second interval. Edit the start and end together in one compact row; displayed duration follows the selected segment.
 - YouTube duration is recorded when the player supplies it. Missing durations remain excluded from known runtime totals.
 
 Further playback checks preserve the remaining queue when its current recording is deleted, stop progress callbacks from paused/inactive sources, and restart a completed cortina from the beginning when replayed. Metadata edits update the loaded queue immediately. Canceling a rename or deletion keeps the previous undo action intact.
+
+
+## DJ preparation and live operation
+
+Each cortina group has **From** and **To** (absolute seconds into the source), and **Wait before the next tanda**. Play the source from the library, seek to a suitable musical entrance, then choose the position icon on its cortina group to save that cue. The adjacent play button checks the chosen segment on the main output. These controls work with local recordings and YouTube videos. They do not provide a separate headphone output.
+
+Use **Update upcoming queue** to apply edits after the current recording while it keeps playing. **Load & play set** loads the entire edited set and restarts it from the first recording. Changes stay separate from the active queue so editing the next tanda does not alter the current transition. At a held cortina's end, press **Next** when ready to start the next tanda's first recording. Press **Play** to replay the same segment. Stop rewinds to the segment's start; pause preserves its current position.
+
+The deck shows the recording number within the tanda, remaining playable time, and the next recording. A compact deck appears when the full transport is outside the viewport, allowing playback control while browsing the library. On narrow screens, recordings display as cards with visible actions. Search accepts Spanish names with or without accents.
+
+Editing or relinking the current recording's source stops the old source. Press Play to load the updated source; metadata-only changes keep the music playing. Importing a replacement set clears the old deck and undo history.
+
+Saving uses a workspace revision to prevent an older tab from replacing newer edits saved by another tab. A conflicting tab keeps its in-memory edits available for export and reports a save failure. Export those edits if needed, then reload to adopt the latest saved workspace. A failed metadata save does not delete the stored audio.
+
+## Extended playback checks
+
+The scripts below use actual YouTube playback in isolated Chromium contexts. They do not access the everyday browser profile or upload local recordings. Provider failures and checkpoints are written to portable JSON reports.
+
+```sh
+# Keep the production preview running in another terminal before starting the soak.
+npm run preview -- --port 5180 --strictPort
+SOAK_SECONDS=7200 node scripts/soak.mjs
+
+# Exercise the current development app during a long playback session.
+npx vite build --outDir dist-review
+npm run preview -- --outDir dist-review --port 5181 --strictPort
+DJ_SECONDS=6200 node scripts/dj-session.mjs
+```
+
+`SOAK_URL` and `DJ_URL` override the default local URLs. `DJ_REPORT` selects a separate output report when running more than one session. The soak keeps one prepared set playing; the DJ session also searches, changes language, adjusts volume, and navigates during playback. Neither script evaluates the artistic quality of a recording, physical sound output, audience response, or a venue's audio setup. Deterministic browser tests separately check cue boundaries, first-recording transitions, pause versus stop, storage conflicts, and mobile controls.

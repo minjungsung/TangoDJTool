@@ -68,3 +68,9 @@ test('milonga cycle uses coherent tandas, short cortinas, and removes legacy sam
   assert.deepEqual(result.state.groups[0].trackIds, ['mine']);
   assert.equal(result.state.groups.length, 1);
 });
+
+test('cortina start positions survive export and queue construction, rejecting invalid values', () => {
+  const value = { version: 1, tracks: [{ id: 'a', source: 'youtube', title: 'Break', videoId: 'abcdefghijk' }], groups: [{ id: 'g', kind: 'cortina', name: 'Break', trackIds: ['a'], startSeconds: 35, limitSeconds: 20 }] };
+  assert.equal(flattenSet(validateSet(value).groups, value.tracks)[0].startSeconds, 35);
+  for (const startSeconds of [-1, Infinity, '35', 86401]) assert.throws(() => validateSet({ ...value, groups: [{ ...value.groups[0], startSeconds }] }));
+});
