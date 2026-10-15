@@ -511,6 +511,12 @@ test('language changes translate the live countdown and tanda position immediate
   await expect(page.locator('#remaining-time')).toHaveText('남은 시간: 2:30'); await expect(page.locator('#recording-number')).toHaveText('곡 1 / 4');
   await page.locator('#language').selectOption('es'); await expect(page.locator('#remaining-time')).toHaveText('Tiempo restante: 2:30');
   await expect(page.locator('#recording-number')).toHaveText('Grabación 1 / 4');
+  await page.locator('#language').selectOption('ko');
+  // Playback writes a fresh translated text node between language changes.
+  await page.evaluate(() => { window.testYouTube.position = 31; });
+  await expect(page.locator('#remaining-time')).toHaveText('남은 시간: 2:29');
+  await page.locator('#language').selectOption('es'); await expect(page.locator('#remaining-time')).toHaveText('Tiempo restante: 2:29');
+  await page.locator('#language').selectOption('en'); await expect(page.locator('#remaining-time')).toHaveText('Remaining: 2:29');
 });
 
 test('small Spanish cortina controls retain readable input widths', async ({ page }) => {

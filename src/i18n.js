@@ -127,6 +127,8 @@ const originals = new WeakMap(), attributes = new WeakMap();
 let observer, scheduled = false;
 export const getLanguage = () => language;
 export function t(text) {
+  const countdown = text.match(/^(?:Remaining|남은 시간|Tiempo restante): (.*)$/);
+  if (countdown) return `${language === 'ko' ? '남은 시간' : language === 'es' ? 'Tiempo restante' : 'Remaining'}: ${countdown[1]}`;
   if (language === 'en') return text;
   const index = language === 'ko' ? 0 : 1;
   if (pairs[text]) return pairs[text][index];
