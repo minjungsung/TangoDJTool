@@ -42,3 +42,10 @@ test('tempo estimation recognizes a pulse train and measures its RMS and peak', 
   assert.ok(result.peakDb + result.gainDb <= -0.9);
   assert.equal(analyzeSamples(new Float32Array(8000), sampleRate).bpm, null);
 });
+
+test('cortina playback limits survive queue construction and import validation', () => {
+  const value = { version: 1, tracks: [{ id: 'a', source: 'local', title: 'Break' }], groups: [{ id: 'g', kind: 'cortina', name: 'Break', trackIds: ['a'], limitSeconds: 20 }] };
+  assert.equal(flattenSet(value.groups, value.tracks)[0].limitSeconds, 20);
+  assert.equal(validateSet(value).groups[0].limitSeconds, 20);
+  assert.throws(() => validateSet({ ...value, groups: [{ ...value.groups[0], limitSeconds: -1 }] }));
+});

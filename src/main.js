@@ -3,13 +3,13 @@ import { parseBlob } from 'music-metadata';
 import { uid, youtubeId, flattenSet, removeTrack, validateSet } from './model.js';
 import { saveState, loadState, saveFile, getFile, deleteFile } from './storage.js';
 import { Player } from './player.js';
-import { SAMPLE_PACK, practiceTracks, practiceGroups, sampleWav, youtubeExamples } from './samples.js';
+import { SAMPLE_PACK, practiceTracks, practiceGroups, sampleWav, youtubeExamples, REAL_SAMPLE_PACK, realTracks, realGroups } from './samples.js';
 import { guideMarkup } from './guide.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const time = seconds => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '—';
 let state = { tracks: [], groups: [] }, selected = null, queue = [], queueIndex = -1, current = null, busy = false;
-let playRequest = 0;
+let playRequest = 0, timedEnd = false;
 const files = new Map();
 let persistence = Promise.resolve();
 function persist() {
@@ -75,6 +75,8 @@ const $ = selector => document.querySelector(selector);
 const player = new Player((position, duration) => {
   $('#position').textContent = `${time(position)} / ${time(duration)}`;
   $('#seek').value = Number.isFinite(duration) && duration > 0 ? position / duration * 100 : 0;
+  const limit = queue[queueIndex]?.limitSeconds;
+  if (limit && position >= limit && !timedEnd) { timedEnd = true; player.stop(); if ($('#auto-next').checked) void next(); else notify('Cortina finished. Press Next to continue.'); }
 }, () => { if ($('#auto-next').checked) void next(); }, message => notify(message, true));
 
 function renderLibrary() {
@@ -186,7 +188,7 @@ async function playIndex(index) {
   try {
     if (!await player.play(item.track, files.get(item.track.id), Number($('#fade').value), $('#normalize').checked)) return;
     if (request !== playRequest) return;
-    queueIndex = index; current = item.track;
+    queueIndex = index; current = item.track; timedEnd = false;
     $('#playing-title').textContent = current.title; $('#playing-artist').textContent = [current.artist, current.singer, current.year].filter(Boolean).join(' · ') || (current.source === 'youtube' ? 'YouTube video' : 'Local recording');
     $('#playing-group').textContent = item.groupName || 'LIBRARY TRACK'; $('#preview-status').hidden = true;
     renderQueue(); markStep('play'); notify(`Playing ${current.title}`);
@@ -387,6 +389,23 @@ $('#sample-link').onclick = () => {
   notify('Example link filled. Press Add video to import it; existing videos are not duplicated.');
 };
 $('#sample-export').onclick = () => $('#export-set').click();
+async function loadRealSamples() {
+  if (busy) { notify('Wait for the current import or analysis to finish.'); return false; }
+  for (const track of realTracks) if (!state.tracks.some(t => t.id === track.id)) state.tracks.push({ ...track });
+  for (const group of realGroups()) if (!state.groups.some(g => g.id === group.id)) state.groups.push(group);
+  selected = 'real-group-tango'; await persist(); render(); markStep('load'); markStep('youtube');
+  notify('Real recordings ready: Troilo tango, Canaro vals and milonga, with two 20-second cortinas. Press Play tango sample set. Internet is required.');
+  return true;
+}
+$('#load-real-samples').onclick = loadRealSamples;
+$('#real-sample-play').onclick = async () => {
+  if (!await loadRealSamples()) return;
+  queue = flattenSet(state.groups.filter(g => g.samplePack === REAL_SAMPLE_PACK), state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
+  queueIndex = -1; renderQueue(); $('#deck').scrollIntoView({ behavior: 'smooth', block: 'start' }); await playIndex(0);
+};
+$('#real-guide-play').onclick = () => $('#real-sample-play').click();
+$('#real-sample-edit').onclick = async () => { if (await loadRealSamples()) editTrack(state.tracks.find(t => t.id === 'real-tango-1')); };
+$('#real-sample-select').onclick = async () => { if (await loadRealSamples()) { markStep('build'); $('#set').scrollIntoView({ behavior: 'smooth', block: 'start' }); } };
 renderProgress();
 
 try {
@@ -398,5 +417,5 @@ render();
 
 // A shareable local entry point opens a populated workspace without starting audio.
 if (new URLSearchParams(location.search).get('practice') === '1') {
-  if (await loadSamples()) $('#sample-youtube').click();
+  await loadRealSamples();
 }

@@ -13,23 +13,23 @@ npm run dev
 
 Open the local URL printed by Vite. For a production build, run `npm run build`; `npm run preview` serves that build locally. The app can be hosted as a static site. Use a stable HTTPS origin when deploying, since browser storage belongs to that origin.
 
-## Learn with the practice workspace
+## Learn with real tango recordings
 
-Open `/?practice=1` on your local app to add the practice library and a YouTube example tanda without starting playback. Alternatively, click **Load practice library** in the app. Existing recordings and groups are preserved; loading the pack again does not duplicate sample entries.
+Open `/?practice=1` or click **Load real tango library** to add a real-recording sample set without starting playback. Existing music is preserved. **Play tango sample set** plays only these sample groups, keeping optional synthesized exercises out of the queue.
 
-The top-of-page walkthrough has eight hands-on steps covering file import, search and metadata, preview, analysis, tanda composition, playback, YouTube, and exporting/importing a set. Each step includes a direct action button and records what you have tried. Library actions also have visible text labels.
+| Group | Recordings |
+| --- | --- |
+| Troilo / Fiorentino · Tango · 1941 | Yo soy el tango; Te aconsejo que me olvides; El bulín de la calle Ayacucho; Toda mi vida |
+| Cortina · 20 seconds | L-O-V-E — Nat King Cole |
+| Canaro / Maida · Vals · 1936–1937 | Cofrecito; Secreto de amor; En voz baja |
+| Cortina · 20 seconds | Hit the Road Jack — Ray Charles |
+| Canaro / Maida · Milonga · 1935–1936 | Largá las penas; Milonga criolla; Silueta porteña |
 
-The pack contains 11 original synthesized WAV clips and five ready-made groups:
+These are external YouTube recordings, played through the official embed. Video titles were checked against YouTube oEmbed when the pack was added. Availability and embedding restrictions can change. No audio is downloaded. Set duration excludes unknown YouTube lengths until they are available; it is not a full runtime estimate.
 
-1. Tango: three 18-second clips.
-2. Cortina: a 6-second break.
-3. Vals: three 15-second clips.
-4. Cortina: a second 6-second break.
-5. Milonga: three 12-second clips.
+In the queue, sample cortinas stop after 20 seconds. With **Auto next** enabled, playback continues to the next tanda. Playing a cortina directly from the library plays the full video. Exported sets retain group playback limits.
 
-Click **Play practice set** to play only the local practice groups. Use **Add YouTube example tanda** to append three external Troilo/Fiorentino recording links, then **Load & play set** to load every group, including your own. YouTube links do not download audio and may not be available or embeddable.
-
-These synthesized clips demonstrate the controls and rhythmic patterns; they are not historical tango recordings or full-length performance selections. **Download practice WAV** provides a portable audio file for trying import and missing-file relinking. **Export my set** downloads the current JSON set, which excludes audio.
+The walkthrough covers importing, metadata, preview, analysis, composition, playback, YouTube, and set backups. The **Optional local audio lab** supplies 11 original synthesized WAV clips for testing features that require decoded local files: preview, fades, and BPM/level analysis. It is separate from the default real-recording set. To analyze actual tango recordings, import your local music using **+ Local files**.
 
 ## First version
 
@@ -60,7 +60,7 @@ YouTube audio is played through the official IFrame API. Videos are not download
 
 - Local codec support varies by browser. MP3 and WAV are good starting points; parsing metadata does not guarantee that a codec can play.
 - Preview shares the main output. Separate headphone routing is not implemented; avoid previewing over a live room output.
-- Fades are sequential fade-out/fade-in transitions, not overlapping crossfades. Groups currently play full recordings, including cortinas; timed cortina cuts and cue points are not implemented.
+- Fades are sequential fade-out/fade-in transitions, not overlapping crossfades. Groups play full recordings unless they carry a playback limit, as the sample cortinas do. Cue points are not implemented.
 - BPM uses an onset-correlation estimate over up to the first three minutes; old recordings and expressive timing can produce half/double-tempo or inaccurate estimates. Review by ear.
 - RMS and peak are measured over the decoded recording. Suggested gain targets approximately -18 dBFS RMS, caps peak at -1 dBFS, and limits gain to ±12 dB. This is not integrated LUFS normalization or a limiter.
 - Analysis decodes one full recording at a time and may use substantial memory for long files.

@@ -153,10 +153,30 @@ test('practice library teaches the full workflow without replacing existing musi
 });
 test('practice entry link opens populated local and YouTube examples without autoplay', async ({ page }) => {
   await page.goto('/?practice=1');
-  await expect(page.locator('#library-count')).toHaveText('14');
-  await expect(page.locator('.group')).toHaveCount(6);
+  await expect(page.locator('#library-count')).toHaveText('12');
+  await expect(page.locator('.group')).toHaveCount(5);
   await expect(page.locator('#playing-title')).toHaveText('No recording loaded');
   await page.reload();
-  await expect(page.locator('#library-count')).toHaveText('14');
-  await expect(page.locator('.group')).toHaveCount(6);
+  await expect(page.locator('#library-count')).toHaveText('12');
+  await expect(page.locator('.group')).toHaveCount(5);
+});
+test('real sample cortina advances at its 20-second limit', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.YT = { Player: class {
+      constructor(id, options) { this.position = 0; window.testYouTube = this; setTimeout(() => options.events.onReady(), 0); }
+      loadVideoById(id) { this.videoId = id; this.position = 0; }
+      getCurrentTime() { return this.position; }
+      getDuration() { return 180; }
+      setVolume() {} pauseVideo() {} playVideo() {} getPlayerState() { return 1; }
+    } };
+  });
+  await page.goto('/?practice=1');
+  await expect(page.locator('#library-count')).toHaveText('12');
+  await page.getByRole('button', { name: 'Play tango sample set', exact: true }).click();
+  await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await expect(page.locator('#queue-count')).toHaveText('12');
+  await page.locator('[data-queue-index="4"]').click();
+  await expect(page.locator('#playing-title')).toHaveText('L-O-V-E');
+  await page.evaluate(() => { window.testYouTube.position = 20.1; });
+  await expect(page.locator('#playing-title')).toHaveText('Cofrecito');
 });

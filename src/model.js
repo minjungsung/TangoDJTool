@@ -17,7 +17,7 @@ export function youtubeId(input) {
 export function flattenSet(groups, tracks) {
   const library = new Map(tracks.map(t => [t.id, t]));
   return groups.flatMap(group => group.trackIds.filter(id => library.has(id)).map(id => ({
-    track: library.get(id), groupId: group.id, kind: group.kind, groupName: group.name,
+    track: library.get(id), groupId: group.id, kind: group.kind, groupName: group.name, ...(group.limitSeconds ? { limitSeconds: group.limitSeconds } : {}),
   })));
 }
 
@@ -40,6 +40,7 @@ export function validateSet(value) {
   const groupIds = new Set();
   for (const group of value.groups) {
     if (!group || typeof group.id !== 'string' || groupIds.has(group.id) || typeof group.name !== 'string' || !['tanda', 'cortina'].includes(group.kind) || !Array.isArray(group.trackIds) || group.trackIds.some(id => !ids.has(id))) throw new Error('Invalid tanda data.');
+    if (group.limitSeconds != null && (!Number.isFinite(group.limitSeconds) || group.limitSeconds <= 0 || group.limitSeconds > 3600)) throw new Error('Invalid group playback limit.');
     groupIds.add(group.id);
   }
   return { tracks: value.tracks, groups: value.groups };

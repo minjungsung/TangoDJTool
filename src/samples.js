@@ -54,3 +54,32 @@ export const youtubeExamples = [
   { id: 'sample-youtube-tango-2', title: 'Te aconsejo que me olvides', videoId: '0YdWK9Lwc6U', artist: 'Aníbal Troilo', singer: 'Francisco Fiorentino', year: '1941', style: 'Tango' },
   { id: 'sample-youtube-tango-3', title: 'Toda mi vida', videoId: 'yPHYf_m9QdY', artist: 'Aníbal Troilo', singer: 'Francisco Fiorentino', year: '1941', style: 'Tango' },
 ].map(track => ({ ...track, source: 'youtube', duration: null, samplePack: SAMPLE_PACK }));
+
+export const REAL_SAMPLE_PACK = 'tango-recordings-v1';
+const recording = (key, title, videoId, artist, singer, year, style) => ({
+  id: `real-${key}`, title, videoId, artist, singer, year, style, source: 'youtube', duration: null, samplePack: REAL_SAMPLE_PACK,
+});
+export const realTracks = [
+  recording('tango-1', 'Yo soy el tango', 'c9UaO1KQwpI', 'Aníbal Troilo', 'Francisco Fiorentino', '1941', 'Tango'),
+  recording('tango-2', 'Te aconsejo que me olvides', '0YdWK9Lwc6U', 'Aníbal Troilo', 'Francisco Fiorentino', '1941', 'Tango'),
+  recording('tango-3', 'El bulín de la calle Ayacucho', '_B8vvMIClSQ', 'Aníbal Troilo', 'Francisco Fiorentino', '1941', 'Tango'),
+  recording('tango-4', 'Toda mi vida', 'yPHYf_m9QdY', 'Aníbal Troilo', 'Francisco Fiorentino', '1941', 'Tango'),
+  recording('cortina-1', 'L-O-V-E', 'f_HmF84G7ZY', 'Nat King Cole', '', '', 'Cortina'),
+  recording('vals-1', 'Cofrecito', '0_wproPbxNU', 'Francisco Canaro', 'Roberto Maida', '1936', 'Vals'),
+  recording('vals-2', 'Secreto de amor', 'L2IBXG66Yc4', 'Francisco Canaro', 'Roberto Maida', '1936', 'Vals'),
+  recording('vals-3', 'En voz baja', 'hj6Li8U_Alg', 'Francisco Canaro', 'Roberto Maida', '1937', 'Vals'),
+  recording('cortina-2', 'Hit the Road Jack', 'uSiHqxgE2d0', 'Ray Charles', '', '', 'Cortina'),
+  recording('milonga-1', 'Largá las penas', 'LsDn9BL526A', 'Francisco Canaro', 'Roberto Maida', '1935', 'Milonga'),
+  recording('milonga-2', 'Milonga criolla', '1n2vkEbjcy8', 'Francisco Canaro', 'Roberto Maida', '1936', 'Milonga'),
+  recording('milonga-3', 'Silueta porteña', '0UYBUEOoZs4', 'Francisco Canaro', 'Roberto Maida', '1936', 'Milonga'),
+];
+export function realGroups() {
+  return [
+    ['tango', 'tanda', 'Troilo / Fiorentino · Tango · 1941', ['tango-1', 'tango-2', 'tango-3', 'tango-4']],
+    ['cortina-1', 'cortina', 'L-O-V-E · 20-second cortina', ['cortina-1']],
+    ['vals', 'tanda', 'Canaro / Maida · Vals · 1936–1937', ['vals-1', 'vals-2', 'vals-3']],
+    ['cortina-2', 'cortina', 'Hit the Road Jack · 20-second cortina', ['cortina-2']],
+    ['milonga', 'tanda', 'Canaro / Maida · Milonga · 1935–1936', ['milonga-1', 'milonga-2', 'milonga-3']],
+  ].map(([key, kind, name, ids]) => ({ id: `real-group-${key}`, kind, name, trackIds: ids.map(id => `real-${id}`), samplePack: REAL_SAMPLE_PACK,
+    ...(kind === 'cortina' ? { limitSeconds: 20 } : {}) }));
+}
