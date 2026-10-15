@@ -40,6 +40,7 @@ th{position:relative}.panel{min-width:0}
 #notice{display:flex;align-items:flex-start;gap:12px}#notice-message{flex:1;min-width:0}#dismiss-notice{background:transparent;border:0;padding:0;min-width:32px;min-height:32px;font-size:22px;flex-shrink:0}
 
 .cortina-range{display:flex;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--border);font-size:13px;color:#d5bc96}.cortina-range label{display:flex;align-items:center;gap:5px;min-width:0}.cortina-range input{width:65px;min-width:0;min-height:34px;padding:5px 7px}.cortina-range button{padding:4px;min-width:32px;min-height:34px}.range-arrow{color:#a4b3c2}.range-unit{font-size:12px}@media(max-width:520px){.cortina-range{gap:4px;padding:10px 8px;font-size:12px}.cortina-range input{width:57px}.cortina-range button{min-width:30px}}
-.cortina-range input{flex-shrink:0}.cortina-range label{flex-shrink:0}.cortina-range button{flex-shrink:0}@media(max-width:380px){.cortina-range label>span,.cortina-range .range-unit{display:none}.cortina-range input{width:62px}.cortina-range{gap:6px}}
+.cortina-range input{flex-shrink:0}.cortina-range label{flex-shrink:0}.cortina-range button{flex-shrink:0}@media(max-width:430px){.cortina-range label>span,.cortina-range .range-unit{display:none}.cortina-range input{width:62px}.cortina-range{gap:6px}}
+.workspace-header .header-actions button{white-space:normal;overflow-wrap:anywhere;line-height:1.4}
 
 .playback-stall{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;margin-top:14px;background:#3b3025;color:#edc393;border:1px solid #79603d;border-radius:7px;font-size:14px;line-height:1.7}.playback-stall span{flex:1;min-width:180px}

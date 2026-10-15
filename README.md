@@ -123,6 +123,8 @@ Further playback checks preserve the remaining queue when its current recording 
 
 Each cortina group has **From** and **To** (absolute seconds into the source), and **Wait before the next tanda**. Play the source from the library, seek to a suitable musical entrance, then choose the position icon on its cortina group to save that cue. The adjacent play button checks the chosen segment on the main output. These controls work with local recordings and YouTube videos. They do not provide a separate headphone output.
 
+Known source lengths bound cortina interval edits. Moving a cue close to the recording's end shortens its segment to the remaining time. A saved cue beyond the known source length is rejected before replacing the current playback.
+
 Use **Update upcoming queue** to apply edits after the current recording while it keeps playing. **Load & play set** loads the entire edited set and restarts it from the first recording. Changes stay separate from the active queue so editing the next tanda does not alter the current transition. At a held cortina's end, press **Next** when ready to start the next tanda's first recording. Press **Play** to replay the same segment. Stop rewinds to the segment's start; pause preserves its current position.
 
 The deck shows the recording number within the tanda, remaining playable time, and the next recording. A compact deck appears when the full transport is outside the viewport, allowing playback control while browsing the library. On narrow screens, recordings display as cards with visible actions. Search accepts Spanish names with or without accents.
@@ -130,6 +132,19 @@ The deck shows the recording number within the tanda, remaining playable time, a
 Editing or relinking the current recording's source stops the old source. Press Play to load the updated source; metadata-only changes keep the music playing. Importing a replacement set clears the old deck and undo history.
 
 Saving uses a workspace revision to prevent an older tab from replacing newer edits saved by another tab. A conflicting tab keeps its in-memory edits available for export and reports a save failure. Export those edits if needed, then reload to adopt the latest saved workspace. A failed metadata save does not delete the stored audio.
+
+## Usage scenarios
+
+| Situation | Suggested workflow | Current limit |
+| --- | --- | --- |
+| Personal set preparation | Import recordings, edit orchestra/singer details, arrange tandas, choose cortina intervals, then export the set. | Cortina audition shares the main output. |
+| Dance lessons and practice | Prepare short groups; disable Auto next for manual pacing and use Play to repeat a finished recording. | General per-recording loop markers are not available. |
+| Small milonga | Prepare local recordings, keep the upcoming queue updated, and use the compact deck while browsing. | Browser codec support and the room's output setup need a rehearsal. |
+| Announcements or performances between tandas | Enable Wait before the next tanda on the preceding cortina, then press Next when ready. | No microphone mixer is included. |
+| Online source research | Add a YouTube link, inspect the full source, choose a cortina interval, and retry at the same position if buffering stops. | Network access and permission to embed the video are required. |
+| Moving to another device | Export/import the set and relink its local recordings on the destination browser. | JSON includes metadata and structure, not audio; automatic synchronization is unavailable. |
+
+Local playback, editing, saving, and export work without a network connection after the app is open. Starting the app from an uncached offline browser is not supported.
 
 ## Extended playback checks
 

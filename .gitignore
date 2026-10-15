@@ -27,3 +27,5 @@ dist-final-review/
 /reports/dj-session-latest.json
 /reports/dj-final-session.json
 /reports/local-session-latest.json
+/reports/dj-current-build.json
+/reports/manual-checks.jsonl

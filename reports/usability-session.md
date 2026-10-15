@@ -17,10 +17,12 @@ This session began at 05:58:02 UTC on 15 October 2026 and is scheduled to contin
 - Spanish artist searches required accents. Searches now ignore accents, while stored recording names retain their original spelling.
 - Playback notices caused layout movement and could cover actions. Notices use a dismissible toast, positioned above the compact transport when it is visible.
 - YouTube can remain buffering without a numeric error. A waiting indicator appears after 15 seconds without progress; Retry here reloads at the current source position. The app leaves the next-recording decision to the DJ.
+- A cortina cue beyond the source length could appear selected without making progress. Known lengths now bound interval edits and playback; moving a cue close to the end shortens its segment to the remaining time. If the provider discovers an invalid cue only after loading, playback stops with an explanation.
+- Common narrow Spanish layouts clipped the final cortina button and overflowed header button text. Interval controls now use their compact presentation through 430 pixels, and header labels wrap inside their buttons.
 
 ## Verification completed so far
 
-The app has 11 passing unit tests and 34 passing browser tests. The original TangoDJ app's five tests also pass, including its cortina-to-first-recording regression.
+The app has 11 passing unit tests and 38 passing browser tests (the full suite completed in 27.4 seconds after the latest fixes). The original TangoDJ app's five tests also pass, including its cortina-to-first-recording regression.
 
 Real YouTube checks verified a 35–55 second cortina entering Poema at queue index 5, a held 35–40 second cortina followed by explicit Next, and a live upcoming-queue update preserving the playhead. A real reload restored the selected recording, tanda position, cortina cue, and 28-entry queue.
 
@@ -31,6 +33,10 @@ An offline browser check passed local playback, editing, saving, and JSON export
 A real network interruption check switched to a YouTube recording while offline. The waiting indicator appeared at 0:00. After reconnecting and choosing Retry here, the same recording progressed to 0:07 without changing the queue entry. With Auto next disabled, a completed real recording replayed from its beginning; Stop and Play also restarted it.
 
 Library playback of a cortina now opens an unrestricted source entry so the DJ can seek beyond a previously loaded short segment. A real source playback check sought to 1:18, saved a 78–98 second interval, and retained the original 28-entry queue plus one source entry.
+
+During actual Cachirulo playback, the next recording was reordered from Guapeando to El tamango, applied to the upcoming queue, then undone and applied again. Cachirulo continued from 0:35 to 0:38, the original next recording was restored, and saving completed. The revised session later played El tamango through its end into Milongueando en el 40.
+
+A real L-O-V-E source check rejected a 999-second cue while preserving playback at 0:02. Choosing its final seven seconds played to the source end. Viewport checks cover 320, 390, 414, and 768 pixels with Spanish header labels and cortina actions contained inside their controls.
 
 ## Observed limits
 

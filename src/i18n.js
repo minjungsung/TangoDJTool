@@ -1,6 +1,8 @@
 const pairs = {
   'Playback is waiting for YouTube. Check your connection or retry from the current position.': ['YouTube 재생이 멈춰 기다리는 중입니다. 인터넷을 확인하거나 현재 지점에서 다시 시도하세요.', 'La reproducción está esperando a YouTube. Comprueba la conexión o reintenta desde la posición actual.'], 'Retry here': ['현재 지점 재시도', 'Reintentar aquí'],
   'From': ['시작', 'Desde'], 'To': ['끝', 'Hasta'], 'Cortina end position': ['코르티나 끝 지점', 'Final de la cortina'],
+  'The start must be before the recording ends. Choose an earlier cue.': ['시작점은 곡이 끝나기 전이어야 합니다. 더 이른 지점을 선택하세요.', 'El inicio debe estar antes del final de la grabación. Elige un punto anterior.'],
+  'Choose a cortina interval within the recording length.': ['코르티나 구간을 원본 곡 길이 안에서 지정하세요.', 'Elige un intervalo de cortina dentro de la duración de la grabación.'],
   'Update upcoming queue': ['이후 대기열 반영', 'Actualizar próximas grabaciones'],
   'Upcoming queue updated. Current recording keeps playing.': ['이후 대기열을 반영했습니다. 현재 곡은 계속 재생됩니다.', 'Cola actualizada. La grabación actual sigue sonando.'],
   'The current recording is no longer in the edited set. Finish it before loading another set.': ['현재 곡이 수정된 세트에 없습니다. 이 곡을 마친 뒤 다른 세트를 불러오세요.', 'La grabación actual ya no está en la sesión editada. Termina antes de cargar otra sesión.'],

@@ -103,6 +103,10 @@ const player = new Player((position, duration) => {
     }
   }
   const startSeconds = queue[queueIndex]?.startSeconds || 0;
+  if (!transitioning && !timedEnd && Number.isFinite(duration) && duration > 0 && startSeconds >= duration) {
+    timedEnd = true; player.stop(); updateTransport();
+    notify('The start must be before the recording ends. Choose an earlier cue.', true); return;
+  }
   position = Math.max(0, position - startSeconds);
   duration = Math.max(0, duration - startSeconds);
   const clipLimit = queue[queueIndex]?.limitSeconds;
@@ -306,7 +310,11 @@ $('#undo-set').onclick = () => {
 };
 async function playIndex(index) {
   if (index < 0 || index >= queue.length) return;
-  const request = ++playRequest, item = queue[index]; transitioning = true; updateTransport();
+  const item = queue[index];
+  if (Number.isFinite(item.track.duration) && item.track.duration > 0 && (item.startSeconds || 0) >= item.track.duration) {
+    notify('The start must be before the recording ends. Choose an earlier cue.', true); return;
+  }
+  const request = ++playRequest; transitioning = true; updateTransport();
   try {
     $('#youtube-error').hidden = true;
     if (!await player.play(item.track, files.get(item.track.id), Number($('#fade').value), $('#normalize').checked, item.startSeconds || 0)) return;
@@ -454,7 +462,14 @@ $('#groups').onclick = event => {
   if (action !== 'select') rememberSetEdit();
   switch (button.dataset.groupAction) {
     case 'select': selected = group.id; break;
-    case 'cue-position': group.startSeconds = Math.floor(current.source === 'youtube' ? player.youtube?.getCurrentTime() || 0 : player.audio.currentTime); break;
+    case 'cue-position': {
+      const position = Math.floor(current.source === 'youtube' ? player.youtube?.getCurrentTime() || 0 : player.audio.currentTime);
+      const duration = current.source === 'youtube' ? player.youtube?.getDuration() : player.audio.duration;
+      if (Number.isFinite(duration) && duration > 0 && position >= duration) { notify('The start must be before the recording ends. Choose an earlier cue.', true); return; }
+      group.startSeconds = position;
+      if (Number.isFinite(duration) && duration > 0) group.limitSeconds = Math.min(group.limitSeconds || 20, Math.ceil(duration) - position);
+      break;
+    }
     case 'rename': group.name = newName.trim(); break;
     case 'delete': state.groups.splice(i, 1); if (selected === group.id) selected = state.groups[0]?.id || null; break;
     case 'up': if (i > 0) [state.groups[i - 1], state.groups[i]] = [state.groups[i], state.groups[i - 1]]; break;
@@ -477,7 +492,14 @@ $('#groups').onchange = event => {
   const priorStart = group.startSeconds || 0, priorEnd = priorStart + (group.limitSeconds || 20);
   const start = isStart ? value : priorStart;
   // Moving the start past the old end keeps a useful segment of the same length.
-  const end = isStart ? Math.max(priorEnd, start + (start >= priorEnd ? group.limitSeconds || 20 : 1)) : value;
+  let end = isStart ? Math.max(priorEnd, start + (start >= priorEnd ? group.limitSeconds || 20 : 1)) : value;
+  const durations = group.trackIds.map(id => state.tracks.find(track => track.id === id)?.duration).filter(duration => Number.isFinite(duration) && duration > 0);
+  const sourceEnd = durations.length ? Math.min(...durations) : Infinity;
+  if (start >= sourceEnd || (!isStart && end > Math.ceil(sourceEnd))) {
+    event.target.value = isStart ? priorStart : priorEnd;
+    notify('Choose a cortina interval within the recording length.', true); return;
+  }
+  if (isStart) end = Math.min(end, Math.ceil(sourceEnd));
   if (!Number.isInteger(value) || start < 0 || start > 86400 || end <= start || end - start > 3600) {
     event.target.value = isStart ? priorStart : priorEnd; return;
   }

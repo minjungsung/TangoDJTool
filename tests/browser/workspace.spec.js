@@ -520,6 +520,20 @@ test('small Spanish cortina controls retain readable input widths', async ({ pag
   expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client); expect(Math.min(...dimensions.widths)).toBeGreaterThanOrEqual(60);
 });
 
+test('Spanish header and cortina actions fit common narrow viewports', async ({ page }) => {
+  await page.goto('/?practice=1'); await page.locator('#open-settings').click(); await page.locator('#language').selectOption('es'); await page.locator('[data-close="settings-dialog"]').click();
+  for (const width of [320, 390, 414, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    const dimensions = await page.evaluate(() => ({
+      page: document.documentElement.scrollWidth,
+      header: [...document.querySelectorAll('.header-actions button')].map(el => ({ client: el.clientWidth, scroll: el.scrollWidth })),
+      ranges: [...document.querySelectorAll('.cortina-range')].map(el => ({ client: el.clientWidth, scroll: el.scrollWidth })),
+    }));
+    expect(dimensions.page).toBeLessThanOrEqual(width);
+    for (const item of [...dimensions.header, ...dimensions.ranges]) expect(item.scroll).toBeLessThanOrEqual(item.client + 1);
+  }
+});
+
 test('changing metadata during playback preserves the source and playhead', async ({ page }) => {
   await simulatedDeck(page); await page.goto('/?practice=1'); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
   await page.evaluate(() => { window.testYouTube.position = 40; });
@@ -565,4 +579,43 @@ test('library cortina playback opens the full source for cue preparation without
   await page.locator('[data-group-action="cue-position"][data-id="real-group-cortina-1"]').click();
   await expect(page.locator('[data-cortina-start]').first()).toHaveValue('35');await expect(page.locator('[data-cortina-end]').first()).toHaveValue('55');
   await page.locator('[data-action="play"][data-id="real-cortina-1"]').click();await expect(page.locator('#queue-count')).toHaveText('29');
+});
+
+test('cortina intervals respect known source length and retain a usable endpoint near the end', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1');
+  await page.locator('[data-action="play"][data-id="real-cortina-1"]').click();
+  await expect(page.locator('#position')).toContainText('/ 3:00');
+  const group = page.locator('[data-group="real-group-cortina-1"]');
+  const start = group.locator('[data-cortina-start]'), end = group.locator('[data-cortina-end]');
+  await start.fill('200'); await start.dispatchEvent('change');
+  await expect(start).toHaveValue('0'); await expect(page.locator('#notice')).toContainText('within the recording length');
+  await start.fill('175'); await start.dispatchEvent('change'); await expect(end).toHaveValue('180');
+  await end.fill('181'); await end.dispatchEvent('change'); await expect(end).toHaveValue('180');
+  await expect(page.locator('#playing-title')).toHaveText('L-O-V-E');
+});
+
+test('a saved cue beyond source length cannot interrupt the current recording', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/'); page.on('dialog', dialog => dialog.accept());
+  await page.locator('#set-input').setInputFiles({ name: 'set.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({
+    version: 1, tracks: [{ id: 'tango', source: 'youtube', videoId: 'c9UaO1KQwpI', title: 'Current tango', duration: 180 }, { id: 'cortina', source: 'youtube', videoId: 'abcdefghijk', title: 'Late cortina', duration: 180 }],
+    groups: [{ id: 'tanda', name: 'Tanda', kind: 'tanda', trackIds: ['tango'] }, { id: 'break', name: 'Cortina', kind: 'cortina', trackIds: ['cortina'], startSeconds: 200, limitSeconds: 20 }],
+  })) });
+  await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Current tango');
+  await page.evaluate(() => { window.testYouTube.position = 40; });
+  const loads = await page.evaluate(() => window.testYouTube.loads);
+  await page.locator('[data-queue-index="1"]').click();
+  await expect(page.locator('#notice')).toContainText('before the recording ends');
+  await expect(page.locator('#playing-title')).toHaveText('Current tango');
+  expect(await page.evaluate(() => window.testYouTube.loads)).toBe(loads);
+  expect(await page.evaluate(() => window.testYouTube.position)).toBe(40);
+});
+
+test('discovering a source shorter than its saved cue stops it and explains the invalid cue', async ({ page }) => {
+  await simulatedDeck(page); await page.goto('/?practice=1');
+  const start = page.locator('[data-cortina-start]').first();
+  await start.fill('200'); await start.dispatchEvent('change');
+  await page.locator('[data-group-action="cue-play"]').first().click();
+  await expect(page.locator('#notice')).toContainText('before the recording ends');
+  expect(await page.evaluate(() => window.testYouTube.state)).toBe(2);
+  await expect(page.locator('.queue-item.playing')).toHaveAttribute('data-queue-index', '0');
 });
