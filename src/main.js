@@ -359,7 +359,8 @@ $('#tracks').onclick = async event => {
   try {
     switch (button.dataset.action) {
       case 'play': {
-        const existingIndex = locateInQueue(queue, track.id, queueIndex);
+        const sourcePlayback = track.style === 'Cortina';
+        const existingIndex = sourcePlayback ? queue.findIndex(item => item.track.id === track.id && !item.limitSeconds && !item.startSeconds) : locateInQueue(queue, track.id, queueIndex);
         if (existingIndex >= 0) await playIndex(existingIndex);
         else { queue.push({ track: structuredClone(track) }); loadedSignature = null; renderQueue(); await playIndex(queue.length - 1); }
         $('#deck').scrollIntoView({ behavior: 'smooth', block: 'start' }); break;

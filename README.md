@@ -30,7 +30,7 @@ The set follows a Tango / Tango / Vals / Tango / Tango / Milonga cycle. Tango ta
 
 All 28 selections are real recordings linked through YouTube's official embed; no audio is downloaded. Preview the transfers and musical progression before a live event. Video availability and embedding restrictions can change. Unknown YouTube durations are excluded from the displayed known runtime.
 
-Cortinas stop after 20 seconds in the set queue. **Auto next** continues to the next tanda. Playing a cortina directly from the library plays the full video. Exported JSON retains the group playback limits.
+Cortinas stop after 20 seconds in the set queue. **Auto next** continues to the next tanda. Playing a cortina directly from the library opens its full source, appending an unrestricted entry when needed while retaining the prepared queue. The group play button uses its selected interval. Exported JSON retains the group playback limits.
 
 The walkthrough uses this playlist for library, metadata, composition, playback, YouTube, and backup examples. Import your own local tango recordings for preview, fades, and BPM/level analysis. No synthesized demonstration audio is included.
 
