@@ -29,3 +29,4 @@ dist-final-review/
 /reports/local-session-latest.json
 /reports/dj-current-build.json
 /reports/manual-checks.jsonl
+.vercel/
