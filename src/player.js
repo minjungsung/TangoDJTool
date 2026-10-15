@@ -9,7 +9,7 @@ export class Player {
     this.timer = setInterval(() => {
       if (this.track?.source === 'youtube' && this.youtube?.getCurrentTime) onUpdate(this.youtube.getCurrentTime(), this.youtube.getDuration());
     }, 500);
-    this.onEnded = onEnded;
+    this.onEnded = onEnded; this.youtubeArmed = false;
   }
   async context() {
     if (!this.ctx) {
@@ -21,13 +21,13 @@ export class Player {
     await this.ctx.resume();
   }
   fileUrl(id, file) { if (!this.urls.has(id)) this.urls.set(id, URL.createObjectURL(file)); return this.urls.get(id); }
-  async loadYouTube() {
+  async loadYouTube(videoId) {
     if (this.youtube) return this.youtube;
     if (this.youtubeLoading) return this.youtubeLoading;
-    this.youtubeLoading = this.createYouTube().catch(error => { this.youtubeLoading = null; throw error; });
+    this.youtubeLoading = this.createYouTube(videoId).catch(error => { this.youtubeLoading = null; throw error; });
     return this.youtubeLoading;
   }
-  async createYouTube() {
+  async createYouTube(videoId) {
     if (!window.YT?.Player) {
       await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('YouTube could not load. Check your connection or browser blocking settings.')), 15000);
@@ -37,11 +37,16 @@ export class Player {
       });
     }
     this.youtube = await new Promise(resolve => {
-      const player = new window.YT.Player('youtube-player', { width: '100%', height: '220',
-        playerVars: { playsinline: 1, origin: location.origin }, events: {
+      const player = new window.YT.Player('youtube-player', { videoId, width: '100%', height: '260',
+        playerVars: { playsinline: 1, origin: location.origin, rel: 0 }, events: {
           onReady: () => resolve(player),
-          onStateChange: event => { if (event.data === 0 && this.track?.source === 'youtube') this.onEnded(); },
-          onError: () => this.onError('YouTube cannot play this video. It may be private, unavailable, or disallow embedding.'),
+          onStateChange: event => {
+            if (this.track?.source !== 'youtube') return;
+            if (this.youtube?.getVideoUrl) { try { if (new URL(this.youtube.getVideoUrl()).searchParams.get('v') !== this.track.videoId) return; } catch { return; } }
+            if (event.data === 1) this.youtubeArmed = true;
+            if (event.data === 0 && this.youtubeArmed && (!this.youtube?.getPlayerState || this.youtube.getPlayerState() === 0)) { this.youtubeArmed = false; this.onEnded(); }
+          },
+          onError: event => { if (this.track?.source === 'youtube') this.onError({ type: 'youtube', code: event.data, track: this.track }); },
         } });
     });
     return this.youtube;
@@ -57,10 +62,10 @@ export class Player {
       if (token !== this.token) return false;
     }
     this.audio.pause(); this.youtube?.pauseVideo?.(); this.preview.pause();
-    this.track = track; this.normalize = normalize;
+    this.youtubeArmed = false; this.track = track; this.normalize = normalize;
     document.querySelector('#youtube-wrap').hidden = track.source !== 'youtube';
     if (track.source === 'youtube') {
-      const yt = await this.loadYouTube(); if (token !== this.token) return false;
+      const yt = await this.loadYouTube(track.videoId); if (token !== this.token) return false;
       yt.setVolume(this.volume * 100); yt.loadVideoById(track.videoId);
     } else {
       if (!file) throw new Error('Relink the local file before playing this track.');
@@ -86,7 +91,7 @@ export class Player {
   }
   seek(seconds) { if (this.track?.source === 'youtube') this.youtube?.seekTo(seconds, true); else if (Number.isFinite(this.audio.duration)) this.audio.currentTime = seconds; }
   stop() {
-    ++this.token; this.audio.pause(); this.youtube?.pauseVideo?.(); this.preview.pause();
+    ++this.token; this.youtubeArmed = false; this.audio.pause(); this.youtube?.pauseVideo?.(); this.preview.pause();
     if (this.gain) { this.gain.gain.cancelScheduledValues(this.ctx.currentTime); this.gain.gain.setValueAtTime(this.targetGain(), this.ctx.currentTime); }
   }
   async previewTrack(track, file) {

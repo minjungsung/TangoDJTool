@@ -103,7 +103,7 @@ test('YouTube queue uses the iframe API and advances after the video ends', asyn
   await expect(page.locator('#youtube-wrap')).toBeVisible();
   await page.locator('#seek').fill('50');
   expect(await page.evaluate(() => window.testYouTube.position)).toBe(60);
-  await page.evaluate(() => window.testYouTube.options.events.onStateChange({ data: 0 }));
+  await page.evaluate(() => { window.testYouTube.options.events.onStateChange({ data: 1 }); window.testYouTube.state = 0; window.testYouTube.options.events.onStateChange({ data: 0 }); });
   await expect(page.locator('#playing-title')).toHaveText('cortina');
   await expect(page.locator('#youtube-wrap')).toBeHidden();
 });
@@ -111,19 +111,23 @@ test('milonga playlist preserves personal music and does not duplicate entries',
   await page.goto('/');
   await page.locator('#file-input').setInputFiles({ name: 'my-recording.wav', mimeType: 'audio/wav', buffer: wav() });
   await expect(page.locator('#notice')).toContainText('1 recording added');
-  await page.getByRole('button', { name: 'Load milonga playlist', exact: true }).click();
+  await page.locator('#open-examples').click();
+  await page.locator('#load-real-samples').click();
   await expect(page.locator('#library-count')).toHaveText('29');
   await expect(page.locator('.group')).toHaveCount(12);
-  await page.getByRole('button', { name: 'Load milonga playlist', exact: true }).click();
+  await page.locator('#open-examples').click();
+  await page.locator('#load-real-samples').click();
   await expect(page.locator('#library-count')).toHaveText('29');
   await expect(page.locator('.group')).toHaveCount(12);
+  await page.locator('#open-guide').click();
   await page.locator('#real-sample-edit').click();
   await page.getByRole('button', { name: 'Save details' }).click();
-  await page.getByRole('button', { name: 'Preview a local tango recording', exact: true }).click();
+  await page.locator('#open-guide').click();
+  await page.locator('#guide-preview').click();
   await expect(page.locator('#preview-status')).toBeVisible();
   await page.getByRole('button', { name: 'Stop preview', exact: true }).click();
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export my set', exact: true }).click();
+  await page.locator('#export-set').click();
   expect((await download).suggestedFilename()).toBe('tango-dj-set.json');
   await page.reload();
   await expect(page.locator('#library-count')).toHaveText('29');
@@ -151,11 +155,69 @@ test('real sample cortina advances at its 20-second limit', async ({ page }) => 
   });
   await page.goto('/?practice=1');
   await expect(page.locator('#library-count')).toHaveText('28');
-  await page.getByRole('button', { name: 'Play milonga set', exact: true }).click();
+  await page.locator('#open-examples').click();
+  await page.locator('#real-sample-play').click();
   await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
   await expect(page.locator('#queue-count')).toHaveText('28');
   await page.locator('[data-queue-index="4"]').click();
   await expect(page.locator('#playing-title')).toHaveText('L-O-V-E');
   await page.evaluate(() => { window.testYouTube.position = 20.1; });
   await expect(page.locator('#playing-title')).toHaveText('Poema');
+});
+test('language, playback preferences, edited tandas and queue survive reload per browser', async ({ page, browser }) => {
+  await page.goto('/?practice=1');
+  await page.locator('#open-settings').click();
+  await page.locator('#language').selectOption('ko');
+  await page.locator('[data-close="settings-dialog"]').click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ko');
+  await expect(page.locator('#load-real-samples')).toHaveText('밀롱가 목록 불러오기');
+  await page.locator('#volume').fill('42'); await page.locator('#volume').dispatchEvent('change');
+  await page.locator('#fade').selectOption('4'); await page.locator('#auto-next').uncheck();
+
+  await page.locator('#file-input').setInputFiles({ name: 'personal.wav', mimeType: 'audio/wav', buffer: wav() });
+  await expect(page.locator('#library-count')).toHaveText('29');
+  await page.locator('[data-action="play"]').last().click();
+  await expect(page.locator('#playing-title')).toHaveText('personal');
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('[data-group-action="delete"]').first().click();
+  await expect(page.locator('.group')).toHaveCount(11);
+  await expect(page.locator('#save-status')).toHaveText('이 브라우저에 저장됨');
+  await page.goto('/');
+  await expect(page.locator('#language')).toHaveValue('ko');
+  await expect(page.locator('#volume')).toHaveValue('42');
+  await expect(page.locator('#fade')).toHaveValue('4');
+  await expect(page.locator('#auto-next')).not.toBeChecked();
+  await expect(page.locator('#guide-dialog')).not.toBeVisible();
+  await expect(page.locator('.group')).toHaveCount(11);
+  await expect(page.locator('#queue-count')).toHaveText('1');
+  await expect(page.locator('#playing-title')).toHaveText('재생 중인 곡 없음');
+  await page.locator('#open-settings').click();
+  await page.locator('#language').selectOption('es');
+  await page.locator('[data-close="settings-dialog"]').click();
+  await expect(page.locator('#import-set')).toHaveText('Importar sesión');
+  await expect(page.locator('#start-set')).toContainText('Cargar y reproducir');
+  const context = await browser.newContext(); const other = await context.newPage(); await other.goto('/');
+  await expect(other.locator('#library-count')).toHaveText('0'); await context.close();
+});
+test('YouTube errors expose recovery and a replacement link is saved', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.YT = { Player: class {
+      constructor(id, options) { this.options = options; window.testYouTube = this; setTimeout(() => options.events.onReady(), 0); }
+      loadVideoById(id) { this.videoId = id; setTimeout(() => this.options.events.onError({ data: 150 }), 20); }
+      getCurrentTime() { return 0; } getDuration() { return 180; } setVolume() {} pauseVideo() {}
+    } };
+  });
+  await page.goto('/?practice=1');
+  await page.locator('#open-examples').click();
+  await page.locator('#real-sample-play').click();
+  await expect(page.locator('#youtube-error')).toBeVisible();
+  await expect(page.locator('#youtube-error-message')).toContainText('does not allow');
+  await expect(page.locator('#youtube-open')).toHaveAttribute('href', /c9UaO1KQwpI/);
+  await page.locator('#youtube-replace').click();
+  await page.locator('[name="videoUrl"]').fill('https://youtu.be/abcdefghijk');
+  await page.locator('#metadata-form button[type="submit"]').click();
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  await page.goto('/');
+  await page.locator('[data-action="edit"][data-id="real-tango-1"]').click();
+  await expect(page.locator('[name="videoUrl"]')).toHaveValue('https://www.youtube.com/watch?v=abcdefghijk');
 });

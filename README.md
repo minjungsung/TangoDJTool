@@ -80,3 +80,21 @@ npm run test:e2e
 ```
 
 Unit checks cover URL validation, queue order, set integrity, and tempo/level estimation. Browser checks cover generated WAV import, metadata editing, analysis, local playback, set export, persistence, YouTube metadata import, missing-file relinking, and mobile layout. YouTube network playback is subject to provider restrictions and is not exercised by mocked metadata checks.
+
+## Personal browser workspace and languages
+
+Each visitor has an independent workspace for the same site origin in their browser profile. IndexedDB stores library metadata, local audio blobs, group order, and the loaded queue; localStorage stores language, volume, fade, normalization, automatic advance, and walkthrough preferences. Reloading restores the queue without automatically starting audio. Regular visits preserve deleted/reordered sample groups; **Load milonga playlist** explicitly adds missing sample groups again.
+
+The language selector supports Korean, English, and Spanish, including the walkthrough and playback recovery controls. Recording titles, artist names, and user-entered metadata are preserved. The initial language follows the browser language and subsequent choices are saved. Interface text uses larger, readable sizes and controls remain usable on mobile.
+
+A save indicator reports pending, successful, and failed saves. **Request persistent storage** asks the browser to protect this site's storage from automatic eviction; the browser may decline. Clearing site data still removes the workspace. Different browser profiles, devices, or site origins do not synchronize; export/import transfers set metadata, and local recordings must be relinked.
+
+## YouTube playback recovery
+
+The embedded player starts with an explicit video ID and origin, with a referrer policy that identifies the site. The app displays YouTube's error code and appropriate recovery actions: retry, open on YouTube, replace the URL, attach a local recording, or skip to the next queue entry. Error 100 indicates an unavailable video, 101/150 indicates blocked embedding, and 153 indicates missing site identification. A video's oEmbed title being available does not guarantee embedded playback. Local audio is the reliable playback option when the provider blocks embeds.
+
+## Everyday workspace
+
+The main screen opens directly onto the library, set builder, and player. The toolbar provides **Example sets**, **User guide**, **Settings**, **Import set**, and **Export set**. Examples and help are available in dialogs and do not occupy the working area. Settings contains the language selector and detailed browser storage controls. Successful action messages disappear automatically; errors remain visible.
+
+Adding an example imports six editable tandas and their cortinas. Normal reloads restore your edits, queue, and preferences without playing audio or adding removed groups again. The legacy `?practice=1` link imports the example once and removes that query parameter from the URL. Use the normal site URL for everyday work.
