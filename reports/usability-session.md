@@ -1,6 +1,6 @@
 # DJ usability session
 
-This session began at 05:58:02 UTC on 15 October 2026 and is scheduled to continue until at least 07:58:02 UTC. The production playback soak began at approximately 05:59:14 UTC and runs for 7,200 real seconds. Final results are pending.
+This session ran from 05:58:02 UTC through 07:59:44 UTC on 15 October 2026: 2 hours, 1 minute, 42 seconds of elapsed work. The baseline production playback soak completed 7,200 real seconds. Concurrent sessions supplement this elapsed session and are not added to its duration.
 
 ## Operational findings and changes
 
@@ -22,7 +22,7 @@ This session began at 05:58:02 UTC on 15 October 2026 and is scheduled to contin
 
 ## Verification completed so far
 
-The app has 11 passing unit tests and 38 passing browser tests (the full suite completed in 27.4 seconds after the latest fixes). The original TangoDJ app's five tests also pass, including its cortina-to-first-recording regression.
+The app has 11 passing unit tests and 38 passing browser tests (the final full suite completed in 28.3 seconds after the live-language fix). The original TangoDJ app's five tests also pass, including its cortina-to-first-recording regression.
 
 Real YouTube checks verified a 35–55 second cortina entering Poema at queue index 5, a held 35–40 second cortina followed by explicit Next, and a live upcoming-queue update preserving the playhead. A real reload restored the selected recording, tanda position, cortina cue, and 28-entry queue.
 
@@ -38,14 +38,29 @@ During actual Cachirulo playback, the next recording was reordered from Guapeand
 
 A real L-O-V-E source check rejected a 999-second cue while preserving playback at 0:02. Choosing its final seven seconds played to the source end. Viewport checks cover 320, 390, 414, and 768 pixels with Spanish header labels and cortina actions contained inside their controls.
 
+Live playback of Milongueando en el 40 entered Fly Me to the Moon, played its 20-second segment, then entered Milagro (the next tanda's first recording). One-second sampling observed approximately one second of source-loading state at that transition. The closing Stand By Me segment stopped at 20 playable seconds; Next was disabled, and the harness explicitly restarted the set. The app did not automatically loop the completed set.
+
+Additional checks verified future-tanda deletion and undo without interrupting the current recording, repeated-recording occurrence matching, and three-language countdown updates during real playback. An isolated 1,000-recording metadata library imported in 149 ms and returned its accent-insensitive search in 64 ms on this test browser. Reload after a completed save retained the added fifth group recording. Reload immediately after the edit, before the save completed, restored four recordings; this is a known pending-save risk, not a passed persistence check. These timings are observations from one environment, not performance guarantees.
+
 ## Observed limits
 
-The baseline soak recorded an El tamango stall at 0:05. Playback subsequently resumed after the harness attempted recovery. An earlier edited-build session stalled on El bulín de la calle Ayacucho at 1:27; a separate fresh session played that recording through its end and entered Toda mi vida. The final revised session is still running to observe recovery behavior.
+The baseline soak recorded an El tamango stall at 0:05. Playback subsequently resumed after the harness attempted recovery. An earlier edited-build session stalled on El bulín de la calle Ayacucho at 1:27; a separate fresh session played that recording through its end and entered Toda mi vida. The revised session completed 4,502 seconds, played a full set through the final cortina, and restarted with no recorded errors.
 
 Testing uses isolated Chromium browser contexts and actual embedded videos. It verifies operations, provider state, playhead movement, ordering, and persistence. It does not establish physical speaker quality, auditory musical phrasing, audience response, headphone routing, or venue acoustics. Cortina cue examples used to verify timing are not presented as artistically curated entrances.
 
-## Snapshot at commit
+## Completed results
 
-Results captured at 2026-10-15T07:17:50.341054+00:00 are preserved in [the timestamped snapshot](snapshots/2026-10-15T07-17-50Z/README.md). The baseline set reached its final 20-second cortina after approximately 70 minutes and restarted at its first recording. One baseline stall is recorded. The revised DJ session has no recorded errors at capture time. The two-hour session is still incomplete; this report does not claim a completed two-hour validation.
+| Session | Real playback duration | Observations | Recorded errors |
+| --- | ---: | ---: | ---: |
+| Baseline production soak | 7,200 seconds | 160 checkpoints | 1 buffering stall |
+| Stable revised DJ-controls build | 4,502 seconds | 131 events | 0 |
+| Later source-preparation and source-length build | 1,801 seconds | 53 events | 0 |
+| Local transport fixture | 608 seconds | 40 checkpoints | 0 |
 
-The 11 unit tests and production build passed again during this save. All 34 browser tests passed again in 24.9 seconds during this save.
+All sessions completed. The baseline and revised DJ session each reached the final cortina and were explicitly restarted by the harness. The revised session's entire six-tanda flow was observed; short cortinas are not all present in 45-second checkpoints. One-second manual transition observations supplement the logs. The latest live-language fix passed separate actual-video checks, 11 unit tests, all 38 browser tests in 28.3 seconds, and the production build. Original TangoDJ's five tests pass, including the duplicate-ended-event regression.
+
+The [completed snapshot](snapshots/2026-10-15T07-59-44Z/README.md) preserves reports and source provenance. The [earlier snapshot](snapshots/2026-10-15T07-17-50Z/README.md) remains as intermediate evidence; it did not establish a completed two-hour validation.
+
+## Practical recommendation
+
+The current workflow supports personal preparation, teaching/practice, small milongas, and announcement breaks with held cortinas. Live events benefit from prepared local recordings. Independent headphone cueing and offline cold startup remain the most useful next additions for larger-event operation. YouTube loading and embed restrictions remain provider-dependent, and pending browser saves need time to commit before reload. No physical listening, audience-response, or venue-audio validation is claimed.
