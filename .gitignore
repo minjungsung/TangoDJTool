@@ -21,3 +21,9 @@ dist-review/
 dist-verify/
 
 dist-final-review/
+
+# Mutable reports from ongoing playback sessions; commit timestamped snapshots instead.
+/reports/soak-latest.json
+/reports/dj-session-latest.json
+/reports/dj-final-session.json
+/reports/local-session-latest.json
