@@ -13,3 +13,5 @@ __pycache__/
 # Local music and collection data
 music/
 local-data/
+playwright-report/
+test-results/
