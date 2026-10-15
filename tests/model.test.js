@@ -49,3 +49,22 @@ test('cortina playback limits survive queue construction and import validation',
   assert.equal(validateSet(value).groups[0].limitSeconds, 20);
   assert.throws(() => validateSet({ ...value, groups: [{ ...value.groups[0], limitSeconds: -1 }] }));
 });
+
+test('milonga cycle uses coherent tandas, short cortinas, and removes legacy samples only', async () => {
+  const { realTracks, realGroups, removeOldExamples } = await import('../src/samples.js');
+  const groups = realGroups(), library = new Map(realTracks.map(t => [t.id, t]));
+  assert.equal(realTracks.length, 28);
+  const tandas = groups.filter(g => g.kind === 'tanda');
+  assert.deepEqual(tandas.map(g => library.get(g.trackIds[0]).style), ['Tango', 'Tango', 'Vals', 'Tango', 'Tango', 'Milonga']);
+  for (const tanda of tandas) {
+    const tracks = tanda.trackIds.map(id => library.get(id));
+    assert.equal(new Set(tracks.map(t => t.artist)).size, 1);
+    assert.equal(new Set(tracks.map(t => t.singer)).size, 1);
+    assert.equal(tracks.length, tracks[0].style === 'Tango' ? 4 : 3);
+  }
+  assert.equal(groups.filter(g => g.kind === 'cortina' && g.limitSeconds === 20).length, 6);
+  const result = removeOldExamples({ tracks: [{ id: 'old', source: 'local', samplePack: 'studio-practice-v1' }, { id: 'mine', source: 'local' }], groups: [{ id: 'my-group', trackIds: ['mine', 'old'] }, { id: 'old-group', samplePack: 'studio-practice-v1', trackIds: ['old'] }] });
+  assert.deepEqual(result.state.tracks.map(t => t.id), ['mine']);
+  assert.deepEqual(result.state.groups[0].trackIds, ['mine']);
+  assert.equal(result.state.groups.length, 1);
+});

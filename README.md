@@ -13,23 +13,26 @@ npm run dev
 
 Open the local URL printed by Vite. For a production build, run `npm run build`; `npm run preview` serves that build locally. The app can be hosted as a static site. Use a stable HTTPS origin when deploying, since browser storage belongs to that origin.
 
-## Learn with real tango recordings
+## Milonga DJ playlist
 
-Open `/?practice=1` or click **Load real tango library** to add a real-recording sample set without starting playback. Existing music is preserved. **Play tango sample set** plays only these sample groups, keeping optional synthesized exercises out of the queue.
+Open `/?practice=1` or click **Load milonga playlist**. **Play milonga set** starts only the curated DJ groups. Personal recordings are preserved. Earlier synthesized examples are removed from browser storage during migration.
 
-| Group | Recordings |
-| --- | --- |
-| Troilo / Fiorentino · Tango · 1941 | Yo soy el tango; Te aconsejo que me olvides; El bulín de la calle Ayacucho; Toda mi vida |
-| Cortina · 20 seconds | L-O-V-E — Nat King Cole |
-| Canaro / Maida · Vals · 1936–1937 | Cofrecito; Secreto de amor; En voz baja |
-| Cortina · 20 seconds | Hit the Road Jack — Ray Charles |
-| Canaro / Maida · Milonga · 1935–1936 | Largá las penas; Milonga criolla; Silueta porteña |
+The set follows a Tango / Tango / Vals / Tango / Tango / Milonga cycle. Tango tandas contain four recordings, while vals and milonga tandas contain three. Each tanda keeps one orchestra and singer or instrumental ensemble. A 20-second non-tango cortina follows each tanda.
 
-These are external YouTube recordings, played through the official embed. Video titles were checked against YouTube oEmbed when the pack was added. Availability and embedding restrictions can change. No audio is downloaded. Set duration excludes unknown YouTube lengths until they are available; it is not a full runtime estimate.
+| Tanda | Recordings | Following cortina |
+| --- | --- | --- |
+| Troilo / Fiorentino · Tango · 1941 | Yo soy el tango; Te aconsejo que me olvides; El bulín de la calle Ayacucho; Toda mi vida | L-O-V-E — Nat King Cole |
+| Canaro / Maida · Lyrical tango · 1935–1937 | Poema; Envidia; Yo también soñé; Invierno | Hit the Road Jack — Ray Charles |
+| Canaro / Maida · Vals · 1936–1937 | Cofrecito; Secreto de amor; En voz baja | Sway — Dean Martin |
+| Troilo · Instrumental tango · 1941 | Cachirulo; Guapeando; El tamango; Milongueando en el 40 | Fly Me to the Moon — Frank Sinatra |
+| Canaro / Maida · Rhythmic tango · 1937–1938 | Milagro; Recuerdos de París; Nada más; Yo seré como tú quieras | The Girl from Ipanema — Astrud Gilberto & Stan Getz |
+| Canaro / Maida · Milonga · 1935–1936 | Largá las penas; Milonga criolla; Silueta porteña | Stand By Me — Ben E. King |
 
-In the queue, sample cortinas stop after 20 seconds. With **Auto next** enabled, playback continues to the next tanda. Playing a cortina directly from the library plays the full video. Exported sets retain group playback limits.
+All 28 selections are real recordings linked through YouTube's official embed; no audio is downloaded. Preview the transfers and musical progression before a live event. Video availability and embedding restrictions can change. Unknown YouTube durations are excluded from the displayed known runtime.
 
-The walkthrough covers importing, metadata, preview, analysis, composition, playback, YouTube, and set backups. The **Optional local audio lab** supplies 11 original synthesized WAV clips for testing features that require decoded local files: preview, fades, and BPM/level analysis. It is separate from the default real-recording set. To analyze actual tango recordings, import your local music using **+ Local files**.
+Cortinas stop after 20 seconds in the set queue. **Auto next** continues to the next tanda. Playing a cortina directly from the library plays the full video. Exported JSON retains the group playback limits.
+
+The walkthrough uses this playlist for library, metadata, composition, playback, YouTube, and backup examples. Import your own local tango recordings for preview, fades, and BPM/level analysis. No synthesized demonstration audio is included.
 
 ## First version
 
