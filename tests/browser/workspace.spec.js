@@ -546,3 +546,14 @@ test('YouTube buffering is visible and retry preserves the current source positi
   await page.locator('#resume-video').click();expect(await page.evaluate(()=>window.stallPlayer.position)).toBe(30);await expect(page.locator('#playback-stall')).toBeHidden();
   await page.locator('#stop').click();await page.evaluate(()=>window.advanceStallClock());await expect(page.locator('#playback-stall')).toBeHidden();
 });
+
+test('local session can play, edit and export while the network is offline', async ({ page, context }) => {
+  await page.goto('/');await page.locator('#file-input').setInputFiles({name:'offline-tango.wav',mimeType:'audio/wav',buffer:wav()});
+  await expect(page.locator('#tracks tr')).toHaveCount(1);await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  await context.setOffline(true);await page.locator('#add-tanda').click();await page.locator('[data-action="add"]').click();
+  await page.locator('#start-set').click();await expect(page.locator('#playing-title')).toHaveText('offline-tango');
+  await page.locator('[data-action="edit"]').click();await page.locator('[name="artist"]').fill('Offline orchestra');await page.locator('#metadata-form button[type="submit"]').click();
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  const download=page.waitForEvent('download');await page.locator('#export-set').click();expect((await download).suggestedFilename()).toBe('tango-dj-set.json');
+  await context.setOffline(false);await page.reload();await expect(page.locator('.missing')).toHaveCount(0);await expect(page.locator('.track-detail')).toContainText('Offline orchestra');
+});

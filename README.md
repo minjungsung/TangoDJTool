@@ -68,6 +68,7 @@ YouTube audio is played through the official IFrame API. Videos are not download
 - RMS and peak are measured over the decoded recording. Suggested gain targets approximately -18 dBFS RMS, caps peak at -1 dBFS, and limits gain to ±12 dB. This is not integrated LUFS normalization or a limiter.
 - Analysis decodes one full recording at a time and may use substantial memory for long files.
 - Browser storage can run out or be cleared/evicted. Keep original recordings and export sets. JSON exports contain metadata and group order, not audio.
+- An already-open app can play, edit, save, and export local recordings without a connection. Opening the app from scratch while offline is not guaranteed; there is no service-worker installation yet.
 - No account, backend upload, or cross-device sync is required. YouTube and optional web fonts make external network requests.
 
 ## Validation
