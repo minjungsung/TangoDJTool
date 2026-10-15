@@ -3,6 +3,8 @@ import { parseBlob } from 'music-metadata';
 import { uid, youtubeId, flattenSet, removeTrack, validateSet } from './model.js';
 import { saveState, loadState, saveFile, getFile, deleteFile } from './storage.js';
 import { Player } from './player.js';
+import { SAMPLE_PACK, practiceTracks, practiceGroups, sampleWav, youtubeExamples } from './samples.js';
+import { guideMarkup } from './guide.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const time = seconds => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '—';
@@ -31,6 +33,7 @@ function notify(message, error = false) {
   <main>
     <header><div><div class="eyebrow">PREPARE. LISTEN. CONNECT.</div><h1>Your next milonga starts here.</h1><p>Build the flow, one tanda at a time.</p></div><div class="header-actions"><button id="import-set">Import set</button><button id="export-set">Export set ↗</button></div></header>
     <div id="notice" role="status" aria-live="polite">Add your recordings or a YouTube video to get started.</div>
+    ${guideMarkup}
     <div class="workspace">
       <section id="library" class="panel library">
         <div class="section-head"><div><div class="eyebrow">01 / COLLECTION</div><h2>Music library <span id="library-count">0</span></h2></div><button id="add-files" class="primary">+ Local files</button></div>
@@ -77,7 +80,7 @@ const player = new Player((position, duration) => {
 function renderLibrary() {
   const search = $('#search').value.toLowerCase(), style = $('#style-filter').value, source = $('#source-filter').value;
   const visible = state.tracks.filter(t => `${t.title} ${t.artist} ${t.singer} ${t.year}`.toLowerCase().includes(search) && (!style || t.style === style) && (!source || t.source === source));
-  $('#tracks').innerHTML = visible.map(t => `<tr draggable="true" data-track="${esc(t.id)}"><td><div class="track-title">${esc(t.title)}</div><div class="track-detail"><span class="source-tag ${t.source}">${t.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(t.artist || 'Unknown orchestra')}${t.singer ? ` · ${esc(t.singer)}` : ''}${t.source === 'local' && !files.has(t.id) ? ' · <span class="missing">File needed</span>' : ''}</div></td><td>${esc(t.style || '—')}<small>${esc(t.year || '')}</small></td><td>${t.bpm ? esc(t.bpm) : '—'}</td><td>${time(t.duration)}</td><td class="track-actions"><button data-action="play" data-id="${esc(t.id)}" aria-label="Play ${esc(t.title)}" title="Play">▶</button>${t.source === 'local' ? `<button data-action="preview" data-id="${esc(t.id)}" aria-label="Preview ${esc(t.title)}" title="Preview on current output">♬</button><button data-action="analyze" data-id="${esc(t.id)}" aria-label="Analyze ${esc(t.title)}" title="Analyze BPM and level">⌁</button>${!files.has(t.id) ? `<button data-action="relink" data-id="${esc(t.id)}" title="Relink file">↥</button>` : ''}` : ''}<button data-action="edit" data-id="${esc(t.id)}" aria-label="Edit ${esc(t.title)}" title="Edit metadata">✎</button><button data-action="add" data-id="${esc(t.id)}" aria-label="Add ${esc(t.title)} to selected group" title="Add to selected group">+</button><button data-action="delete" data-id="${esc(t.id)}" aria-label="Delete ${esc(t.title)}" title="Remove from library">×</button></td></tr>`).join('');
+  $('#tracks').innerHTML = visible.map(t => `<tr draggable="true" data-track="${esc(t.id)}"><td><div class="track-title">${esc(t.title)}</div><div class="track-detail"><span class="source-tag ${t.source}">${t.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(t.artist || 'Unknown orchestra')}${t.singer ? ` · ${esc(t.singer)}` : ''}${t.source === 'local' && !files.has(t.id) ? ' · <span class="missing">File needed</span>' : ''}</div></td><td>${esc(t.style || '—')}<small>${esc(t.year || '')}</small></td><td>${t.bpm ? esc(t.bpm) : '—'}</td><td>${time(t.duration)}</td><td class="track-actions"><button data-action="play" data-id="${esc(t.id)}" aria-label="Play ${esc(t.title)}" title="Play">▶ Play</button>${t.source === 'local' ? `<button data-action="preview" data-id="${esc(t.id)}" aria-label="Preview ${esc(t.title)}" title="Preview on current output">♬ Preview</button><button data-action="analyze" data-id="${esc(t.id)}" aria-label="Analyze ${esc(t.title)}" title="Analyze BPM and level">⌁ Analyze</button>${!files.has(t.id) ? `<button data-action="relink" data-id="${esc(t.id)}" title="Relink file">↥ Relink</button>` : ''}` : ''}<button data-action="edit" data-id="${esc(t.id)}" aria-label="Edit ${esc(t.title)}" title="Edit metadata">✎ Edit</button><button data-action="add" data-id="${esc(t.id)}" aria-label="Add ${esc(t.title)} to selected group" title="Add to selected group">+ Add</button><button data-action="delete" data-id="${esc(t.id)}" aria-label="Delete ${esc(t.title)}" title="Remove from library">×</button></td></tr>`).join('');
   $('#empty-library').hidden = visible.length > 0;
   $('#empty-library h3').textContent = state.tracks.length ? 'No matching recordings' : 'A home for your collection';
   $('#library-count').textContent = state.tracks.length; $('#nav-count').textContent = state.tracks.length;
@@ -111,7 +114,7 @@ async function importFiles(list) {
         title: common.title || file.name.replace(/\.[^.]+$/, ''), artist: common.artist || common.albumartist || '', singer: '', year: String(common.year || ''),
         style: genre ? genre[0].toUpperCase() + genre.slice(1).toLowerCase() : '', duration: metadata?.format.duration || null, bpm: common.bpm || null };
       await saveFile(track.id, file); files.set(track.id, file); state.tracks.push(track); count++;
-      await persist(); renderLibrary();
+      await persist(); renderLibrary(); markStep('load');
     }
     notify(`${count} recording${count === 1 ? '' : 's'} added. Files are saved in this browser; keep your originals for backup.`);
   } catch (error) { notify(`Import stopped: ${error.message}. Keep your original files; browser storage may be full.`, true); }
@@ -123,7 +126,7 @@ async function addYouTube(url) {
   if (state.tracks.some(t => t.source === 'youtube' && t.videoId === videoId)) { notify('This YouTube video is already in your library.'); return; }
   const track = { id: uid(), source: 'youtube', videoId, title: `YouTube · ${videoId}`, artist: '', singer: '', year: '', style: '', duration: null };
   state.tracks.push(track); await persist(); renderLibrary(); $('#youtube-form').reset();
-  notify('Video added. Edit its title and orchestra while YouTube details load.');
+  markStep('youtube'); notify('Video added. Edit its title and orchestra while YouTube details load.');
   try {
     const response = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`, { signal: AbortSignal.timeout(8000) });
     if (response.ok) {
@@ -173,7 +176,7 @@ async function runAnalysis(tracks) {
   if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
   busy = true; $('#analyze-all').disabled = true; let completed = 0, errors = [];
   try {
-    for (const track of tracks) { try { await analyzeTrack(track); completed++; } catch (error) { errors.push(error.message); } }
+    for (const track of tracks) { try { await analyzeTrack(track); completed++; markStep('analyze'); } catch (error) { errors.push(error.message); } }
     notify(`${completed} tracks analyzed. BPM is an estimate; review it by ear.${errors.length ? ` ${errors.length} failed: ${errors[0]}` : ''}`, errors.length > 0);
   } finally { busy = false; $('#analyze-all').disabled = false; }
 }
@@ -186,7 +189,7 @@ async function playIndex(index) {
     queueIndex = index; current = item.track;
     $('#playing-title').textContent = current.title; $('#playing-artist').textContent = [current.artist, current.singer, current.year].filter(Boolean).join(' · ') || (current.source === 'youtube' ? 'YouTube video' : 'Local recording');
     $('#playing-group').textContent = item.groupName || 'LIBRARY TRACK'; $('#preview-status').hidden = true;
-    renderQueue(); notify(`Playing ${current.title}`);
+    renderQueue(); markStep('play'); notify(`Playing ${current.title}`);
   } catch (error) { if (request === playRequest) notify(error.message, true); }
 }
 async function next() { if (queueIndex + 1 < queue.length) await playIndex(queueIndex + 1); else { notify('End of play queue.'); } }
@@ -194,7 +197,7 @@ function addToGroup(id, groupId = selected) {
   const group = state.groups.find(g => g.id === groupId);
   if (!group) { notify('Create or select a tanda or cortina first.'); return; }
   if (!state.tracks.some(t => t.id === id)) return;
-  group.trackIds.push(id); selected = group.id; void persist(); renderGroups();
+  group.trackIds.push(id); selected = group.id; void persist(); renderGroups(); markStep('build');
 }
 function editTrack(track) {
   const form = $('#metadata-form');
@@ -220,7 +223,7 @@ $('#tracks').onclick = async event => {
   try {
     switch (button.dataset.action) {
       case 'play': queue = [{ track }]; queueIndex = -1; renderQueue(); await playIndex(0); break;
-      case 'preview': await player.previewTrack(track, files.get(track.id)); $('#preview-status span').textContent = `Preview: ${track.title} · same output`; $('#preview-status').hidden = false; break;
+      case 'preview': await player.previewTrack(track, files.get(track.id)); $('#preview-status span').textContent = `Preview: ${track.title} · same output`; $('#preview-status').hidden = false; markStep('preview'); break;
       case 'analyze': await runAnalysis([track]); break;
       case 'edit': editTrack(track); break;
       case 'add': addToGroup(track.id); break;
@@ -251,7 +254,7 @@ $('#metadata-form').onsubmit = event => {
   if (!track) return;
   for (const field of ['title', 'artist', 'singer', 'year', 'style']) track[field] = data.get(field).trim();
   track.bpm = data.get('bpm') ? Number(data.get('bpm')) : null;
-  void persist(); render(); $('#metadata-dialog').close();
+  void persist(); render(); markStep('edit'); $('#metadata-dialog').close();
 };
 $('#close-metadata').onclick = () => $('#metadata-dialog').close();
 function addGroup(kind) { const group = { id: uid(), kind, name: `${kind === 'tanda' ? 'Tanda' : 'Cortina'} ${state.groups.filter(g => g.kind === kind).length + 1}`, trackIds: [] }; state.groups.push(group); selected = group.id; void persist(); renderGroups(); }
@@ -287,7 +290,7 @@ $('#analyze-all').onclick = () => runAnalysis(state.tracks.filter(t => t.source 
 $('#export-set').onclick = () => {
   const blob = new Blob([JSON.stringify({ version: 1, ...state }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = 'tango-dj-set.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-  notify('Set exported. Audio is not included; keep your original recordings.');
+  markStep('export'); notify('Set exported. Audio is not included; keep your original recordings.');
 };
 $('#import-set').onclick = () => { if (busy) { notify('Wait for the current import or analysis to finish.'); return; } $('#set-input').click(); };
 $('#set-input').onchange = async event => {
@@ -309,9 +312,91 @@ $('#set-input').onchange = async event => {
   finally { event.target.value = ''; }
 };
 
+
+let triedSteps = new Set();
+try { triedSteps = new Set(JSON.parse(localStorage.getItem('studio-walkthrough') || '[]')); } catch { /* Progress is optional. */ }
+function renderProgress() {
+  const steps = [...document.querySelectorAll('[data-step]')];
+  for (const step of steps) {
+    const done = triedSteps.has(step.dataset.step); step.classList.toggle('tried', done);
+    step.querySelector('.step-number').textContent = done ? '✓ Tried' : String(steps.indexOf(step) + 1).padStart(2, '0');
+  }
+  $('#practice-progress-text').textContent = `${steps.filter(step => triedSteps.has(step.dataset.step)).length} / 8 tried`;
+}
+function markStep(step) {
+  triedSteps.add(step); renderProgress();
+  try { localStorage.setItem('studio-walkthrough', JSON.stringify([...triedSteps])); } catch { /* Progress is optional. */ }
+}
+$('#reset-guide').onclick = () => { triedSteps.clear(); try { localStorage.removeItem('studio-walkthrough'); } catch { /* Optional. */ } renderProgress(); };
+$('#toggle-guide').onclick = () => {
+  $('#practice-guide').hidden = !$('#practice-guide').hidden;
+  $('#toggle-guide').textContent = $('#practice-guide').hidden ? 'Show walkthrough' : 'Hide walkthrough';
+  $('#toggle-guide').setAttribute('aria-expanded', String(!$('#practice-guide').hidden));
+};
+async function loadSamples() {
+  if (busy) { notify('Wait for the current import or analysis to finish.'); return false; }
+  busy = true; $('#load-samples').disabled = true;
+  try {
+    for (const sample of practiceTracks()) {
+      let track = state.tracks.find(t => t.id === sample.id);
+      if (!track) { track = { ...sample }; state.tracks.push(track); }
+      if (!files.has(track.id)) { const blob = sampleWav(sample); await saveFile(track.id, blob); files.set(track.id, blob); }
+    }
+    for (const group of practiceGroups()) if (!state.groups.some(g => g.id === group.id)) state.groups.push(group);
+    selected = 'sample-group-tango'; await persist(); render(); markStep('load');
+    notify('Practice library ready: 11 short clips and 5 groups. Try Edit, Preview, Analyze, then Play practice set. Your existing music is preserved.');
+    return true;
+  } catch (error) { render(); notify(`Practice library could not be fully saved: ${error.message}`, true); return false; }
+  finally { busy = false; $('#load-samples').disabled = false; }
+}
+async function withPractice(action) {
+  if (!state.tracks.some(t => t.id === 'sample-tango-1') || !files.has('sample-tango-1')) if (!await loadSamples()) return;
+  try { await action(state.tracks.find(t => t.id === 'sample-tango-1')); } catch (error) { notify(error.message, true); }
+}
+$('#load-samples').onclick = loadSamples;
+$('#download-sample').onclick = () => {
+  const url = URL.createObjectURL(sampleWav(practiceTracks()[0])), anchor = document.createElement('a');
+  anchor.href = url; anchor.download = 'amber-floor-practice.wav'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  notify('Practice WAV downloaded. Add it with + Local files, or use it to relink a missing recording after importing a set.');
+};
+$('#sample-edit').onclick = () => withPractice(editTrack);
+$('#sample-preview').onclick = () => withPractice(async track => {
+  await player.previewTrack(track, files.get(track.id)); $('#preview-status span').textContent = `Preview: ${track.title} · same output`;
+  $('#preview-status').hidden = false; markStep('preview'); $('#deck').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('#sample-analyze').onclick = () => withPractice(() => runAnalysis(state.tracks.filter(t => t.source === 'local' && t.samplePack === SAMPLE_PACK)));
+$('#sample-select').onclick = () => withPractice(() => {
+  if (!state.groups.some(g => g.id === 'sample-group-tango')) state.groups.push(practiceGroups()[0]);
+  selected = 'sample-group-tango'; void persist(); renderGroups(); markStep('build'); $('#set').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  notify('Practice Tango tanda selected. Use + Add on a recording, or drag it here. Use arrows to change the order.');
+});
+$('#sample-play').onclick = () => withPractice(async () => {
+  queue = flattenSet(state.groups.filter(g => g.samplePack === SAMPLE_PACK && g.id !== 'sample-group-youtube'), state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
+  queueIndex = -1; renderQueue(); $('#deck').scrollIntoView({ behavior: 'smooth', block: 'start' }); await playIndex(0);
+});
+$('#sample-youtube').onclick = () => {
+  if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
+  for (const sample of youtubeExamples) if (!state.tracks.some(t => t.id === sample.id)) state.tracks.push({ ...sample });
+  if (!state.groups.some(g => g.id === 'sample-group-youtube')) state.groups.push({ id: 'sample-group-youtube', kind: 'tanda', name: 'YouTube example · Troilo / Fiorentino', trackIds: youtubeExamples.map(t => t.id), samplePack: SAMPLE_PACK });
+  selected = 'sample-group-youtube'; void persist(); render(); markStep('youtube');
+  notify('Three YouTube links added in a separate example tanda. Nothing is playing yet. Use Play on a video or Load & play set to try the mixed queue.');
+};
+$('#sample-link').onclick = () => {
+  $('#youtube-form input').value = `https://www.youtube.com/watch?v=${youtubeExamples[0].videoId}`;
+  $('#youtube-form').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#youtube-form input').focus();
+  notify('Example link filled. Press Add video to import it; existing videos are not duplicated.');
+};
+$('#sample-export').onclick = () => $('#export-set').click();
+renderProgress();
+
 try {
   const saved = await loadState(); if (saved) state = validateSet({ version: 1, ...saved });
   for (const track of state.tracks.filter(t => t.source === 'local')) { const file = await getFile(track.id); if (file) files.set(track.id, file); }
   selected = state.groups[0]?.id || null;
 } catch (error) { notify(`Could not restore your library: ${error.message}`, true); }
 render();
+
+// A shareable local entry point opens a populated workspace without starting audio.
+if (new URLSearchParams(location.search).get('practice') === '1') {
+  if (await loadSamples()) $('#sample-youtube').click();
+}

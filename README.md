@@ -13,6 +13,24 @@ npm run dev
 
 Open the local URL printed by Vite. For a production build, run `npm run build`; `npm run preview` serves that build locally. The app can be hosted as a static site. Use a stable HTTPS origin when deploying, since browser storage belongs to that origin.
 
+## Learn with the practice workspace
+
+Open `/?practice=1` on your local app to add the practice library and a YouTube example tanda without starting playback. Alternatively, click **Load practice library** in the app. Existing recordings and groups are preserved; loading the pack again does not duplicate sample entries.
+
+The top-of-page walkthrough has eight hands-on steps covering file import, search and metadata, preview, analysis, tanda composition, playback, YouTube, and exporting/importing a set. Each step includes a direct action button and records what you have tried. Library actions also have visible text labels.
+
+The pack contains 11 original synthesized WAV clips and five ready-made groups:
+
+1. Tango: three 18-second clips.
+2. Cortina: a 6-second break.
+3. Vals: three 15-second clips.
+4. Cortina: a second 6-second break.
+5. Milonga: three 12-second clips.
+
+Click **Play practice set** to play only the local practice groups. Use **Add YouTube example tanda** to append three external Troilo/Fiorentino recording links, then **Load & play set** to load every group, including your own. YouTube links do not download audio and may not be available or embeddable.
+
+These synthesized clips demonstrate the controls and rhythmic patterns; they are not historical tango recordings or full-length performance selections. **Download practice WAV** provides a portable audio file for trying import and missing-file relinking. **Export my set** downloads the current JSON set, which excludes audio.
+
 ## First version
 
 - Import multiple local audio files by browsing or dropping them into the library.
