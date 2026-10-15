@@ -114,3 +114,5 @@ Numeric loopback visits transfer the saved workspace, audio blobs, and preferenc
 - Editing the set after loading a queue shows a reminder to reload it. The current queue stays stable during performance.
 - New cortinas default to 20 seconds. Each cortina group has an editable length, and its displayed duration follows that limit.
 - YouTube duration is recorded when the player supplies it. Missing durations remain excluded from known runtime totals.
+
+Further playback checks preserve the remaining queue when its current recording is deleted, stop progress callbacks from paused/inactive sources, and restart a completed cortina from the beginning when replayed. Metadata edits update the loaded queue immediately. Canceling a rename or deletion keeps the previous undo action intact.

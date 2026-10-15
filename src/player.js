@@ -2,13 +2,13 @@ export class Player {
   constructor(onUpdate, onEnded, onError) {
     this.audio = new Audio(); this.preview = new Audio(); this.audio.preload = 'metadata';
     this.onUpdate = onUpdate; this.onError = onError; this.volume = 0.85; this.token = 0; this.urls = new Map();
-    this.audio.addEventListener('timeupdate', () => onUpdate(this.audio.currentTime, this.audio.duration));
+    this.audio.addEventListener('timeupdate', () => { if (this.track?.source === 'local' && !this.audio.paused) onUpdate(this.audio.currentTime, this.audio.duration); });
     this.audio.addEventListener('ended', onEnded);
     for (const event of ['play','pause','ended']) this.audio.addEventListener(event, () => this.onPlaybackState?.());
     this.audio.addEventListener('error', () => onError('This audio format could not be played. Try MP3, WAV, or a supported AAC file.'));
     this.preview.addEventListener('error', () => onError('Preview playback failed.'));
     this.timer = setInterval(() => {
-      if (this.track?.source === 'youtube' && this.youtube?.getCurrentTime && this.matchesVideo()) onUpdate(this.youtube.getCurrentTime(), this.youtube.getDuration());
+      if (this.track?.source === 'youtube' && this.youtube?.getPlayerState?.() === 1 && this.youtube?.getCurrentTime && this.matchesVideo()) onUpdate(this.youtube.getCurrentTime(), this.youtube.getDuration());
     }, 500);
     this.onEnded = onEnded; this.youtubeArmed = false;
   }

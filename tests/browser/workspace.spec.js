@@ -275,3 +275,40 @@ test('DJ edits preserve queue, can be undone, and resume the last track after re
   await expect(page.locator('#playing-title')).toHaveText('Cofrecito');
   await expect(page.locator('#queue-count')).toHaveText('28');
 });
+test('deleting a loaded recording keeps the remaining queue ready to play', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.YT = { Player: class {
+      constructor(id, options) { this.state = 2; setTimeout(() => options.events.onReady(), 0); }
+      loadVideoById(id) { this.videoId = id; this.state = 1; }
+      getCurrentTime() { return 0; } getDuration() { return 180; } getPlayerState() { return this.state; }
+      setVolume() {} pauseVideo() { this.state = 2; } playVideo() { this.state = 1; }
+    } };
+  });
+  await page.goto('/?practice=1'); await page.locator('#start-set').click();
+  await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('[data-action="delete"][data-id="real-tango-1"]').click();
+  await expect(page.locator('#queue-count')).toHaveText('27');
+  await expect(page.locator('#playing-title')).toHaveText('No recording loaded');
+  await page.locator('#play-pause').click();
+  await expect(page.locator('#playing-title')).toHaveText('Te aconsejo que me olvides');
+});
+test('completed cortina can be replayed without bypassing its limit', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.YT = { Player: class {
+      constructor(id, options) { this.state = 2; this.position = 0; this.loads = 0; window.testYouTube = this; setTimeout(() => options.events.onReady(), 0); }
+      loadVideoById(id) { this.videoId = id; this.state = 1; this.position = 0; this.loads++; }
+      getCurrentTime() { return this.position; } getDuration() { return 180; } getPlayerState() { return this.state; }
+      setVolume() {} pauseVideo() { this.state = 2; } playVideo() { this.state = 1; }
+    } };
+  });
+  await page.goto('/?practice=1'); await page.locator('#auto-next').uncheck(); await page.locator('#start-set').click();
+  await page.locator('[data-queue-index="4"]').click();
+  await page.evaluate(() => { window.testYouTube.position = 20.1; });
+  await expect(page.locator('#notice')).toContainText('Cortina finished');
+  const loads = await page.evaluate(() => window.testYouTube.loads);
+  await page.locator('#play-pause').click();
+  expect(await page.evaluate(() => window.testYouTube.loads)).toBe(loads + 1);
+  expect(await page.evaluate(() => window.testYouTube.position)).toBe(0);
+  await expect(page.locator('#playing-title')).toHaveText('L-O-V-E');
+});

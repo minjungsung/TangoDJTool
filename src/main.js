@@ -312,8 +312,18 @@ $('#tracks').onclick = async event => {
       case 'delete':
         if (!confirm(t(`Remove “${track.title}” from the library and every group? Your original file will be kept.`))) return;
         if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
-        if (current?.id === track.id || player.track?.id === track.id) { player.stop(); current = null; queue = []; queueIndex = -1; $('#playing-title').textContent = 'No recording loaded'; $('#playing-artist').textContent = 'Play a track or load your prepared set.'; }
-        else { const playingItem = queue[queueIndex]; queue = queue.filter(item => item.track.id !== track.id); queueIndex = queue.indexOf(playingItem); }
+        const playingItem = queue[queueIndex];
+        const removingCurrent = current?.id === track.id || player.track?.id === track.id;
+        const priorIndex = queueIndex >= 0 ? queueIndex : resumeIndex;
+        queue = queue.filter(item => item.track.id !== track.id);
+        loadedSignature = null;
+        if (removingCurrent) {
+          ++playRequest; player.stop(); player.track = null; current = null; transitioning = false;
+          queueIndex = -1; resumeIndex = Math.min(Math.max(0, priorIndex), Math.max(0, queue.length - 1));
+          $('#playing-title').textContent = 'No recording loaded'; $('#playing-artist').textContent = 'Play a track or load your prepared set.';
+          $('#playing-group').textContent = 'READY WHEN YOU ARE'; $('#position').textContent = '0:00 / 0:00'; $('#seek').value = 0;
+          $('#youtube-wrap').hidden = true; $('#preview-status').hidden = true; $('#queue-resume').hidden = !queue.length;
+        } else { queueIndex = queue.indexOf(playingItem); resumeIndex = queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, Math.max(0, queue.length - 1)); }
         state = removeTrack(state, track.id); await persist(); await deleteFile(track.id); files.delete(track.id); player.revoke(track.id); render(); break;
     }
   } catch (error) { notify(error.message, true); }
@@ -337,6 +347,9 @@ $('#metadata-form').onsubmit = event => {
   if (track.source === 'youtube') { const id = youtubeId(data.get('videoUrl')); if (!id) { notify('Enter a YouTube watch, short, live, or youtu.be video link.', true); return; } track.videoId = id; for (const item of queue) if (item.track.id === track.id) item.track.videoId = id; }
   for (const field of ['title', 'artist', 'singer', 'year', 'style']) track[field] = data.get(field).trim();
   track.bpm = data.get('bpm') ? Number(data.get('bpm')) : null;
+  for (const item of queue) if (item.track.id === track.id) Object.assign(item.track, track);
+  if (current?.id === track.id) { $('#playing-title').textContent = track.title; $('#playing-artist').textContent = [track.artist, track.singer, track.year].filter(Boolean).join(' · '); }
+  renderQueue();
   void persist(); render(); markStep('edit'); $('#metadata-dialog').close();
 };
 $('#close-metadata').onclick = () => $('#metadata-dialog').close();
@@ -346,11 +359,15 @@ $('#groups').onclick = event => {
   const button = event.target.closest('[data-group-action]'); if (!button) return;
   const group = state.groups.find(g => g.id === button.dataset.id); if (!group) return;
   const i = state.groups.indexOf(group), j = Number(button.dataset.index);
-  if (button.dataset.groupAction !== 'select') rememberSetEdit();
+  const action = button.dataset.groupAction;
+  let newName;
+  if (action === 'rename') { newName = prompt(t('Group name'), group.name); if (!newName?.trim() || newName.trim() === group.name) return; }
+  if (action === 'delete' && !confirm(t(`Remove “${group.name}” from your set? Recordings stay in the library.`))) return;
+  if (action !== 'select') rememberSetEdit();
   switch (button.dataset.groupAction) {
     case 'select': selected = group.id; break;
-    case 'rename': { const name = prompt(t('Group name'), group.name); if (name?.trim()) group.name = name.trim(); break; }
-    case 'delete': if (confirm(t(`Remove “${group.name}” from your set? Recordings stay in the library.`))) { state.groups.splice(i, 1); if (selected === group.id) selected = state.groups.some(g => g.id === selected) ? selected : state.groups[0]?.id || null; } break;
+    case 'rename': group.name = newName.trim(); break;
+    case 'delete': state.groups.splice(i, 1); if (selected === group.id) selected = state.groups[0]?.id || null; break;
     case 'up': if (i > 0) [state.groups[i - 1], state.groups[i]] = [state.groups[i], state.groups[i - 1]]; break;
     case 'down': if (i < state.groups.length - 1) [state.groups[i + 1], state.groups[i]] = [state.groups[i], state.groups[i + 1]]; break;
     case 'remove': group.trackIds.splice(j, 1); break;
@@ -370,7 +387,7 @@ $('#groups').ondragover = event => { if (event.target.closest('[data-group]')) e
 $('#groups').ondrop = event => { const group = event.target.closest('[data-group]'); if (group) { event.preventDefault(); addToGroup(event.dataTransfer.getData('text/plain'), group.dataset.group); } };
 $('#start-set').onclick = () => { loadedSignature = queueSignature(state.groups, state.tracks); queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
 $('#queue').onclick = event => { const item = event.target.closest('[data-queue-index]'); if (item) void playIndex(Number(item.dataset.queueIndex)); };
-$('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); } catch (error) { notify(error.message, true); } };
+$('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1)); else if (timedEnd) await playIndex(queueIndex); else await player.toggle(); updateTransport(); } catch (error) { notify(error.message, true); } };
 $('#next').onclick = next; $('#previous').onclick = () => playIndex(queueIndex - 1);
 $('#stop').onclick = () => { ++playRequest; player.stop(); transitioning = false; updateTransport(); notify('Playback stopped.'); };
 $('#seek').oninput = () => { const duration = queue[queueIndex]?.limitSeconds || (current?.source === 'youtube' ? player.youtube?.getDuration() : player.audio.duration); if (Number.isFinite(duration)) player.seek(Number($('#seek').value) / 100 * duration); };
