@@ -33,7 +33,8 @@ The Android app uses a supported browser to run the Tango DJ Studio website. Aft
 
 - Category candidate: Music & Audio.
 - Advertising: the application has no advertising SDK; embedded provider content can have provider advertising. Confirm the Console declaration against Google's current guidance.
-- Privacy URL: `https://tangodjtool.vercel.app/privacy.html` after deployment.
+- Privacy URL: `https://minjung-world.notion.site/Tango-DJ-Studio-Privacy-Policy-b7474a525fd882d39c2e01b0091b667b`.
+- Terms URL: `https://minjung-world.notion.site/Tango-DJ-Studio-Terms-of-Use-c3174a525fd8831f9cab81b1b229fa08`.
 - Support website: `https://github.com/minjungsung/TangoDJTool/issues`.
 - Support email: obtain from the developer account; do not fabricate one.
 - Access: no app login; YouTube sources can be restricted by provider rules or location.
