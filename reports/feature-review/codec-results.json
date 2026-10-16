@@ -1,0 +1,122 @@
+[
+  {
+    "browser": "chromium",
+    "extension": "mp3",
+    "playable": true,
+    "title": "Codec review MP3",
+    "metadata": "FILE Review orchestra",
+    "timeline": "0:01 / 0:20",
+    "sourceTime": 1.372872,
+    "message": "Playing Codec review MP3"
+  },
+  {
+    "browser": "chromium",
+    "extension": "m4a",
+    "playable": true,
+    "title": "Codec review M4A",
+    "metadata": "FILE Review orchestra",
+    "timeline": "0:01 / 0:20",
+    "sourceTime": 1.367075,
+    "message": "Playing Codec review M4A"
+  },
+  {
+    "browser": "chromium",
+    "extension": "flac",
+    "playable": true,
+    "title": "Codec review FLAC",
+    "metadata": "FILE Review orchestra",
+    "timeline": "0:01 / 0:20",
+    "sourceTime": 1.370733,
+    "message": "Playing Codec review FLAC"
+  },
+  {
+    "browser": "chromium",
+    "extension": "ogg",
+    "playable": true,
+    "title": "Codec review OGG",
+    "metadata": "FILE Review orchestra",
+    "timeline": "0:01 / 0:20",
+    "sourceTime": 1.37065,
+    "message": "Playing Codec review OGG"
+  },
+  {
+    "browser": "chromium",
+    "extension": "aiff",
+    "playable": false,
+    "title": "Codec review AIFF",
+    "metadata": "FILE Unknown orchestra",
+    "timeline": "0:00 / —",
+    "sourceTime": 0,
+    "message": "This audio format could not be played. Try MP3, WAV, or a supported AAC file."
+  },
+  {
+    "browser": "chromium",
+    "extension": "opus",
+    "playable": true,
+    "title": "Codec review OPUS",
+    "metadata": "FILE Review orchestra",
+    "timeline": "0:01 / 0:20",
+    "sourceTime": 1.365333,
+    "message": "Playing Codec review OPUS"
+  },
+  {
+    "browser": "webkit",
+    "extension": "mp3",
+    "playable": true,
+    "title": "Codec review MP3",
+    "metadata": "FILE Review orchestra",
+    "timeline": "0:01 / 0:20",
+    "sourceTime": 1.3722192029840836,
+    "message": "Playing Codec review MP3"
+  },
+  {
+    "browser": "webkit",
+    "extension": "m4a",
+    "playable": true,
+    "title": "Codec review M4A",
+    "metadata": "FILE Review orchestra",
+    "timeline": "0:01 / 0:19",
+    "sourceTime": 1.372204905330173,
+    "message": "Playing Codec review M4A"
+  },
+  {
+    "browser": "webkit",
+    "extension": "flac",
+    "playable": true,
+    "title": "Codec review FLAC",
+    "metadata": "FILE Review orchestra",
+    "timeline": "0:01 / 0:20",
+    "sourceTime": 1.3679725193306034,
+    "message": "Playing Codec review FLAC"
+  },
+  {
+    "browser": "webkit",
+    "extension": "ogg",
+    "playable": true,
+    "title": "Codec review OGG",
+    "metadata": "FILE Review orchestra",
+    "timeline": "0:01 / 0:20",
+    "sourceTime": 1.3691513829922812,
+    "message": "Playing Codec review OGG"
+  },
+  {
+    "browser": "webkit",
+    "extension": "aiff",
+    "playable": true,
+    "title": "Codec review AIFF",
+    "metadata": "FILE Unknown orchestra",
+    "timeline": "0:01 / 0:20",
+    "sourceTime": 1.3668530963410677,
+    "message": "Playing Codec review AIFF"
+  },
+  {
+    "browser": "webkit",
+    "extension": "opus",
+    "playable": true,
+    "title": "Codec review OPUS",
+    "metadata": "FILE Review orchestra",
+    "timeline": "0:01 / 0:20",
+    "sourceTime": 1.3710440106724104,
+    "message": "Playing Codec review OPUS"
+  }
+]

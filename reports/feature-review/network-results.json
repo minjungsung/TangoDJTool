@@ -1,0 +1,16 @@
+{
+  "events": [
+    {
+      "phase": "offline",
+      "waiting": true,
+      "title": "Te aconsejo que me olvides"
+    },
+    {
+      "phase": "recovered",
+      "title": "Te aconsejo que me olvides",
+      "position": "0:01 / 3:00"
+    }
+  ],
+  "errors": [],
+  "completed": true
+}

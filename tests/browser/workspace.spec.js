@@ -471,8 +471,9 @@ test('mobile library actions stay visible and floating deck controls work while 
   const firstPlay = page.locator('[data-action="play"]').first(); await firstPlay.scrollIntoViewIfNeeded();
   const box = await firstPlay.boundingBox(); expect(box.x + box.width).toBeLessThanOrEqual(390);
   await firstPlay.click(); await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await page.locator('button[data-view="set"]').click();
   await page.locator('#start-set').click(); await expect(page.locator('#queue-count')).toHaveText('28');
-  await page.locator('#library').scrollIntoViewIfNeeded(); await expect(page.locator('#mini-deck')).toBeVisible();
+  await page.locator('button[data-view="library"]').click(); await expect(page.locator('#mini-deck')).toBeVisible();
   await page.locator('#mini-play').click(); await expect(page.locator('#mini-play')).toHaveText('▶');
   await page.locator('#mini-next').click(); await expect(page.locator('#playing-title')).toHaveText('Te aconsejo que me olvides');
   await page.locator('#mini-open').click(); await expect(page.locator('#mini-deck')).toBeHidden();
@@ -583,7 +584,8 @@ test('language changes translate the live countdown and tanda position immediate
 
 test('small Spanish cortina controls retain readable input widths', async ({ page }) => {
   await page.setViewportSize({width:320,height:700}); await page.goto('/?practice=1');
-  await page.locator('#open-settings').click(); await page.locator('#language').selectOption('es'); await page.locator('[data-close="settings-dialog"]').click();
+  await page.locator('#open-menu').click(); await page.locator('#open-settings').click(); await page.locator('#language').selectOption('es'); await page.locator('[data-close="settings-dialog"]').click();
+  await page.locator('button[data-view="set"]').click();
   const dimensions = await page.locator('.cortina-range').first().evaluate(el=>({client:el.clientWidth,scroll:el.scrollWidth,widths:[...el.querySelectorAll('input')].map(input=>input.getBoundingClientRect().width)}));
   expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.client); expect(Math.min(...dimensions.widths)).toBeGreaterThanOrEqual(60);
 });
@@ -592,6 +594,7 @@ test('Spanish header and cortina actions fit common narrow viewports', async ({ 
   await page.goto('/?practice=1'); await page.locator('#open-settings').click(); await page.locator('#language').selectOption('es'); await page.locator('[data-close="settings-dialog"]').click();
   for (const width of [320, 390, 414, 768]) {
     await page.setViewportSize({ width, height: 900 });
+    if (width < 700) { await page.locator('#open-menu').click(); await page.locator('button[data-view="set"]').click(); }
     const dimensions = await page.evaluate(() => ({
       page: document.documentElement.scrollWidth,
       header: [...document.querySelectorAll('.header-actions button')].map(el => ({ client: el.clientWidth, scroll: el.scrollWidth })),

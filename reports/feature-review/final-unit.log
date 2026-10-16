@@ -1,0 +1,26 @@
+
+> tango-dj-studio@0.1.0 test
+> node --test tests/*.test.js
+
+✔ four-second fades cover the audible beginning and end (0.623625ms)
+✔ short segments, unknown provider durations and disabled fades remain bounded (0.073ms)
+✔ permission and codec failures provide different recovery instructions (0.097625ms)
+✔ YouTube URLs accept canonical variants and reject unrelated hosts (0.467666ms)
+✔ set playback preserves group order, repeats, and cortinas (0.326792ms)
+✔ set import rejects corrupt references, duplicate IDs, and invalid video data (0.480708ms)
+✔ tempo estimation recognizes a pulse train and measures its RMS and peak (3.727375ms)
+✔ cortina playback limits survive queue construction and import validation (0.109542ms)
+✔ milonga cycle uses coherent tandas, short cortinas, and removes legacy samples only (0.846167ms)
+✔ cortina start positions survive export and queue construction, rejecting invalid values (0.125333ms)
+✔ cortina runtime follows the playback limit instead of full song length (0.44775ms)
+✔ library playback selects the current or next repeated queue entry (0.103125ms)
+✔ queue staleness follows order and limits while ignoring discovered durations (0.127708ms)
+✔ cue offsets affect queue freshness and duration clips at the actual recording end (0.075417ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 406.305083

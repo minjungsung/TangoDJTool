@@ -1,8 +1,9 @@
 import './style.css';
 import { parseBlob } from 'music-metadata';
 import { uid, youtubeId, flattenSet, removeTrack, validateSet } from './model.js';
-import { saveState, loadState, saveFile, getFile, deleteFile, replaceRecording } from './storage.js';
+import { saveState, loadState, saveFile, getFile, deleteFile, replaceRecording, storageMessage } from './storage.js';
 import { Player } from './player.js';
+import { playbackMessage } from './fade.js';
 import { REAL_SAMPLE_PACK, realTracks, realGroups, removeOldExamples } from './samples.js';
 import { guideMarkup } from './guide.js';
 import { groupDuration, queueSignature, locateInQueue } from './workspace.js';
@@ -17,14 +18,17 @@ const files = new Map();
 let savedQueue = [], revision = 0;
 let settings = {};
 try { settings = JSON.parse(localStorage.getItem('studio-settings') || '{}'); } catch {}
-let persistence = Promise.resolve();
+let persistence = Promise.resolve(), temporaryWorkspace = false;
 function workspaceSnapshot(tracks = state.tracks) {
   return structuredClone({ ...state, tracks, queue: queue.map(item => ({ trackId: item.track.id, groupId: item.groupId, groupName: item.groupName, kind: item.kind, limitSeconds: item.limitSeconds, startSeconds: item.startSeconds, holdAfter: item.holdAfter })), queueIndex: queueIndex >= 0 ? queueIndex : resumeIndex, selected, loadedSignature });
 }
 function persist() {
   const snapshot = workspaceSnapshot();
+  if (temporaryWorkspace) return Promise.resolve(false);
   $('#save-status').textContent = t('Saving…');
-  persistence = persistence.then(() => saveState(snapshot, revision)).then(savedRevision => { revision = savedRevision; $('#save-status').textContent = t('Saved in this browser'); return true; }).catch(error => { $('#save-status').textContent = t('Save failed — export a backup'); notify(`Could not save your library: ${error.message}`, true); return false; });
+  persistence = persistence.then(() => saveState(snapshot, revision)).then(savedRevision => { revision = savedRevision; $('#storage-recovery').hidden = true; $('#save-status').textContent = t('Saved in this browser'); return true; }).catch(error => { $('#save-status').textContent = t('Save failed — export a backup'); notify(`Could not save your library: ${storageMessage(error)}`, true);
+    if (!error?.message?.includes('another tab. Export')) showStorageRecovery(error);
+    return false; });
   return persistence;
 }
 function notify(message, error = false) {
@@ -41,15 +45,16 @@ function notify(message, error = false) {
     <a href="#deck" class="nav">◉ <span>Live deck</span></a>
     <div class="sidebar-bottom"><span class="status-dot"></span> Local-first workspace<p>Music stays in this browser.<br>YouTube plays online.</p></div>
   </aside>
+  <nav class="device-nav" aria-label="Workspace navigation"><button data-view="library" aria-current="page">1 · Music</button><button data-view="set">2 · Set</button><button data-view="deck">3 · Play</button></nav>
   <main>
-    <header class="workspace-header"><div class="workspace-title"><h1>DJ workspace</h1><span id="save-status" role="status">Saved in this browser</span></div><div class="header-actions"><button id="open-examples">Example sets</button><button id="open-guide">User guide</button><button id="open-settings">Settings</button><button id="import-set">Import set</button><button id="export-set">Export set ↗</button></div></header>
+    <header class="workspace-header"><div class="workspace-title"><h1>DJ workspace</h1><span id="save-status" role="status">Saved in this browser</span></div><button id="open-menu" class="phone-menu" aria-expanded="false">Menu</button><div class="header-actions"><button id="open-examples">Example sets</button><button id="open-guide">User guide</button><button id="open-settings">Settings</button><button id="import-set">Import set</button><button id="export-set">Export set ↗</button></div></header>
     <div id="notice" role="status" aria-live="polite" hidden><span id="notice-message"></span><button id="dismiss-notice" aria-label="Dismiss notification">×</button></div><div id="undo-bar" hidden><span>Set changed</span><button id="undo-set">Undo last set edit</button></div>
-    <div class="workspace">
+    <p class="workflow-hint">Add music, arrange your tandas, then play your set.</p><div id="storage-recovery" class="storage-recovery" role="status" hidden><strong>Temporary workspace · not saved</strong><p id="storage-recovery-message"></p><p>You can play the example set in this tab. Export your edits before closing or reloading.</p><div><button id="retry-saving">Retry saving</button><button id="temporary-export">Export set</button></div></div><div class="workspace">
       <section id="library" class="panel library">
         <div class="section-head"><div><div class="eyebrow">01 / COLLECTION</div><h2>Music library <span id="library-count">0</span></h2></div><button id="add-files" class="primary">+ Local files</button></div>
         <div id="drop-zone" tabindex="0" role="button" aria-label="Choose or drop local music files"><span class="drop-icon">↥</span><div><strong>Drop your music here</strong><span>MP3, WAV, FLAC, M4A and other browser-supported audio</span></div><span class="drop-link">Browse files</span></div>
         <form id="youtube-form" class="youtube-form"><span class="youtube-mark">▶</span><input name="url" type="url" aria-label="YouTube video URL" placeholder="Paste a YouTube video link" required><button type="submit">Add video</button></form>
-        <div class="filters"><input id="search" type="search" aria-label="Search library" placeholder="Search title, orchestra, singer…"><select id="style-filter" aria-label="Filter dance style"><option value="">All styles</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select><select id="source-filter" aria-label="Filter source"><option value="">All sources</option><option value="local">Local</option><option value="youtube">YouTube</option></select></div>
+        <p id="library-target" class="selection-summary"></p><p id="import-progress" class="hint" role="status" hidden></p><div class="filters"><input id="search" type="search" aria-label="Search library" placeholder="Search title, orchestra, singer…"><select id="style-filter" aria-label="Filter dance style"><option value="">All styles</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select><select id="source-filter" aria-label="Filter source"><option value="">All sources</option><option value="local">Local</option><option value="youtube">YouTube</option></select></div>
         <div class="table-scroll"><table><thead><tr><th>RECORDING</th><th>STYLE / YEAR</th><th>BPM</th><th>LENGTH</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="tracks"></tbody></table></div>
         <div id="empty-library" class="empty"><span>♫</span><h3>A home for your collection</h3><p>Bring in your recordings, organize the details,<br>and find the right music for each moment.</p></div>
         <div class="panel-foot"><span id="library-summary">0 recordings · 0:00 known duration</span><button id="analyze-all" class="text-button">Analyze local tracks</button></div>
@@ -58,20 +63,20 @@ function notify(message, error = false) {
         <div class="section-head"><div><div class="eyebrow">02 / THE FLOW</div><h2>Set builder</h2></div><span id="set-duration" class="badge">0:00</span></div>
         <div class="builder-actions"><button id="add-tanda">+ Tanda</button><button id="add-cortina">+ Cortina</button></div>
         <p id="selected-group" class="selection-summary"></p><p class="hint">Select a group, then use + on a recording. Drag recordings into a group to add them.</p>
-        <div id="groups"></div>
+        <button id="choose-recordings" class="wide">Choose recordings for this group</button><div id="groups"></div>
         <div id="empty-set" class="empty"><span>▤</span><h3>Give your set a shape</h3><p>Create a tanda, choose its recordings,<br>then add a cortina between groups.</p></div>
         <button id="refresh-queue" class="wide" hidden>Update upcoming queue</button><p id="queue-stale" class="hint" hidden>Set changed. Update upcoming queue to keep the current recording, or load the whole set from the start.</p><button id="start-set" class="primary wide">▶ Load & play set</button>
       </section>
     </div>
     <section id="deck" class="panel deck">
-      <div class="deck-main"><div class="eyebrow">03 / LIVE DECK</div><div class="now-playing"><div class="record-art">♫</div><div><span id="playing-group" class="eyebrow">READY WHEN YOU ARE</span><h2 id="playing-title">No recording loaded</h2><p id="playing-artist">Play a track or load your prepared set.</p></div></div>
+      <div class="deck-main"><button id="deck-start-set" class="primary" hidden>Play prepared set</button><div class="eyebrow">03 / LIVE DECK</div><div class="now-playing"><div class="record-art">♫</div><div><span id="playing-group" class="eyebrow">READY WHEN YOU ARE</span><h2 id="playing-title">No recording loaded</h2><p id="playing-artist">Play a track or load your prepared set.</p></div></div>
         <div class="transport"><button id="previous" aria-label="Previous track">⏮</button><button id="play-pause" class="play-button" aria-label="Play or pause">▶</button><button id="next" aria-label="Next track">⏭</button><button id="stop" aria-label="Stop playback">■</button><span id="position">0:00 / 0:00</span></div>
         <div class="deck-context"><span id="recording-number"></span><span id="remaining-time"></span></div><div id="up-next" class="up-next" hidden></div>
         <input id="seek" type="range" min="0" max="100" value="0" aria-label="Playback position">
-        <div class="deck-settings"><label>Volume <input id="volume" type="range" min="0" max="100" value="85"></label><label>Fade <select id="fade"><option value="0" selected>Off</option><option value="1">1 sec</option><option value="2">2 sec</option><option value="4">4 sec</option></select></label><label><input id="normalize" type="checkbox"> Level local audio</label><label><input id="auto-next" type="checkbox" checked> Auto next</label></div>
-        <p class="hint">Preview uses the same audio output as the live deck. Fades and level adjustment apply to local audio. YouTube uses its own player controls.</p>
+        <details class="playback-options" open><summary>Playback settings</summary><div class="deck-settings"><label>Volume <input id="volume" type="range" min="0" max="100" value="85"></label><label>Fade <select id="fade"><option value="0" selected>Off</option><option value="1">1 sec</option><option value="2">2 sec</option><option value="4">4 sec</option></select></label><label><input id="normalize" type="checkbox"> Level local audio</label><label><input id="auto-next" type="checkbox" checked> Auto next</label></div>
+        <p class="hint">Fade follows the beginning and end of each recording. YouTube fades depend on device volume support; use local files for reliable fades. Preview uses the live output.</p></details><p id="playback-loading" class="hint" role="status" hidden>Loading recording…</p><div id="playback-recovery" class="playback-stall" hidden><span id="playback-recovery-message"></span><button id="playback-retry">Retry</button><button id="playback-relink">Relink file</button><button id="playback-skip">Skip recording</button></div>
         <div id="preview-status" class="preview-status" hidden><span></span><button id="stop-preview">Stop preview</button></div>
-        <div id="playback-stall" class="playback-stall" hidden><span>Playback is waiting for YouTube. Check your connection or retry from the current position.</span><button id="resume-video">Retry here</button></div><div id="youtube-wrap" hidden><div id="youtube-player"></div><div id="youtube-error" hidden><strong>YouTube video unavailable</strong><p id="youtube-error-message"></p><div class="video-recovery"><a id="youtube-open" target="_blank" rel="noopener noreferrer">Open on YouTube</a><button id="youtube-retry">Retry video</button><button id="youtube-replace">Replace video link</button><button id="youtube-local">Use my local recording</button><button id="youtube-skip">Skip unavailable video</button></div></div><p class="hint">If automatic playback is blocked, press play in the video.</p></div>
+        <p id="playback-permission" class="hint" role="status" hidden>Playback has not started. Press play inside the YouTube video below, or press Play again.</p><div id="playback-stall" class="playback-stall" hidden><span>Playback is waiting for YouTube. Check your connection or retry from the current position.</span><button id="resume-video">Retry here</button></div><div id="youtube-wrap" hidden><div id="youtube-player"></div><div id="youtube-error" hidden><strong>YouTube video unavailable</strong><p id="youtube-error-message"></p><div class="video-recovery"><a id="youtube-open" target="_blank" rel="noopener noreferrer">Open on YouTube</a><button id="youtube-retry">Retry video</button><button id="youtube-replace">Replace video link</button><button id="youtube-local">Use my local recording</button><button id="youtube-skip">Skip unavailable video</button></div></div><p class="hint">If automatic playback is blocked, press play in the video.</p></div>
       </div>
       <div class="queue-panel"><div class="section-head"><h3>Play queue</h3><span id="queue-count" class="badge">0</span></div><p id="queue-resume" class="hint" hidden>Queue restored. Press Play to resume your last recording.</p><div id="queue"><p class="hint">Load a set or play a library track.</p></div></div>
     </section>
@@ -81,7 +86,7 @@ function notify(message, error = false) {
   <dialog id="examples-dialog"><div class="dialog-heading"><h2>Example sets</h2><button data-close="examples-dialog" aria-label="Close">×</button></div><p class="hint">Six tandas with cortinas. Add this set to your workspace when you need a starting point.</p><div class="example-flow">Tango · Tango · Vals · Tango · Tango · Milonga</div><div id="example-actions"></div></dialog>
   <dialog id="guide-dialog"><div class="dialog-heading"><h2>User guide</h2><button data-close="guide-dialog" aria-label="Close">×</button></div>${guideMarkup}</dialog>
   <dialog id="settings-dialog"><div class="dialog-heading"><h2>Settings</h2><button data-close="settings-dialog" aria-label="Close">×</button></div><label class="language-control">Language <select id="language" aria-label="Language"><option value="ko">한국어</option><option value="en">English</option><option value="es">Español</option></select></label><section class="storage-panel"><div><strong>Personal workspace</strong><p>Your library, audio files, set, queue, and preferences are saved for this site in this browser. Other visitors have their own workspace.</p></div><div><button id="persist-storage">Request persistent storage</button><small id="storage-details"></small></div></section></dialog>
-  <input id="file-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" multiple hidden>
+  <dialog id="actions-dialog"><div class="dialog-heading"><h2>Recording actions</h2><button data-close="actions-dialog" aria-label="Close">×</button></div><p id="actions-title" data-preserve></p><div id="recording-actions"></div></dialog><input id="file-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" multiple hidden>
   <input id="set-input" type="file" accept="application/json,.json" hidden>
   <input id="relink-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" hidden>
   <dialog id="metadata-dialog"><form id="metadata-form"><div class="eyebrow">RECORDING DETAILS</div><h2>Edit metadata</h2><input name="id" type="hidden"><label>Title<input name="title" required maxlength="300"></label><label>Orchestra / artist<input name="artist" maxlength="300"></label><label>Singer<input name="singer" maxlength="300"></label><div class="form-row"><label>Year<input name="year" maxlength="30"></label><label>Style<select name="style" aria-label="Style"><option value="">Unspecified</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select></label><label>BPM<input name="bpm" type="number" min="20" max="300" step="1"></label></div><label id="video-url-label" hidden>Video URL<input name="videoUrl" type="url" placeholder="https://www.youtube.com/watch?v=..."></label><p id="analysis-details" class="hint"></p><div class="dialog-actions"><button id="close-metadata" type="button">Cancel</button><button class="primary" type="submit">Save details</button></div></form></dialog>
@@ -91,9 +96,42 @@ $('#dismiss-notice').onclick = () => { $('#notice').hidden = true; clearTimeout(
 for (const [button, dialog] of [['open-examples','examples-dialog'],['open-guide','guide-dialog'],['open-settings','settings-dialog']]) $(`#${button}`).onclick = () => $(`#${dialog}`).showModal();
 for (const button of document.querySelectorAll('[data-close]')) button.onclick = () => $(`#${button.dataset.close}`).close();
 $('#example-actions').append($('#load-real-samples'), $('#real-sample-play'));
+const phoneLayout = matchMedia('(max-width: 699px)');
+let activeView = 'library';
+function showView(view, scroll = true) {
+  activeView = view; document.body.dataset.view = view;
+  for (const button of document.querySelectorAll('button[data-view]')) {
+    if (button.dataset.view === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+  }
+  if (scroll) $(phoneLayout.matches ? 'main' : `#${view}`).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  updateMiniDeck();
+}
+for (const button of document.querySelectorAll('button[data-view]')) button.onclick = () => showView(button.dataset.view);
+for (const link of document.querySelectorAll('.sidebar .nav')) link.onclick = () => showView(link.hash.slice(1), false);
+$('#open-menu').onclick = () => {
+  const expanded = document.body.classList.toggle('menu-expanded'); $('#open-menu').setAttribute('aria-expanded', String(expanded));
+};
+$('#choose-recordings').onclick = () => { showView('library'); $('#search').focus({ preventScroll: true }); };
+function syncDeviceLayout() { $('.playback-options').open = !phoneLayout.matches; showView(activeView, false); }
+phoneLayout.addEventListener('change', syncDeviceLayout);
+document.body.dataset.view = activeView;
+$('.playback-options').open = !phoneLayout.matches;
+
 function closePanels() { for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close(); }
+function showStorageRecovery(error) {
+  temporaryWorkspace = true; $('#storage-recovery').hidden = false;
+  $('#storage-recovery-message').textContent = t(storageMessage(error));
+  $('#save-status').textContent = t('Temporary · not saved');
+}
+$('#retry-saving').onclick = async () => {
+  $('#retry-saving').disabled = true; temporaryWorkspace = false;
+  try { await persist(); } finally { $('#retry-saving').disabled = false; }
+};
+$('#temporary-export').onclick = () => $('#export-set').click();
+
 
 const player = new Player((position, duration) => {
+  if (transitioning) return;
   const track = player.track;
   if (track?.source === 'youtube' && Number.isFinite(duration) && duration > 0) {
     const original = state.tracks.find(t => t.id === track.id);
@@ -119,14 +157,21 @@ const player = new Player((position, duration) => {
   const limit = queue[queueIndex]?.limitSeconds;
   if (!transitioning && limit && position >= limit && !timedEnd) { timedEnd = true; player.stop(); if ($('#auto-next').checked && !queue[queueIndex]?.holdAfter) void next(); else notify('Cortina finished. Press Next to continue.'); }
 }, () => { timedEnd = true; updateTransport(); if ($('#auto-next').checked && !queue[queueIndex]?.holdAfter) void next(); else if (queue[queueIndex]?.kind === 'cortina') notify('Cortina finished. Press Next to continue.'); }, error => {
-  if (error?.type !== 'youtube') { notify(error, true); return; }
+  if (error?.type !== 'youtube') {
+    if (current?.source === 'local') { $('#playback-recovery').hidden = false; $('#playback-recovery-message').textContent = t(error); $('#playback-relink').hidden = false; }
+    notify(error, true); return;
+  }
   const reason = error.code === 100 ? 'This video is private, removed, or unavailable in your region.' : [101,150].includes(error.code) ? 'YouTube blocked embedded playback. This may be a video restriction or a website origin issue.' : error.code === 153 ? 'YouTube could not identify this website. Try opening the app normally and allow its referrer.' : 'YouTube playback failed. Retry, replace the link, or open the video on YouTube.';
   player.onPlaybackState?.(); $('#youtube-error').hidden = false; $('#youtube-error-message').textContent = t(reason) + ` (${error.code})`;
   $('#youtube-open').href = `https://www.youtube.com/watch?v=${error.track.videoId}`;
   notify(reason, true);
 });
 player.onStall = waiting => { $('#playback-stall').hidden = !waiting; };
+player.onNeedsGesture = needed => { $('#playback-permission').hidden = !needed; };
 $('#resume-video').onclick = () => { const yt = player.youtube; if (!yt || !player.track) return; const position = yt.getCurrentTime() || 0; yt.loadVideoById({ videoId: player.track.videoId, startSeconds: position }); player.lastProgress = Date.now(); player.stallNotified = false; $('#playback-stall').hidden = true; };
+$('#playback-retry').onclick = () => { if (queueIndex >= 0) void playIndex(queueIndex); };
+$('#playback-relink').onclick = () => { relinkId = current?.id; $('#relink-input').click(); };
+$('#playback-skip').onclick = next;
 $('#youtube-retry').onclick = () => { if (queueIndex >= 0) void playIndex(queueIndex); };
 $('#youtube-skip').onclick = next;
 $('#youtube-local').onclick = () => { relinkId = player.track?.id; $('#relink-input').click(); };
@@ -155,7 +200,7 @@ const searchKey = value => String(value || '').normalize('NFD').replace(/[\u0300
 function renderLibrary() {
   const search = searchKey($('#search').value), style = $('#style-filter').value, source = $('#source-filter').value;
   const visible = state.tracks.filter(t => searchKey(`${t.title} ${t.artist} ${t.singer} ${t.year}`).includes(search) && (!style || t.style === style) && (!source || t.source === source));
-  $('#tracks').innerHTML = visible.map(t => `<tr draggable="true" data-track="${esc(t.id)}"><td><div class="track-title">${esc(t.title)}</div><div class="track-detail"><span class="source-tag ${t.source}">${t.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(t.artist || 'Unknown orchestra')}${t.singer ? ` · ${esc(t.singer)}` : ''}${t.source === 'local' && !files.has(t.id) ? ' · <span class="missing">File needed</span>' : ''}</div></td><td>${esc(t.style || '—')}<small>${esc(t.year || '')}</small></td><td>${t.bpm ? esc(t.bpm) : '—'}</td><td>${time(t.duration)}</td><td class="track-actions"><button data-action="play" data-id="${esc(t.id)}" aria-label="Play ${esc(t.title)}" title="Play">▶ Play</button>${t.source === 'local' ? `<button data-action="preview" data-id="${esc(t.id)}" aria-label="Preview ${esc(t.title)}" title="Preview on current output">♬ Preview</button><button data-action="analyze" data-id="${esc(t.id)}" aria-label="Analyze ${esc(t.title)}" title="Analyze BPM and level">⌁ Analyze</button>${!files.has(t.id) ? `<button data-action="relink" data-id="${esc(t.id)}" title="Relink file">↥ Relink</button>` : ''}` : ''}<button data-action="edit" data-id="${esc(t.id)}" aria-label="Edit ${esc(t.title)}" title="Edit metadata">✎ Edit</button><button data-action="add" data-id="${esc(t.id)}" aria-label="Add ${esc(t.title)} to selected group" title="Add to selected group">+ Add</button><button data-action="delete" data-id="${esc(t.id)}" aria-label="Delete ${esc(t.title)}" title="Remove from library">×</button></td></tr>`).join('');
+  $('#tracks').innerHTML = visible.map(t => `<tr draggable="true" data-track="${esc(t.id)}"><td><div class="track-title">${esc(t.title)}</div><div class="track-detail"><span class="source-tag ${t.source}">${t.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(t.artist || 'Unknown orchestra')}${t.singer ? ` · ${esc(t.singer)}` : ''}${t.source === 'local' && !files.has(t.id) ? ' · <span class="missing">File needed</span>' : ''}</div></td><td>${esc(t.style || '—')}<small>${esc(t.year || '')}</small></td><td>${t.bpm ? esc(t.bpm) : '—'}</td><td>${time(t.duration)}</td><td class="track-actions"><button data-action="play" data-id="${esc(t.id)}" aria-label="Play ${esc(t.title)}" title="Play">▶ Play</button>${t.source === 'local' ? `<button class="secondary-action" data-action="preview" data-id="${esc(t.id)}" aria-label="Preview ${esc(t.title)}" title="Preview on current output">♬ Preview</button><button class="secondary-action" data-action="analyze" data-id="${esc(t.id)}" aria-label="Analyze ${esc(t.title)}" title="Analyze BPM and level">⌁ Analyze</button>${!files.has(t.id) ? `<button data-action="relink" data-id="${esc(t.id)}" title="Relink file">↥ Relink</button>` : ''}` : ''}<button class="secondary-action" data-action="edit" data-id="${esc(t.id)}" aria-label="Edit ${esc(t.title)}" title="Edit metadata">✎ Edit</button><button data-action="add" data-id="${esc(t.id)}" aria-label="Add ${esc(t.title)} to selected group" title="Add to selected group">+ Add</button><button class="secondary-action" data-action="delete" data-id="${esc(t.id)}" aria-label="Delete ${esc(t.title)}" title="Remove from library">×</button><button class="more-action" data-action="more" data-id="${esc(t.id)}" aria-label="More actions for ${esc(t.title)}">More</button></td></tr>`).join('');
   $('#empty-library').hidden = visible.length > 0;
   $('#empty-library h3').textContent = state.tracks.length ? 'No matching recordings' : 'A home for your collection';
   $('#library-count').textContent = state.tracks.length; $('#nav-count').textContent = state.tracks.length;
@@ -180,15 +225,18 @@ function refreshGroupSummaries() {
   $('#empty-set').hidden = state.groups.length > 0;
   $('#set-duration').textContent = time(state.groups.reduce((s, group) => s + groupDuration(group, state.tracks), 0));
   $('#start-set').disabled = !flattenSet(state.groups, state.tracks).length;
+  $('#deck-start-set').hidden = $('#start-set').disabled || Boolean(current);
   const chosen = state.groups.find(g => g.id === selected);
+  $('#choose-recordings').hidden = !chosen;
+  $('#library-target').textContent = chosen ? `${t('Adding to')}: ${chosen.name}` : t('Create a tanda in Set, then add recordings here.');
   $('#selected-group').textContent = chosen ? `${t('Adding to')}: ${chosen.name}` : t('Select a tanda to add recordings');
   $('#queue-stale').hidden = !loadedSignature || loadedSignature === queueSignature(state.groups, state.tracks);
   $('#refresh-queue').hidden = $('#queue-stale').hidden || !current || queueIndex < 0; $('#refresh-queue').disabled = transitioning;
 }
 let deckVisible = false;
-function updateMiniDeck() { const visible = Boolean(current && !deckVisible); $('#mini-deck').hidden = !visible; document.body.classList.toggle('mini-deck-visible', visible); }
+function updateMiniDeck() { const visible = Boolean(current && (!deckVisible || (phoneLayout.matches && activeView !== 'deck'))); $('#mini-deck').hidden = !visible; document.body.classList.toggle('mini-deck-visible', visible); }
 new IntersectionObserver(entries => { deckVisible = entries[0].isIntersecting; updateMiniDeck(); }, { threshold: 0 }).observe($('#deck .transport'));
-$('#mini-open').onclick = () => $('#deck').scrollIntoView({ behavior: 'smooth', block: 'start' });
+$('#mini-open').onclick = () => showView('deck');
 $('#mini-play').onclick = () => $('#play-pause').click(); $('#mini-next').onclick = () => $('#next').click();
 function renderQueue() {
   updateTransport();
@@ -212,25 +260,34 @@ function render() { renderLibrary(); renderGroups(); renderQueue(); }
 
 async function importFiles(list) {
   if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
-  busy = true; let count = 0;
+  if (temporaryWorkspace) { notify('Storage is unavailable. Retry saving before importing local audio. You can still play the example set.', true); return; }
+  busy = true; let count = 0, skipped = 0;
+  const candidates = [...list];
+  const progress = $('#import-progress'); progress.hidden = false;
+  $('#add-files').disabled = true; $('#analyze-all').disabled = true;
   try {
-    for (const file of list) {
-      if (!file.type.startsWith('audio/') && !/\.(mp3|wav|flac|m4a|ogg|aiff?|opus|aac)$/i.test(file.name)) continue;
-      if (state.tracks.some(t => t.source === 'local' && t.fileName === file.name && t.fileSize === file.size && t.lastModified === file.lastModified)) continue;
+    for (const [index, file] of candidates.entries()) {
+      progress.textContent = `${index + 1} / ${candidates.length} · ${file.name}`;
+      if (!file.type.startsWith('audio/') && !/\.(mp3|wav|flac|m4a|ogg|aiff?|opus|aac)$/i.test(file.name)) { skipped++; continue; }
+      if (state.tracks.some(t => t.source === 'local' && t.fileName === file.name && t.fileSize === file.size && t.lastModified === file.lastModified)) { skipped++; continue; }
       notify(`Reading ${file.name}…`);
       let metadata;
-      try { metadata = await parseBlob(file); } catch { /* Unsupported tags do not prevent importing playable audio. */ }
+      try { metadata = await parseBlob(file); } catch { /* Tag failures do not prevent importing playable audio. */ }
       const common = metadata?.common || {};
       const genre = (common.genre || []).find(g => ['Tango', 'Vals', 'Milonga', 'Cortina'].some(s => s.toLowerCase() === g.toLowerCase()));
       const track = { id: uid(), source: 'local', fileName: file.name, fileSize: file.size, lastModified: file.lastModified,
         title: common.title || file.name.replace(/\.[^.]+$/, ''), artist: common.artist || common.albumartist || '', singer: '', year: String(common.year || ''),
         style: genre ? genre[0].toUpperCase() + genre.slice(1).toLowerCase() : '', duration: metadata?.format.duration || null, bpm: common.bpm || null };
-      await saveFile(track.id, file); files.set(track.id, file); state.tracks.push(track); count++;
-      await persist(); renderLibrary(); markStep('load');
+      await saveFile(track.id, file); files.set(track.id, file); state.tracks.push(track);
+      if (!await persist()) { progress.textContent = t('Save failed — export a backup'); return; }
+      count++; renderLibrary(); markStep('load');
     }
+    progress.textContent = `${count} / ${candidates.length} · ${t('Done')}${skipped ? ` · ${skipped} ${t('Skipped duplicates or unsupported files')}` : ''}`;
     notify(`${count} recording${count === 1 ? '' : 's'} added. Files are saved in this browser; keep your originals for backup.`);
-  } catch (error) { notify(`Import stopped: ${error.message}. Keep your original files; browser storage may be full.`, true); }
-  finally { busy = false; render(); }
+  } catch (error) {
+    progress.textContent = `${count} / ${candidates.length} · ${t('Import stopped')}`;
+    notify(`Import stopped: ${storageMessage(error)}`, true);
+  } finally { busy = false; $('#add-files').disabled = false; $('#analyze-all').disabled = false; render(); }
 }
 async function addYouTube(url) {
   const videoId = youtubeId(url);
@@ -281,6 +338,8 @@ async function analyzeTrack(track) {
     const peakDb = 20 * Math.log10(Math.max(peak, 1e-9));
     Object.assign(track, result, { duration: buffer.duration, rmsDb: Math.round(rmsDb * 10) / 10,
       peakDb: Math.round(peakDb * 10) / 10, gainDb: Math.round(Math.max(-12, Math.min(12, -18 - rmsDb, -1 - peakDb)) * 10) / 10 });
+    for (const item of queue) if (item.track.id === track.id) Object.assign(item.track, track);
+    if (player.track?.id === track.id) { Object.assign(player.track, track); player.setVolume(Number($('#volume').value) / 100, $('#normalize').checked); }
     await persist(); render();
   } finally { await context.close(); }
 }
@@ -315,9 +374,10 @@ async function playIndex(index) {
     notify('The start must be before the recording ends. Choose an earlier cue.', true); return;
   }
   const request = ++playRequest; transitioning = true; updateTransport();
+  $('#playback-loading').hidden = false; $('#playback-recovery').hidden = true;
   try {
     $('#youtube-error').hidden = true;
-    if (!await player.play(item.track, files.get(item.track.id), Number($('#fade').value), $('#normalize').checked, item.startSeconds || 0)) return;
+    if (!await player.play(item.track, files.get(item.track.id), Number($('#fade').value), $('#normalize').checked, item.startSeconds || 0, item.limitSeconds)) return;
     if (request !== playRequest) return;
     queueIndex = index; resumeIndex = index; current = item.track; timedEnd = false; stopped = false; $('#queue-resume').hidden = true; void persist();
     $('#playing-title').textContent = current.title; $('#playing-artist').textContent = [current.artist, current.singer, current.year].filter(Boolean).join(' · ') || (current.source === 'youtube' ? 'YouTube video' : 'Local recording');
@@ -330,15 +390,18 @@ async function playIndex(index) {
       queueIndex = index; resumeIndex = index; stopped = true; timedEnd = false;
       $('#playing-title').textContent = current.title; $('#playing-artist').textContent = [current.artist, current.singer, current.year].filter(Boolean).join(' · ');
       $('#playing-group').textContent = item.groupName || 'LIBRARY TRACK'; $('#position').textContent = '0:00 / —'; $('#seek').value = 0;
-      renderQueue(); void persist(); notify(error.message, true);
+      renderQueue(); void persist();
+      $('#playback-recovery').hidden = false; $('#playback-recovery-message').textContent = t(playbackMessage(error));
+      $('#playback-relink').hidden = item.track.source !== 'local';
+      notify(playbackMessage(error), true);
     }
   }
-  finally { if (request === playRequest) { transitioning = false; updateTransport(); } }
+  finally { if (request === playRequest) { transitioning = false; $('#playback-loading').hidden = true; updateTransport(); } }
 }
 async function next() { if (queueIndex + 1 < queue.length) await playIndex(queueIndex + 1); else { notify('End of play queue.'); } }
 function addToGroup(id, groupId = selected) {
   const group = state.groups.find(g => g.id === groupId);
-  if (!group) { notify('Create or select a tanda or cortina first.'); return; }
+  if (!group) { showView('set'); notify('Create or select a tanda or cortina first.'); return; }
   if (!state.tracks.some(t => t.id === id)) return;
   rememberSetEdit(); group.trackIds.push(id); selected = group.id; void persist(); renderGroups(); markStep('build');
 }
@@ -361,8 +424,20 @@ $('#youtube-form').onsubmit = event => { event.preventDefault(); void addYouTube
 for (const id of ['search', 'style-filter', 'source-filter']) $(`#${id}`).oninput = renderLibrary;
 $('#tracks').ondragstart = event => { const row = event.target.closest('[data-track]'); if (row) event.dataTransfer.setData('text/plain', row.dataset.track); };
 let relinkId = null;
+$('#recording-actions').onclick = event => {
+  const action = event.target.closest('[data-action]'); if (!action) return;
+  $('#actions-dialog').close();
+  const original = [...$('#tracks').querySelectorAll('[data-action]')].find(button => button.dataset.id === action.dataset.id && button.dataset.action === action.dataset.action);
+  original?.click();
+};
 $('#tracks').onclick = async event => {
   const button = event.target.closest('[data-action]'); if (!button) return;
+  if (button.dataset.action === 'more') {
+    const row = button.closest('tr'); $('#actions-title').textContent = row.querySelector('.track-title').textContent;
+    $('#recording-actions').replaceChildren(...[...row.querySelectorAll('.secondary-action')].map(action => action.cloneNode(true)));
+    $('#actions-dialog').showModal(); return;
+  }
+
   const track = state.tracks.find(t => t.id === button.dataset.id); if (!track) return;
   try {
     switch (button.dataset.action) {
@@ -371,9 +446,9 @@ $('#tracks').onclick = async event => {
         const existingIndex = sourcePlayback ? queue.findIndex(item => item.track.id === track.id && !item.limitSeconds && !item.startSeconds) : locateInQueue(queue, track.id, queueIndex);
         if (existingIndex >= 0) await playIndex(existingIndex);
         else { queue.push({ track: structuredClone(track) }); loadedSignature = null; renderQueue(); await playIndex(queue.length - 1); }
-        $('#deck').scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+        showView('deck'); break;
       }
-      case 'preview': await player.previewTrack(track, files.get(track.id)); $('#preview-status span').textContent = `Preview: ${track.title} · same output`; $('#preview-status').hidden = false; markStep('preview'); $('#deck').scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+      case 'preview': await player.previewTrack(track, files.get(track.id)); $('#preview-status span').textContent = `Preview: ${track.title} · same output`; $('#preview-status').hidden = false; markStep('preview'); showView('deck'); break;
       case 'analyze': await runAnalysis([track]); break;
       case 'edit': editTrack(track); break;
       case 'add': addToGroup(track.id); break;
@@ -381,6 +456,7 @@ $('#tracks').onclick = async event => {
       case 'delete':
         if (!confirm(t(`Remove “${track.title}” from the library and every group? Your original file will be kept.`))) return;
         if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
+        if (player.previewId === track.id) { player.preview.pause(); player.previewId = null; $('#preview-status').hidden = true; }
         const playingItem = queue[queueIndex];
         const removingCurrent = current?.id === track.id || player.track?.id === track.id;
         const priorIndex = queueIndex >= 0 ? queueIndex : resumeIndex;
@@ -408,7 +484,12 @@ $('#relink-input').onchange = async event => {
       delete updated.videoId;
       for (const field of ['duration', 'bpm', 'rmsDb', 'peakDb', 'gainDb']) updated[field] = null;
       const snapshot = workspaceSnapshot(state.tracks.map(item => item.id === track.id ? updated : item));
-      revision = await replaceRecording(track.id, file, snapshot, revision);
+      const replacement = persistence.then(async () => {
+        revision = await replaceRecording(track.id, file, snapshot, revision);
+        return true;
+      });
+      persistence = replacement.catch(() => false);
+      await replacement;
       Object.assign(track, updated); delete track.videoId;
       player.revoke(track.id); files.set(track.id, file);
       for (const item of queue) if (item.track.id === track.id) item.track = structuredClone(track);
@@ -451,6 +532,7 @@ $('#groups').onclick = event => {
   if (action === 'rename') { newName = prompt(t('Group name'), group.name); if (!newName?.trim() || newName.trim() === group.name) return; }
   if (action === 'delete' && !confirm(t(`Remove “${group.name}” from your set? Recordings stay in the library.`))) return;
   if (action === 'cue-play') {
+    showView('deck');
     const clips = flattenSet([group], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
     if (!clips.length) return;
     const index = queue.findIndex(item => item.groupId === group.id && (item.startSeconds || 0) === (group.startSeconds || 0) && item.limitSeconds === (group.limitSeconds || 20) && Boolean(item.holdAfter) === Boolean(group.holdAfter));
@@ -519,17 +601,19 @@ $('#refresh-queue').onclick = async () => {
   queue = [...queue.slice(0, queueIndex + 1), ...prepared.slice(match.index + 1)];
   loadedSignature = queueSignature(state.groups, state.tracks); render(); await persist(); notify('Upcoming queue updated. Current recording keeps playing.');
 };
-$('#start-set').onclick = () => { loadedSignature = queueSignature(state.groups, state.tracks); queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
+$('#start-set').onclick = () => { showView('deck'); loadedSignature = queueSignature(state.groups, state.tracks); queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
+$('#deck-start-set').onclick = () => $('#start-set').click();
 $('#queue').onclick = event => { const item = event.target.closest('[data-queue-index]'); if (item) void playIndex(Number(item.dataset.queueIndex)); };
-$('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1)); else if (timedEnd || stopped) await playIndex(queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); } catch (error) { notify(error.message, true); } };
+$('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1)); else if (timedEnd || stopped) await playIndex(queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); } catch (error) { notify(playbackMessage(error), true); } };
 $('#next').onclick = next; $('#previous').onclick = () => playIndex(queueIndex - 1);
 $('#stop').onclick = () => {
-  ++playRequest; player.stop(); $('#playback-stall').hidden = true; player.seek(queue[queueIndex]?.startSeconds || 0); stopped = true; transitioning = false;
+  ++playRequest; player.stop(); $('#playback-loading').hidden = true; $('#playback-stall').hidden = true; player.seek(queue[queueIndex]?.startSeconds || 0); stopped = true; transitioning = false;
   $('#position').textContent = `0:00 / ${time(queue[queueIndex]?.limitSeconds || current?.duration)}`;
   $('#remaining-time').textContent = `${t('Remaining')}: ${time(queue[queueIndex]?.limitSeconds || current?.duration)}`; $('#mini-remaining').textContent = $('#remaining-time').textContent;
   $('#seek').value = 0; $('#preview-status').hidden = true; updateTransport(); notify('Playback stopped.');
 };
 $('#seek').oninput = () => { const available = (current?.source === 'youtube' ? player.youtube?.getDuration() : player.audio.duration) - (queue[queueIndex]?.startSeconds || 0); const duration = Math.min(queue[queueIndex]?.limitSeconds || Infinity, available); if (Number.isFinite(duration)) player.seek((queue[queueIndex]?.startSeconds || 0) + Number($('#seek').value) / 100 * duration); };
+$('#fade').oninput = () => player.setFade(Number($('#fade').value));
 for (const id of ['volume', 'normalize']) $(`#${id}`).oninput = () => player.setVolume(Number($('#volume').value) / 100, $('#normalize').checked);
 $('#stop-preview').onclick = () => { player.preview.pause(); $('#preview-status').hidden = true; };
 player.preview.addEventListener('ended', () => { $('#preview-status').hidden = true; });
@@ -584,16 +668,20 @@ $('#toggle-guide').onclick = () => {
   $('#toggle-guide').textContent = $('#practice-guide').hidden ? 'Show walkthrough' : 'Hide walkthrough';
   $('#toggle-guide').setAttribute('aria-expanded', String(!$('#practice-guide').hidden)); saveSettings();
 };
-$('#sample-link').onclick = () => { closePanels();
+$('#sample-link').onclick = () => { closePanels(); showView('library');
   $('#youtube-form input').value = `https://www.youtube.com/watch?v=${realTracks[0].videoId}`;
   $('#youtube-form').scrollIntoView({ behavior: 'smooth', block: 'center' }); $('#youtube-form input').focus();
   notify('Recording link filled. Press Add video to import it.');
 };
-$('#guide-files').onclick = () => { closePanels(); $('#file-input').click(); };
-$('#guide-preview').onclick = () => {
+$('#guide-files').onclick = () => { closePanels(); showView('library'); $('#file-input').click(); };
+$('#guide-preview').onclick = async () => {
   closePanels(); const track = state.tracks.find(t => t.source === 'local' && files.has(t.id));
   if (!track) { notify('Import a local tango recording with + Local files to use Preview. YouTube recordings use Play.'); return; }
-  $('#tracks [data-action="preview"][data-id="' + track.id + '"]')?.click();
+  try {
+    await player.previewTrack(track, files.get(track.id));
+    $('#preview-status span').textContent = `Preview: ${track.title} · same output`;
+    $('#preview-status').hidden = false; markStep('preview'); showView('deck');
+  } catch (error) { notify(playbackMessage(error), true); }
 };
 $('#guide-analyze').onclick = () => {
   closePanels(); const tracks = state.tracks.filter(t => t.source === 'local');
@@ -605,19 +693,19 @@ async function loadRealSamples() {
   if (busy) { notify('Wait for the current import or analysis to finish.'); return false; }
   for (const track of realTracks) { const existing = state.tracks.find(t => t.id === track.id); if (!existing) state.tracks.push({ ...track }); else existing.samplePack = REAL_SAMPLE_PACK; }
   for (const group of realGroups()) if (!state.groups.some(g => g.id === group.id)) state.groups.push(group);
-  selected = 'real-group-tango'; await persist(); render(); markStep('load'); markStep('youtube');
-  notify('Real recordings ready: 6 DJ tandas in Tango / Tango / Vals / Tango / Tango / Milonga order, with 20-second cortinas. Press Play milonga set. Internet is required.');
+  selected = 'real-group-tango'; const saved = await persist(); render(); markStep('load'); markStep('youtube');
+  if (saved) notify('Real recordings ready: 6 DJ tandas in Tango / Tango / Vals / Tango / Tango / Milonga order, with 20-second cortinas. Press Play milonga set. Internet is required.');
   return true;
 }
 $('#load-real-samples').onclick = async () => { if (await loadRealSamples()) $('#examples-dialog').close(); };
 $('#real-sample-play').onclick = async () => {
   if (!await loadRealSamples()) return; closePanels(); loadedSignature = null;
   queue = flattenSet(state.groups.filter(g => g.samplePack === REAL_SAMPLE_PACK), state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
-  queueIndex = -1; renderQueue(); $('#deck').scrollIntoView({ behavior: 'smooth', block: 'start' }); await playIndex(0);
+  queueIndex = -1; renderQueue(); showView('deck'); await playIndex(0);
 };
 $('#real-guide-play').onclick = () => $('#real-sample-play').click();
 $('#real-sample-edit').onclick = async () => { closePanels(); if (await loadRealSamples()) editTrack(state.tracks.find(t => t.id === 'real-tango-1')); };
-$('#real-sample-select').onclick = async () => { if (await loadRealSamples()) { closePanels(); markStep('build'); $('#set').scrollIntoView({ behavior: 'smooth', block: 'start' }); } };
+$('#real-sample-select').onclick = async () => { if (await loadRealSamples()) { closePanels(); markStep('build'); showView('set'); } };
 renderProgress();
 
 try {
@@ -632,7 +720,7 @@ try {
   if (saved) { queueIndex = -1; $('#queue-resume').hidden = !queue.length; }
   for (const track of state.tracks.filter(t => t.source === 'local')) { const file = await getFile(track.id); if (file) files.set(track.id, file); }
   selected = state.groups.some(g => g.id === selected) ? selected : state.groups[0]?.id || null;
-} catch (error) { notify(`Could not restore your library: ${error.message}`, true); }
+} catch (error) { showStorageRecovery(error); notify(`Could not restore your library: ${storageMessage(error)}`, true); }
 render();
 
 // A shareable local entry point opens a populated workspace without starting audio.

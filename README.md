@@ -13,6 +13,16 @@ npm run dev
 
 Open the local URL printed by Vite. For a production build, run `npm run build`; `npm run preview` serves that build locally. The app can be hosted as a static site. Use a stable HTTPS origin when deploying, since browser storage belongs to that origin.
 
+## Phone, tablet, and computer workflows
+
+On phones, use **1 · Music → 2 · Set → 3 · Play** in the bottom navigation. Add files in Music, create a tanda in Set, then choose **Choose recordings for this group** and use **Add** on each recording. Return to Set and choose **Load & play set**, or start the prepared set from Play. Playback opens the deck; compact pause/next controls stay available while browsing. **More** opens recording details, preview, analysis, and deletion. **Menu** contains examples, the guide, settings, and set backup/import. Playback settings expand inside Play.
+
+Portrait tablets keep readable cards and labeled navigation. At 900–1199 CSS pixels the library and builder sit side by side. Computer layouts retain the full workspace, tabular library, and keyboard controls. Resizing changes the presentation while preserving playback and the queue.
+
+Loading failures keep the selected recording ready for **Retry**, file relinking, or skipping. A YouTube permission hint explains when to press play inside the video. File imports display progress; quota errors explain how to free space or reduce the import. Previously imported recordings remain available if a later file fails. If browser database initialization or example saving fails, the examples can play in a clearly labeled temporary workspace. Use Retry saving to restore persistence; export edits before closing the tab. Local import requires working storage. Audio files are still separate from exported set JSON.
+
+The [device and playback plan](docs/device-playback-improvement-plan.md) records requirements, implementation order, acceptance criteria, and the physical-device verification checklist.
+
 ## Milonga DJ playlist
 
 Open `/?practice=1` or click **Load milonga playlist**. **Play milonga set** starts only the curated DJ groups. Personal recordings are preserved. Earlier synthesized examples are removed from browser storage during migration.
@@ -32,7 +42,7 @@ All 28 selections are real recordings linked through YouTube's official embed; n
 
 Cortinas stop after 20 seconds in the set queue. **Auto next** continues to the next tanda. Playing a cortina directly from the library opens its full source, appending an unrestricted entry when needed while retaining the prepared queue. The group play button uses its selected interval. Exported JSON retains the group playback limits.
 
-The walkthrough uses this playlist for library, metadata, composition, playback, YouTube, and backup examples. Import your own local tango recordings for preview, fades, and BPM/level analysis. No synthesized demonstration audio is included.
+The walkthrough uses this playlist for library, metadata, composition, playback, YouTube, and backup examples. Import your own local tango recordings for preview, reliable fades, and BPM/level analysis. No synthesized demonstration audio is included.
 
 ## First version
 
@@ -42,7 +52,7 @@ The walkthrough uses this playlist for library, metadata, composition, playback,
 - Search recordings and filter by dance style or source.
 - Create, rename, reorder, and remove tandas and cortinas. Add tracks with the library's + button or drag them into a group; reorder tracks within groups.
 - Load an ordered set into the play queue, switch between local and YouTube recordings, pause, seek, adjust volume, and optionally advance automatically.
-- Preview local recordings, apply local fade-out/fade-in transitions, and optionally apply analyzed gain.
+- Preview local recordings, fade recordings in and out at segment boundaries and during manual transitions, and optionally apply analyzed gain.
 - Estimate local BPM, RMS level, peak, and suggested gain. BPM remains editable.
 - Save metadata, set structure, and local audio in IndexedDB. Export and import portable JSON set files; relink missing audio when moving a set to another browser.
 
@@ -54,7 +64,8 @@ The walkthrough uses this playlist for library, metadata, composition, playback,
 | Playback, seeking, queue | Yes, if the browser supports the codec | Official embedded player; connection required |
 | Metadata | Embedded tags and manual editing | Available video title/channel and manual editing |
 | Audio preview | Yes, through the current output | Use the video player |
-| Fades and gain adjustment | Yes | Not implemented |
+| Fades | Web Audio fade-in/out | Official volume API; device support varies |
+| Analyzed gain adjustment | Yes | No |
 | BPM and level analysis | Decoded audio | Manual BPM entry only |
 
 YouTube audio is played through the official IFrame API. Videos are not downloaded or extracted. Private, removed, restricted, or non-embeddable videos may not play. Autoplay can require a click inside the video. Playlist import and other streaming providers are not included in this version.
@@ -63,7 +74,7 @@ YouTube audio is played through the official IFrame API. Videos are not download
 
 - Local codec support varies by browser. MP3 and WAV are good starting points; parsing metadata does not guarantee that a codec can play.
 - Preview shares the main output. Separate headphone routing is not implemented; avoid previewing over a live room output.
-- Fade defaults to Off to preserve recording entrances. When enabled, fades are sequential fade-out/fade-in transitions, not overlapping crossfades. Groups play full recordings unless they carry a playback limit, as the sample cortinas do. Cortina groups support a saved start offset and playback length; general per-recording cue points are not implemented.
+- Fade defaults to Off to preserve recording entrances. When enabled, each recording fades in from its playback position and fades out before its natural or configured endpoint. Manual changes use sequential fade-out/fade-in, without overlapping crossfade. Short segments clamp fades to half their length. Pausing, seeking, buffering, and changing master volume preserve or recalculate the envelope. YouTube uses the official player volume API; some mobile devices ignore programmatic video volume, so use local files when audible fades must be reliable. Groups play full recordings unless they carry a playback limit, as the sample cortinas do. Cortina groups support a saved start offset and playback length; general per-recording cue points are not implemented.
 - BPM uses an onset-correlation estimate over up to the first three minutes; old recordings and expressive timing can produce half/double-tempo or inaccurate estimates. Review by ear.
 - RMS and peak are measured over the decoded recording. Suggested gain targets approximately -18 dBFS RMS, caps peak at -1 dBFS, and limits gain to ±12 dB. This is not integrated LUFS normalization or a limiter.
 - Analysis decodes one full recording at a time and may use substantial memory for long files.
@@ -78,13 +89,18 @@ npm test
 npm run build
 npx playwright install chromium
 npm run test:e2e
+npx playwright install webkit
+npm run test:devices
+npm run test:review
 ```
 
 Unit checks cover URL validation, queue order, set integrity, and tempo/level estimation. Browser checks cover generated WAV import, metadata editing, analysis, local playback, set export, persistence, YouTube metadata import, missing-file relinking, and mobile layout. YouTube network playback is subject to provider restrictions and is not exercised by mocked metadata checks.
 
+The [complete feature validation](docs/all-features-validation.md) maps current controls and error/recovery paths to repeatable UI cases. `test:review` runs the production build in desktop Chromium, phone Chromium, and tablet WebKit. Review scripts support background execution; `REVIEW_HEADLESS=1` makes the real fade review headless. Provider availability checks and codec probes are short operational checks; codec probes require `ffmpeg`.
+
 ## Personal browser workspace and languages
 
-Each visitor has an independent workspace for the same site origin in their browser profile. IndexedDB stores library metadata, local audio blobs, group order, and the loaded queue; localStorage stores language, volume, fade, normalization, automatic advance, and walkthrough preferences. Reloading restores the queue without automatically starting audio. Regular visits preserve deleted/reordered sample groups; **Load milonga playlist** explicitly adds missing sample groups again.
+Each visitor has an independent workspace for the same site origin in their browser profile. IndexedDB stores library metadata, local audio (Blob values or a byte-based fallback for affected WebKit environments), group order, and the loaded queue; localStorage stores language, volume, fade, normalization, automatic advance, and walkthrough preferences. Reloading restores the queue without automatically starting audio. Regular visits preserve deleted/reordered sample groups; **Load milonga playlist** explicitly adds missing sample groups again.
 
 The language selector supports Korean, English, and Spanish, including the walkthrough and playback recovery controls. Recording titles, artist names, and user-entered metadata are preserved. The initial language follows the browser language and subsequent choices are saved. Interface text uses larger, readable sizes and controls remain usable on mobile.
 

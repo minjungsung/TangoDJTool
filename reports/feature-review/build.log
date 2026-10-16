@@ -1,0 +1,43 @@
+
+> tango-dj-studio@0.1.0 build
+> vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 159 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                              0.60 kB │ gzip:  0.33 kB
+dist/assets/analysis-worker-BTz-V09q.js      0.92 kB
+dist/assets/main-D1fTnOAn.css               30.48 kB │ gzip:  7.00 kB
+dist/assets/FlacParser-BnR40gkG.js           0.05 kB │ gzip:  0.06 kB
+dist/assets/APEv2Parser-DanrmrWq.js          0.05 kB │ gzip:  0.06 kB
+dist/assets/type-hqr378jM.js                 0.27 kB │ gzip:  0.17 kB
+dist/assets/rolldown-runtime-XKyaHtl9.js     0.72 kB │ gzip:  0.42 kB
+dist/assets/AbstractID3Parser-BU_aUDwC.js    1.09 kB │ gzip:  0.53 kB
+dist/assets/preload-helper-BLdHbfdN.js       1.51 kB │ gzip:  0.79 kB
+dist/assets/ID3v2Token-DOg0jc_4.js           1.68 kB │ gzip:  0.93 kB
+dist/assets/DsfParser-s3nsu27M.js            2.60 kB │ gzip:  1.03 kB
+dist/assets/storage-hTfphBQx.js              2.78 kB │ gzip:  1.21 kB
+dist/assets/Util-BwYbf2oZ.js                 2.81 kB │ gzip:  1.26 kB
+dist/assets/AiffParser-BYNvZ96j.js           3.59 kB │ gzip:  1.56 kB
+dist/assets/WavPackParser-D4WgY42k.js        3.59 kB │ gzip:  1.57 kB
+dist/assets/ID3v1Parser-DVPq_qxH.js          3.74 kB │ gzip:  1.93 kB
+dist/assets/index-Bk175nKH.js                3.89 kB │ gzip:  1.65 kB
+dist/assets/DsdiffParser-Bq4jVSxP.js         4.99 kB │ gzip:  1.56 kB
+dist/assets/MusepackParser-BlffHhV3.js       5.53 kB │ gzip:  1.95 kB
+dist/assets/WaveParser-C1aIUaz_.js           6.63 kB │ gzip:  2.43 kB
+dist/assets/CafParser-DSuS3VLf.js            7.45 kB │ gzip:  2.50 kB
+dist/assets/FlacParser-aRsaoc7t.js           7.48 kB │ gzip:  2.74 kB
+dist/assets/OggParser-B65dfF6R.js           10.58 kB │ gzip:  3.64 kB
+dist/assets/MpegParser-0Gij9RN2.js          10.61 kB │ gzip:  3.60 kB
+dist/assets/ID3v2Parser-QigpFd7h.js         10.94 kB │ gzip:  4.04 kB
+dist/assets/APEv2Parser-CAyHunE4.js         13.82 kB │ gzip:  4.27 kB
+dist/assets/MatroskaParser-BN5_uCKU.js      14.66 kB │ gzip:  4.81 kB
+dist/assets/BasicParser-CH9lNCsr.js         16.67 kB │ gzip:  5.96 kB
+dist/assets/AsfParser-BKOwJlXA.js           18.40 kB │ gzip:  6.17 kB
+dist/assets/MP4Parser-DmBre0Gv.js           27.46 kB │ gzip:  8.23 kB
+dist/assets/MetadataCollector-BR7uH3CX.js   76.46 kB │ gzip: 22.03 kB
+dist/assets/main-Lx1wsYNw.js               124.68 kB │ gzip: 40.77 kB
+
+✓ built in 157ms

@@ -44,3 +44,62 @@ th{position:relative}.panel{min-width:0}
 .workspace-header .header-actions button{white-space:normal;overflow-wrap:anywhere;line-height:1.4}
 
 .playback-stall{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;margin-top:14px;background:#3b3025;color:#edc393;border:1px solid #79603d;border-radius:7px;font-size:14px;line-height:1.7}.playback-stall span{flex:1;min-width:180px}
+
+/* Device workflows share one player and workspace state. */
+.device-nav,.phone-menu,.more-action,.workflow-hint{display:none}
+.playback-options summary{font-size:14px;color:var(--accent);cursor:pointer;padding:12px 0;min-height:44px}
+.playback-options .hint{font-size:13px;line-height:1.7;color:var(--muted)}
+#recording-actions{display:grid;gap:10px}#recording-actions button{text-align:left;min-height:44px}
+#import-progress{margin:0 22px 16px;color:var(--accent)}
+@media(min-width:700px) and (max-width:1199px){
+  .sidebar{display:none}main{margin-left:0;padding:24px}
+  .device-nav{display:flex;position:sticky;top:0;z-index:8;gap:12px;padding:10px 24px;background:#151b22;border-bottom:1px solid var(--border)}
+  .device-nav button{min-height:44px;flex:1}
+  #notice,.mini-deck{left:24px;right:24px}
+  .workspace{grid-template-columns:1fr}
+  .table-scroll table{min-width:0;white-space:normal}.table-scroll thead{display:none}.table-scroll tbody{display:block}
+  .table-scroll tr{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px 12px;padding:16px;border-bottom:1px solid var(--border)}
+  .table-scroll td{padding:0;border:0;min-width:0}.table-scroll td:first-child{grid-column:1 / -1;padding:0}
+  .table-scroll .track-actions{grid-column:1 / -1;display:flex;flex-wrap:wrap;min-width:0;max-width:none;gap:6px}
+  .track-actions button,.group-tools button,.group li button{min-height:44px;min-width:44px}
+  .track-title,.track-detail{max-width:none;white-space:normal;overflow-wrap:anywhere}
+  .group-select strong{max-width:none}.group-header{align-items:flex-start;flex-wrap:wrap}.group-tools{margin-left:auto}
+}
+@media(min-width:900px) and (max-width:1199px){.workspace{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}}
+@media(max-width:699px){
+  .sidebar{display:none}main{margin-left:0;padding:16px 12px calc(90px + env(safe-area-inset-bottom))}
+  .device-nav{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:12;background:#151b22;border-top:1px solid var(--border);gap:8px;padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
+  .device-nav button{flex:1;min-width:0;min-height:44px;font-size:14px;background:transparent}
+  .device-nav button[aria-current]{background:#40362a;border-color:var(--accent);color:#f2cb98}
+  body[data-view=library] #set,body[data-view=library] #deck,body[data-view=set] #library,body[data-view=set] #deck,body[data-view=deck] .workspace{display:none}
+  .workspace{display:block}.deck{margin-top:0}.workspace-header{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+  .workspace-title{flex:1;min-width:0;margin:0}.workspace-title h1{font-size:21px}.workspace-title #save-status{font-size:11px}
+  .phone-menu{display:block;min-height:44px}.workspace-header .header-actions{display:none;width:100%}
+  .menu-expanded .workspace-header .header-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .workflow-hint{display:block;font-size:14px;color:#afbdcb;line-height:1.6;margin:0 0 16px}
+  button,input,select{min-height:44px}input,select{font-size:16px}
+  #drop-zone{display:none}.section-head{padding:18px 16px}.section-head h2{font-size:20px}
+  .youtube-form{padding:0 16px 16px;flex-wrap:wrap}.youtube-form input{min-width:0;width:100%}.youtube-mark{display:none}
+  .filters{padding:12px 16px;flex-wrap:wrap}.filters input{flex-basis:100%;min-width:0}.filters select{flex:1;min-width:0}
+  .table-scroll,#groups{max-height:none}.table-scroll table{min-width:0;white-space:normal}.table-scroll thead{display:none}.table-scroll tbody{display:block}
+  .table-scroll tr{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px 12px;padding:16px;border-bottom:1px solid var(--border)}
+  .table-scroll td{padding:0;border:0;min-width:0}.table-scroll td:first-child{grid-column:1 / -1;padding:0}
+  .table-scroll .track-title,.table-scroll .track-detail{max-width:none;white-space:normal;overflow-wrap:anywhere}
+  .table-scroll .track-actions{grid-column:1 / -1;display:flex;gap:8px;min-width:0;max-width:none}
+  .table-scroll .track-actions button{min-height:44px;font-size:14px;padding:8px 12px}
+  .table-scroll .track-actions .secondary-action{display:none}.more-action{display:inline-block}
+  .group-header{flex-wrap:wrap}.group-tools{margin-left:auto}.group-tools button,.group li button{min-width:44px;min-height:44px}
+  .group-select{min-height:44px}.group-select strong{max-width:none;overflow-wrap:anywhere}.group-select span{min-width:0}
+  .group li{flex-wrap:wrap}.group li>div{margin-left:auto}.group li>span{white-space:normal}
+  .cortina-range{flex-wrap:wrap;gap:8px}.cortina-range input,.cortina-range button{min-height:44px}.cortina-range button{min-width:44px}
+  .now-playing{align-items:flex-start}.now-playing>div:last-child{min-width:0}.now-playing h2{max-width:none;white-space:normal;overflow-wrap:anywhere}
+  .record-art{width:44px;height:44px}.transport{gap:8px}.transport button{min-width:44px;min-height:44px}
+  .deck-settings{display:grid;gap:16px}.deck-settings label{font-size:15px;min-height:44px}.deck-settings input[type=range]{flex:1;min-height:44px}
+  .queue-panel .section-head{padding:18px 16px}.deck-context{flex-wrap:wrap}
+  .mini-deck{left:12px;right:12px;bottom:calc(74px + env(safe-area-inset-bottom));gap:8px}
+  .mini-deck>span{display:none}.mini-deck button:not(.mini-recording){min-height:44px;min-width:44px}
+  #notice{left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));max-height:160px}
+  .mini-deck-visible #notice{bottom:calc(155px + env(safe-area-inset-bottom))}.mini-deck-visible main{padding-bottom:calc(160px + env(safe-area-inset-bottom))}
+  dialog{max-height:calc(100dvh - 32px);padding:20px 16px}footer{display:none}
+}
+.storage-recovery{padding:16px;margin-bottom:18px;background:#392e22;border:1px solid #a17b49;border-radius:8px;font-size:14px;line-height:1.6}.storage-recovery p{margin:8px 0}.storage-recovery>div{display:flex;gap:10px;flex-wrap:wrap}.storage-recovery button{min-height:44px}

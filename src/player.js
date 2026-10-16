@@ -1,16 +1,34 @@
+import { fadeLevel, playbackMessage } from './fade.js';
+
 export class Player {
   constructor(onUpdate, onEnded, onError) {
     this.audio = new Audio(); this.preview = new Audio(); this.audio.preload = 'metadata';
-    this.onUpdate = onUpdate; this.onError = onError; this.volume = 0.85; this.token = 0; this.urls = new Map();
-    this.audio.addEventListener('timeupdate', () => { if (this.track?.source === 'local' && !this.audio.paused) onUpdate(this.audio.currentTime, this.audio.duration); });
-    this.audio.addEventListener('ended', () => { if (this.track?.source === 'local' && this.audio.ended) onEnded(); });
+    this.audio.playsInline = true; this.preview.playsInline = true;
+    this.onUpdate = onUpdate; this.onError = onError; this.volume = 0.85; this.fade = 0; this.level = 1; this.token = 0; this.urls = new Map();
+    this.audio.addEventListener('timeupdate', () => {
+      if (this.audio.currentTime !== this.localLastPosition) { this.localLastPosition = this.audio.currentTime; this.localWaitingSince = null; this.localStallReported = false; }
+      if (this.track?.source === 'local' && !this.audio.paused) onUpdate(this.audio.currentTime, this.audio.duration);
+    });
+    this.audio.addEventListener('waiting', () => { this.localWaitingSince = Date.now(); });
+    this.audio.addEventListener('playing', () => { this.localWaitingSince = null; this.localStallReported = false; });
+    this.audio.addEventListener('ended', () => { if (this.track?.source === 'local' && this.audio.ended && !this.switching) onEnded(); });
     for (const event of ['play','pause','ended']) this.audio.addEventListener(event, () => this.onPlaybackState?.());
     this.audio.addEventListener('error', () => onError('This audio format could not be played. Try MP3, WAV, or a supported AAC file.'));
     this.preview.addEventListener('error', () => onError('Preview playback failed.'));
     this.lastProgress = Date.now(); this.lastPosition = -1; this.stallNotified = false;
     this.timer = setInterval(() => {
+      this.updateEnvelope();
+      if (this.track?.source === 'local' && !this.audio.paused) {
+        const position = this.audio.currentTime;
+        if (position !== this.localLastPosition) { this.localLastPosition = position; this.localWaitingSince = null; this.localStallReported = false; }
+        if (!this.lastLocalUpdate || Date.now() - this.lastLocalUpdate >= 250) { this.lastLocalUpdate = Date.now(); onUpdate(position, this.audio.duration); }
+      }
+      if (this.track?.source === 'local' && !this.audio.paused && this.localWaitingSince && Date.now() - this.localWaitingSince > 15000 && !this.localStallReported) {
+        this.localStallReported = true; this.onError('Audio playback is stalled. Retry or relink a browser-supported MP3, WAV, or AAC file.');
+      }
       if (this.track?.source !== 'youtube' || !this.youtube?.getCurrentTime || !this.matchesVideo()) return;
       const position = this.youtube.getCurrentTime(), state = this.youtube.getPlayerState?.();
+      this.onNeedsGesture?.(!this.youtubeArmed && ![1,3].includes(state) && Date.now() - this.loadStarted > 8000);
       if (Math.abs(position - this.lastPosition) > 0.1 || ![1,3].includes(state)) {
         this.lastPosition = position; this.lastProgress = Date.now();
         if (this.stallNotified) { this.stallNotified = false; this.onStall?.(false); }
@@ -18,8 +36,8 @@ export class Player {
       if ([1,3].includes(state) && Date.now() - this.lastProgress > 15000 && !this.stallNotified) {
         this.stallNotified = true; this.onStall?.(true);
       }
-      if (state === 1) onUpdate(position, this.youtube.getDuration());
-    }, 500);
+      if (state === 1 && (!this.lastUpdate || Date.now() - this.lastUpdate >= 250)) { this.lastUpdate = Date.now(); onUpdate(position, this.youtube.getDuration()); }
+    }, 50);
     this.onEnded = onEnded; this.youtubeArmed = false;
   }
   matchesVideo() {
@@ -28,7 +46,9 @@ export class Player {
   }
   async context() {
     if (!this.ctx) {
-      this.ctx = new AudioContext();
+      const Context = window.AudioContext || window.webkitAudioContext;
+      if (!Context) throw new Error('Audio processing is unavailable in this browser. Try a current Safari or Chrome browser.');
+      this.ctx = new Context();
       this.gain = this.ctx.createGain(); this.gain.connect(this.ctx.destination);
       this.ctx.createMediaElementSource(this.audio).connect(this.gain);
       this.ctx.createMediaElementSource(this.preview).connect(this.ctx.destination);
@@ -70,7 +90,7 @@ export class Player {
               if (this.track?.source !== 'youtube' || !this.matchesVideo()) return;
               this.onPlaybackState?.();
               if (event.data === 1) this.youtubeArmed = true;
-              if (event.data === 0 && this.youtubeArmed && (!this.youtube?.getPlayerState || this.youtube.getPlayerState() === 0)) {
+              if (event.data === 0 && this.youtubeArmed && !this.switching && (!this.youtube?.getPlayerState || this.youtube.getPlayerState() === 0)) {
                 this.youtubeArmed = false; this.onEnded();
               }
             },
@@ -81,53 +101,88 @@ export class Player {
     });
     return this.youtube;
   }
-  async play(track, file, fade, normalize, startSeconds = 0) {
+  position() { return this.track?.source === 'youtube' ? this.youtube?.getCurrentTime?.() || 0 : this.audio.currentTime; }
+  isPlaying() { return this.track?.source === 'youtube' ? this.youtube?.getPlayerState?.() === 1 : !this.audio.paused; }
+  updateEnvelope() {
+    if (!this.track || this.switching || !this.isPlaying() || (this.track.source === 'youtube' && !this.matchesVideo())) return;
+    const sourceDuration = this.track.source === 'youtube' ? this.youtube?.getDuration?.() : this.audio.duration;
+    const available = sourceDuration > 0 ? Math.max(0, sourceDuration - this.startSeconds) : Infinity;
+    const duration = Math.min(this.limitSeconds || Infinity, available);
+    this.applyLevel(fadeLevel(this.position() - this.startSeconds, duration, this.fade));
+  }
+  applyLevel(level) {
+    this.level = level;
+    if (this.track?.source === 'youtube') this.youtube?.setVolume?.(this.volume * level * 100);
+    else if (this.gain) this.gain.gain.setTargetAtTime(this.targetGain() * level, this.ctx.currentTime, 0.015);
+  }
+  async play(track, file, fade, normalize, startSeconds = 0, limitSeconds = null) {
     if (track.source === 'local' && !file) throw new Error('Relink the local file before playing this track.');
+    this.updateEnvelope();
     const token = ++this.token;
-    if (this.track?.source === 'local' && !this.audio.paused && fade > 0 && track.source === 'local') {
-      this.gain.gain.cancelScheduledValues(this.ctx.currentTime);
-      this.gain.gain.setValueAtTime(this.gain.gain.value, this.ctx.currentTime);
-      this.gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + fade);
-      await new Promise(resolve => setTimeout(resolve, fade * 1000));
+    // Unlock Web Audio while this call still belongs to the user's gesture.
+    if (track.source === 'local') { await this.context(); if (token !== this.token) return false; }
+    if (this.track && this.isPlaying() && fade > 0 && this.level > 0.01) {
+      this.switching = true;
+      const initial = this.level, started = performance.now();
+      await new Promise(resolve => {
+        const timer = setInterval(() => {
+          if (token !== this.token) { clearInterval(timer); resolve(); return; }
+          const progress = Math.min(1, (performance.now() - started) / (fade * 1000));
+          this.applyLevel(initial * (1 - progress));
+          if (progress === 1) { clearInterval(timer); resolve(); }
+        }, 25);
+      });
       if (token !== this.token) return false;
     }
     this.audio.pause(); this.youtube?.pauseVideo?.(); this.preview.pause();
-    this.youtubeArmed = false; this.lastProgress = Date.now(); this.lastPosition = -1; this.stallNotified = false; this.onStall?.(false); this.track = structuredClone(track); this.normalize = normalize;
+    this.switching = false;
+    this.youtubeArmed = false; this.lastProgress = Date.now(); this.lastPosition = -1; this.stallNotified = false; this.onStall?.(false);
+    this.localWaitingSince = null; this.localStallReported = false;
+    this.loadStarted = Date.now(); this.onNeedsGesture?.(false);
+    this.track = structuredClone(track); this.normalize = normalize; this.fade = fade;
+    this.startSeconds = startSeconds; this.limitSeconds = limitSeconds;
     document.querySelector('#youtube-wrap').hidden = track.source !== 'youtube';
     if (track.source === 'youtube') {
       const yt = await this.loadYouTube(track.videoId); if (token !== this.token) return false;
-      yt.setVolume(this.volume * 100); yt.loadVideoById(startSeconds ? { videoId: track.videoId, startSeconds } : track.videoId);
+      this.applyLevel(fade > 0 ? 0 : 1);
+      yt.loadVideoById(startSeconds ? { videoId: track.videoId, startSeconds } : track.videoId);
     } else {
-      if (!file) throw new Error('Relink the local file before playing this track.');
-      await this.context(); if (token !== this.token) return false;
       this.audio.src = this.fileUrl(track.id, file);
       this.audio.currentTime = startSeconds;
-      const target = this.targetGain(); this.gain.gain.cancelScheduledValues(this.ctx.currentTime);
-      this.gain.gain.setValueAtTime(fade > 0 ? 0 : target, this.ctx.currentTime);
-      if (fade > 0) this.gain.gain.linearRampToValueAtTime(target, this.ctx.currentTime + fade);
-      await this.audio.play();
+      this.gain.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.gain.gain.setValueAtTime(fade > 0 ? 0 : this.targetGain(), this.ctx.currentTime);
+      this.level = fade > 0 ? 0 : 1;
+      let timeout;
+      try {
+        await Promise.race([this.audio.play(), new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('Audio is taking too long to load. Retry or relink the original file.')), 15000); })]);
+      } catch (error) {
+        if (token === this.token) this.audio.pause();
+        throw new Error(playbackMessage(error));
+      } finally { clearTimeout(timeout); }
+      if (token !== this.token) return false;
+      this.updateEnvelope();
     }
     return true;
   }
   targetGain() { return this.volume * 10 ** ((this.normalize ? (this.track?.gainDb || 0) : 0) / 20); }
   setVolume(value, normalize) {
     this.volume = value; this.normalize = normalize;
-    if (this.gain) { this.gain.gain.cancelScheduledValues(this.ctx.currentTime); this.gain.gain.setValueAtTime(this.targetGain(), this.ctx.currentTime); }
-    this.youtube?.setVolume?.(value * 100);
+    this.applyLevel(this.level);
   }
+  setFade(value) { this.fade = value; this.updateEnvelope(); }
   async toggle() {
     if (this.track?.source === 'youtube') {
       if (this.youtube?.getPlayerState() === 1) this.youtube.pauseVideo(); else this.youtube?.playVideo();
     } else if (this.track) { await this.context(); if (this.audio.paused) await this.audio.play(); else this.audio.pause(); }
   }
-  seek(seconds) { if (this.track?.source === 'youtube') this.youtube?.seekTo?.(seconds, true); else if (Number.isFinite(this.audio.duration)) this.audio.currentTime = seconds; }
+  seek(seconds) { if (this.track?.source === 'youtube') this.youtube?.seekTo?.(seconds, true); else if (Number.isFinite(this.audio.duration)) this.audio.currentTime = seconds; this.updateEnvelope(); }
   stop() {
-    ++this.token; this.youtubeArmed = false; this.stallNotified = false; this.onStall?.(false); this.audio.pause(); this.youtube?.pauseVideo?.(); this.preview.pause();
+    ++this.token; this.onNeedsGesture?.(false); this.switching = false; this.youtubeArmed = false; this.stallNotified = false; this.onStall?.(false); this.audio.pause(); this.youtube?.pauseVideo?.(); this.preview.pause();
     if (this.gain) { this.gain.gain.cancelScheduledValues(this.ctx.currentTime); this.gain.gain.setValueAtTime(this.targetGain(), this.ctx.currentTime); }
   }
   async previewTrack(track, file) {
     if (!file) throw new Error('Relink the local file before previewing.');
-    await this.context(); this.preview.src = this.fileUrl(track.id, file); this.preview.volume = 0.55; await this.preview.play();
+    await this.context(); this.previewId = track.id; this.preview.src = this.fileUrl(track.id, file); this.preview.volume = 0.55; await this.preview.play();
   }
   revoke(id) { if (this.urls.has(id)) URL.revokeObjectURL(this.urls.get(id)); this.urls.delete(id); }
 }

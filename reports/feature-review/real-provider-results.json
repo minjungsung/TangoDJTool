@@ -1,0 +1,204 @@
+{
+  "started": "2026-10-16T01:48:47.117Z",
+  "tracks": [
+    {
+      "id": "real-tango-1",
+      "title": "Yo soy el tango",
+      "progress": 1.4146630743865967,
+      "pass": true,
+      "duration": 144.541
+    },
+    {
+      "id": "real-tango-2",
+      "title": "Te aconsejo que me olvides",
+      "progress": 1.4972460324249268,
+      "pass": true,
+      "duration": 180.061
+    },
+    {
+      "id": "real-tango-3",
+      "title": "El bulín de la calle Ayacucho",
+      "progress": 1.5001560743865967,
+      "pass": true,
+      "duration": 151.281
+    },
+    {
+      "id": "real-tango-4",
+      "title": "Toda mi vida",
+      "progress": 1.4978579809265136,
+      "pass": true,
+      "duration": 178.181
+    },
+    {
+      "id": "real-cortina-1",
+      "title": "L-O-V-E",
+      "progress": 1.4977189084472655,
+      "pass": true,
+      "duration": 152.461
+    },
+    {
+      "id": "real-vals-1",
+      "title": "Cofrecito",
+      "progress": 1.4789260953674317,
+      "pass": true,
+      "duration": 189.541
+    },
+    {
+      "id": "real-vals-2",
+      "title": "Secreto de amor",
+      "progress": 1.5033828874664306,
+      "pass": true,
+      "duration": 179.921
+    },
+    {
+      "id": "real-vals-3",
+      "title": "En voz baja",
+      "progress": 1.50062412588501,
+      "pass": true,
+      "duration": 175.821
+    },
+    {
+      "id": "real-cortina-2",
+      "title": "Hit the Road Jack",
+      "progress": 1.4995350743865965,
+      "pass": true,
+      "duration": 122.361
+    },
+    {
+      "id": "real-milonga-1",
+      "title": "Largá las penas",
+      "progress": 1.5024199694824218,
+      "pass": true,
+      "duration": 190.481
+    },
+    {
+      "id": "real-milonga-2",
+      "title": "Milonga criolla",
+      "progress": 1.4933930324249267,
+      "pass": true,
+      "duration": 190.341
+    },
+    {
+      "id": "real-milonga-3",
+      "title": "Silueta porteña",
+      "progress": 1.4987141049041748,
+      "pass": true,
+      "duration": 177.721
+    },
+    {
+      "id": "real-canaro-1",
+      "title": "Poema",
+      "progress": 1.5011970324249269,
+      "pass": true,
+      "duration": 200.901
+    },
+    {
+      "id": "real-canaro-2",
+      "title": "Envidia",
+      "progress": 1.4957271773834229,
+      "pass": true,
+      "duration": 191.961
+    },
+    {
+      "id": "real-canaro-3",
+      "title": "Yo también soñé",
+      "progress": 1.5039898874664306,
+      "pass": true,
+      "duration": 186.281
+    },
+    {
+      "id": "real-canaro-4",
+      "title": "Invierno",
+      "progress": 1.5000689599456787,
+      "pass": true,
+      "duration": 205.761
+    },
+    {
+      "id": "real-rhythmic-1",
+      "title": "Milagro",
+      "progress": 1.4968598874664307,
+      "pass": true,
+      "duration": 171.861
+    },
+    {
+      "id": "real-rhythmic-2",
+      "title": "Recuerdos de París",
+      "progress": 1.5024220953674317,
+      "pass": true,
+      "duration": 192.121
+    },
+    {
+      "id": "real-rhythmic-3",
+      "title": "Nada más",
+      "progress": 1.4978250019073485,
+      "pass": true,
+      "duration": 181.601
+    },
+    {
+      "id": "real-rhythmic-4",
+      "title": "Yo seré como tú quieras",
+      "progress": 1.5032569084472656,
+      "pass": true,
+      "duration": 159.561
+    },
+    {
+      "id": "real-instrumental-1",
+      "title": "Cachirulo",
+      "progress": 1.5030928874664307,
+      "pass": true,
+      "duration": 157.321
+    },
+    {
+      "id": "real-instrumental-2",
+      "title": "Guapeando",
+      "progress": 1.4961151773834227,
+      "pass": true,
+      "duration": 168.341
+    },
+    {
+      "id": "real-instrumental-3",
+      "title": "El tamango",
+      "progress": 1.4985258359680176,
+      "pass": true,
+      "duration": 161.12326530612245
+    },
+    {
+      "id": "real-instrumental-4",
+      "title": "Milongueando en el 40",
+      "progress": 1.48201208392334,
+      "pass": true,
+      "duration": 159.081
+    },
+    {
+      "id": "real-cortina-3",
+      "title": "Sway",
+      "progress": 1.5009641773834228,
+      "pass": true,
+      "duration": 162.781
+    },
+    {
+      "id": "real-cortina-4",
+      "title": "Fly Me to the Moon",
+      "progress": 1.4997761773834228,
+      "pass": true,
+      "duration": 147.201
+    },
+    {
+      "id": "real-cortina-5",
+      "title": "The Girl from Ipanema",
+      "progress": 1.5017929809265136,
+      "pass": true,
+      "duration": 181.401
+    },
+    {
+      "id": "real-cortina-6",
+      "title": "Stand By Me",
+      "progress": 1.5014577425079345,
+      "pass": true,
+      "duration": 177.481
+    }
+  ],
+  "errors": [],
+  "completed": true,
+  "finished": "2026-10-16T01:49:50.086Z"
+}
