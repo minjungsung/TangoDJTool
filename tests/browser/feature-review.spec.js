@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './saved-workspace.js';
 
 function wav(name = 'Review tango', amplitude = 10000) {
   const rate = 8000, length = rate * 10, b = Buffer.alloc(44 + length * 2);
@@ -198,7 +198,7 @@ test('local decode failure and preview failure report errors, playback relink an
 });
 
 test('temporary database failure: example-only queue, backup export, local import guard and saving recovery', async ({page}) => {
-  await provider(page);await page.addInitScript(()=>{const original=IDBFactory.prototype.open;IDBFactory.prototype.open=function(...args){if(!window.storageAllowed)throw new DOMException('Unavailable','SecurityError');return original.apply(this,args);};});await page.reload();await expect(page.locator('#storage-recovery')).toBeVisible();await menu(page,'open-examples');await page.locator('#real-sample-play').click();await expect(page.locator('#queue-count')).toHaveText('28');await expect(page.locator('#save-status')).toHaveText('Temporary · not saved');
+  await page.evaluate(() => new Promise((resolve,reject) => { const request=indexedDB.deleteDatabase('tango-dj-studio');request.onsuccess=resolve;request.onerror=()=>reject(request.error); }));await provider(page);await page.addInitScript(()=>{const original=IDBFactory.prototype.open;IDBFactory.prototype.open=function(...args){if(!window.storageAllowed)throw new DOMException('Unavailable','SecurityError');return original.apply(this,args);};});await page.reload();await expect(page.locator('#storage-recovery')).toBeVisible();await menu(page,'open-examples');await page.locator('#real-sample-play').click();await expect(page.locator('#queue-count')).toHaveText('28');await expect(page.locator('#save-status')).toHaveText('Temporary · not saved');
   const pending=page.waitForEvent('download');await page.locator('#temporary-export').click();expect((await pending).suggestedFilename()).toBe('tango-dj-set.json');
   await page.locator('#file-input').setInputFiles(wav());await expect(page.locator('#notice')).toContainText('Retry saving');await expect(page.locator('#library-count')).toHaveText('28');
   await page.evaluate(()=>window.storageAllowed=true);await page.locator('#retry-saving').click();await save(page);await expect(page.locator('#storage-recovery')).toBeHidden();

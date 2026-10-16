@@ -15,7 +15,7 @@ let state = { tracks: [], groups: [] }, selected = null, queue = [], queueIndex 
 let playRequest = 0, timedEnd = false, loadedSignature = null, resumeIndex = 0;
 let undoGroups = null, transitioning = false, stopped = false, lastRenderedIndex = -1;
 const files = new Map();
-let savedQueue = [], revision = 0;
+let savedQueue = [], revision = 0, firstVisit = true;
 let settings = {};
 try { settings = JSON.parse(localStorage.getItem('studio-settings') || '{}'); } catch {}
 let persistence = Promise.resolve(), temporaryWorkspace = false;
@@ -85,7 +85,7 @@ function notify(message, error = false) {
   </main>
   <dialog id="examples-dialog"><div class="dialog-heading"><h2>Example sets</h2><button data-close="examples-dialog" aria-label="Close">×</button></div><p class="hint">Six tandas with cortinas. Add this set to your workspace when you need a starting point.</p><div class="example-flow">Tango · Tango · Vals · Tango · Tango · Milonga</div><div id="example-actions"></div></dialog>
   <dialog id="guide-dialog"><div class="dialog-heading"><h2>User guide</h2><button data-close="guide-dialog" aria-label="Close">×</button></div>${guideMarkup}</dialog>
-  <dialog id="settings-dialog"><div class="dialog-heading"><h2>Settings</h2><button data-close="settings-dialog" aria-label="Close">×</button></div><label class="language-control">Language <select id="language" aria-label="Language"><option value="ko">한국어</option><option value="en">English</option><option value="es">Español</option></select></label><section class="storage-panel"><div><strong>Personal workspace</strong><p>Your library, audio files, set, queue, and preferences are saved for this site in this browser. Other visitors have their own workspace.</p></div><div><button id="persist-storage">Request persistent storage</button><small id="storage-details"></small></div></section></dialog>
+  <dialog id="settings-dialog"><div class="dialog-heading"><h2>Settings</h2><button data-close="settings-dialog" aria-label="Close">×</button></div><label class="language-control">Language <select id="language" aria-label="Language"><option value="ko">한국어</option><option value="en">English</option><option value="es">Español</option></select></label><p><a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy policy</a></p><section class="storage-panel"><div><strong>Personal workspace</strong><p>Your library, audio files, set, queue, and preferences are saved for this site in this browser. Other visitors have their own workspace.</p></div><div><button id="persist-storage">Request persistent storage</button><small id="storage-details"></small></div></section></dialog>
   <dialog id="actions-dialog"><div class="dialog-heading"><h2>Recording actions</h2><button data-close="actions-dialog" aria-label="Close">×</button></div><p id="actions-title" data-preserve></p><div id="recording-actions"></div></dialog><input id="file-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" multiple hidden>
   <input id="set-input" type="file" accept="application/json,.json" hidden>
   <input id="relink-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" hidden>
@@ -709,7 +709,7 @@ $('#real-sample-select').onclick = async () => { if (await loadRealSamples()) { 
 renderProgress();
 
 try {
-  const saved = await loadState(); if (saved) { revision = saved.revision || 0; state = validateSet({ version: 1, ...saved }); selected = saved.selected; loadedSignature = typeof saved.loadedSignature === 'string' ? saved.loadedSignature : null; resumeIndex = Number.isInteger(saved.queueIndex) && saved.queueIndex >= 0 ? saved.queueIndex : 0; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; }
+  const saved = await loadState(); firstVisit = !saved; if (saved) { revision = saved.revision || 0; state = validateSet({ version: 1, ...saved }); selected = saved.selected; loadedSignature = typeof saved.loadedSignature === 'string' ? saved.loadedSignature : null; resumeIndex = Number.isInteger(saved.queueIndex) && saved.queueIndex >= 0 ? saved.queueIndex : 0; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; }
   const migrated = removeOldExamples(state); state = migrated.state;
   for (const group of state.groups) if (group.samplePack === REAL_SAMPLE_PACK && group.kind === 'cortina') {
     const defaults = realGroups().find(item => item.id === group.id);
@@ -723,7 +723,23 @@ try {
 } catch (error) { showStorageRecovery(error); notify(`Could not restore your library: ${storageMessage(error)}`, true); }
 render();
 
-// A shareable local entry point opens a populated workspace without starting audio.
+// Seed examples only when there is no saved workspace. An intentionally empty
+// saved workspace is still existing work and must remain empty.
+if (firstVisit) {
+  await loadRealSamples();
+  loadedSignature = queueSignature(state.groups, state.tracks);
+  queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
+  resumeIndex = 0; queueIndex = -1;
+  $('#queue-resume').hidden = true;
+  $('#playing-title').textContent = queue[0]?.track.title || 'No recording loaded';
+  $('#playing-artist').textContent = queue[0]?.track.artist || '';
+  $('#playing-group').textContent = queue[0]?.groupName || 'READY WHEN YOU ARE';
+  $('#position').textContent = `0:00 / ${time(queue[0]?.track.duration)}`;
+  render(); await persist(); showView('deck');
+  if (!temporaryWorkspace) notify('Example set ready. Press Play to start. YouTube needs an internet connection.');
+}
+
+// A shareable entry point can add examples to an existing workspace.
 if (new URLSearchParams(location.search).get('practice') === '1') {
   await loadRealSamples();
   const url = new URL(location.href); url.searchParams.delete('practice'); history.replaceState(null, '', url);

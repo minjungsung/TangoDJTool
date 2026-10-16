@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Tango DJ Studio</string>
+    <string name="asset_statements" translatable="false">[{\"relation\":[\"delegate_permission/common.handle_all_urls\"],\"target\":{\"namespace\":\"web\",\"site\":\"https://tangodjtool.vercel.app\"}}]</string>
+    <color name="background">#15191e</color>
+</resources>

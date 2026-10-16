@@ -1,4 +1,5 @@
 const pairs = {
+  'Example set ready. Press Play to start. YouTube needs an internet connection.': ['예제 세트가 준비됐습니다. 재생 버튼을 눌러 시작하세요. YouTube는 인터넷 연결이 필요합니다.', 'La sesión de ejemplo está lista. Pulsa Reproducir para empezar. YouTube necesita conexión a internet.'],
   'Playback is waiting for YouTube. Check your connection or retry from the current position.': ['YouTube 재생이 멈춰 기다리는 중입니다. 인터넷을 확인하거나 현재 지점에서 다시 시도하세요.', 'La reproducción está esperando a YouTube. Comprueba la conexión o reintenta desde la posición actual.'], 'Retry here': ['현재 지점 재시도', 'Reintentar aquí'],
   'From': ['시작', 'Desde'], 'To': ['끝', 'Hasta'], 'Cortina end position': ['꼬르띠나 끝 지점', 'Final de la cortina'],
   'The start must be before the recording ends. Choose an earlier cue.': ['시작점은 곡이 끝나기 전이어야 합니다. 더 이른 지점을 선택하세요.', 'El inicio debe estar antes del final de la grabación. Elige un punto anterior.'],

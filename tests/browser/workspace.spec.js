@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, prepareSavedWorkspace } from './saved-workspace.js';
 function wav() {
   const rate = 8000, seconds = 8, length = rate * seconds, buffer = Buffer.alloc(44 + length * 2);
   buffer.write('RIFF'); buffer.writeUInt32LE(buffer.length - 8, 4); buffer.write('WAVE', 8); buffer.write('fmt ', 12);
@@ -66,7 +66,7 @@ test('an exported mixed set transfers to another browser with cues, holds and lo
   expect(original.groups[1]).toMatchObject({ startSeconds: 35, limitSeconds: 15, holdAfter: true });
   const context = await browser.newContext(), other = await context.newPage();
   try {
-    await other.goto('/'); await expect(other.locator('#library-count')).toHaveText('0');
+    await prepareSavedWorkspace(other); await other.goto('/'); await expect(other.locator('#library-count')).toHaveText('0');
     other.on('dialog', dialog => dialog.accept());
     await other.locator('#set-input').setInputFiles({ name: 'exported-set.json', mimeType: 'application/json', buffer: exported });
     await expect(other.locator('#library-count')).toHaveText('29'); await expect(other.locator('.group')).toHaveCount(13);
@@ -258,7 +258,7 @@ test('language, playback preferences, edited tandas and queue survive reload per
   await page.locator('[data-close="settings-dialog"]').click();
   await expect(page.locator('#import-set')).toHaveText('Importar sesión');
   await expect(page.locator('#start-set')).toContainText('Cargar y reproducir');
-  const context = await browser.newContext(); const other = await context.newPage(); await other.goto('/');
+  const context = await browser.newContext(); const other = await context.newPage(); await prepareSavedWorkspace(other); await other.goto('/');
   await expect(other.locator('#library-count')).toHaveText('0'); await context.close();
 });
 test('YouTube errors expose recovery and a replacement link is saved', async ({ page }) => {

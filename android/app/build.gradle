@@ -1,0 +1,32 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'app.tangodj.studio'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'app.tangodj.studio'
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0'
+    }
+    // Signing values come from the environment, never from committed credentials.
+    def signingPath = System.getenv('TANGO_UPLOAD_KEYSTORE')
+    if (signingPath) {
+        signingConfigs {
+            release {
+                storeFile file(signingPath)
+                storePassword System.getenv('TANGO_UPLOAD_STORE_PASSWORD')
+                keyAlias System.getenv('TANGO_UPLOAD_KEY_ALIAS')
+                keyPassword System.getenv('TANGO_UPLOAD_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (signingPath) signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+}
+dependencies { implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4' }

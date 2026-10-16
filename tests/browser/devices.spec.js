@@ -1,4 +1,5 @@
-import { test, expect, devices } from '@playwright/test';
+import { test, expect, prepareSavedWorkspace } from './saved-workspace.js';
+import { devices } from '@playwright/test';
 
 function tone() {
   const rate = 8000, length = rate * 12, buffer = Buffer.alloc(44 + length * 2);
@@ -12,7 +13,7 @@ function tone() {
 for (const device of ['iPhone 13', 'iPad (gen 7)', 'Pixel 7']) {
   test(`${device} supports import, group selection, playback and orientation changes`, async ({ browser }) => {
     const context = await browser.newContext({ ...devices[device], locale: 'en-US' });
-    const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message));
+    const page = await context.newPage(); await prepareSavedWorkspace(page); const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto('/'); await expect(page.locator('#library')).toBeVisible();
     const phone = devices[device].viewport.width < 700;
     await expect(page.locator('#library')).toBeVisible();

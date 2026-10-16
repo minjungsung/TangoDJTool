@@ -30,3 +30,10 @@ dist-final-review/
 /reports/dj-current-build.json
 /reports/manual-checks.jsonl
 .vercel/
+
+# Android local SDK configuration and release secrets
+android/.gradle/
+android/local.properties
+*.jks
+*.keystore
+/reports/android-release/

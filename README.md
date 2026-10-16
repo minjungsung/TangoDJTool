@@ -15,6 +15,8 @@ Open the local URL printed by Vite. For a production build, run `npm run build`;
 
 ## Phone, tablet, and computer workflows
 
+On a first visit, the example set is already prepared and the Play work area opens. Press Play to start the examples; YouTube requires a connection. Saved workspaces, including deliberately cleared sets, are preserved.
+
 On phones, use **1 · Music → 2 · Set → 3 · Play** in the bottom navigation. Add files in Music, create a tanda in Set, then choose **Choose recordings for this group** and use **Add** on each recording. Return to Set and choose **Load & play set**, or start the prepared set from Play. Playback opens the deck; compact pause/next controls stay available while browsing. **More** opens recording details, preview, analysis, and deletion. **Menu** contains examples, the guide, settings, and set backup/import. Playback settings expand inside Play.
 
 Portrait tablets keep readable cards and labeled navigation. At 900–1199 CSS pixels the library and builder sit side by side. Computer layouts retain the full workspace, tabular library, and keyboard controls. Resizing changes the presentation while preserving playback and the queue.

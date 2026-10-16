@@ -11,13 +11,16 @@
     "test": "node --test tests/*.test.js",
     "test:e2e": "playwright test",
     "test:review": "npm run build && playwright test --config playwright.review.config.js",
-    "test:devices": "playwright test --config playwright.devices.config.js"
+    "test:devices": "playwright test --config playwright.devices.config.js",
+    "test:install": "npm run build && playwright test --config playwright.install.config.js",
+    "android:assetlinks": "node scripts/android-assetlinks.mjs"
   },
   "dependencies": {
     "music-metadata": "^12.2.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vite-plugin-pwa": "^2.0.0"
   }
 }
