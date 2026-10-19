@@ -85,8 +85,9 @@ function notify(message, error = false) {
       <div class="queue-panel"><div class="section-head"><h3>Play queue</h3><span id="queue-count" class="badge">0</span></div><p id="queue-resume" class="hint" hidden>Queue restored. Press Play to resume your last recording.</p><div id="queue"><p class="hint">Load a set or play a library track.</p></div></div>
     </section>
     <div id="mini-deck" class="mini-deck" hidden><button id="mini-open" class="mini-recording"><strong></strong><small></small></button><span id="mini-remaining"></span><button id="mini-play" aria-label="Play or pause">▶</button><button id="mini-next" aria-label="Next track">⏭</button></div>
-    <footer>Made for the music between people.<span>Library & files saved locally · Export sets for backup</span></footer>
+    <footer><div class="footer-credit"><span>Made for the music between people.</span><button id="maker-credit" data-preserve>Made by 별사탕</button></div><span>Library & files saved locally · Export sets for backup</span></footer>
   </main>
+  <dialog id="dedication-dialog" aria-labelledby="dedication-title"><button class="dedication-close" data-close="dedication-dialog" aria-label="Close">×</button><span class="dedication-star" aria-hidden="true">✦</span><h2 id="dedication-title" data-preserve>Dedicated to 태풍</h2></dialog>
   <dialog id="examples-dialog"><div class="dialog-heading"><h2>Example sets</h2><button data-close="examples-dialog" aria-label="Close">×</button></div><p class="hint">Six tandas with cortinas. Add this set to your workspace when you need a starting point.</p><div class="example-flow">Tango · Tango · Vals · Tango · Tango · Milonga</div><div id="example-actions"></div></dialog>
   <dialog id="guide-dialog"><div class="dialog-heading"><h2>User guide</h2><button data-close="guide-dialog" aria-label="Close">×</button></div>${guideMarkup}</dialog>
   <dialog id="settings-dialog"><div class="dialog-heading"><h2>Settings</h2><button data-close="settings-dialog" aria-label="Close">×</button></div><label class="language-control">Language <select id="language" aria-label="Language"><option value="ko">한국어</option><option value="en">English</option><option value="es">Español</option></select></label><p><a href="https://minjung-world.notion.site/Tango-DJ-Studio-Privacy-Policy-b7474a525fd882d39c2e01b0091b667b" target="_blank" rel="noopener noreferrer">Privacy policy</a> · <a href="https://minjung-world.notion.site/Tango-DJ-Studio-Terms-of-Use-c3174a525fd8831f9cab81b1b229fa08" target="_blank" rel="noopener noreferrer">Terms of use</a></p><section class="storage-panel"><div><strong>Personal workspace</strong><p>Your library, audio files, set, queue, and preferences are saved for this site in this browser. Other visitors have their own workspace.</p></div><div><button id="persist-storage">Request persistent storage</button><small id="storage-details"></small></div></section></dialog>
@@ -99,6 +100,13 @@ const $ = selector => document.querySelector(selector);
 $('#dismiss-notice').onclick = () => { $('#notice').hidden = true; clearTimeout(notify.timer); };
 for (const [button, dialog] of [['open-examples','examples-dialog'],['open-guide','guide-dialog'],['open-settings','settings-dialog']]) $(`#${button}`).onclick = () => $(`#${dialog}`).showModal();
 for (const button of document.querySelectorAll('[data-close]')) button.onclick = () => $(`#${button.dataset.close}`).close();
+let creditClicks = 0, lastCreditClick = 0;
+$('#maker-credit').onclick = () => {
+  const now = Date.now();
+  creditClicks = now - lastCreditClick > 3000 ? 1 : creditClicks + 1;
+  lastCreditClick = now;
+  if (creditClicks === 5) { creditClicks = 0; $('#dedication-dialog').showModal(); }
+};
 $('#example-actions').append($('#load-real-samples'), $('#real-sample-play'));
 const phoneLayout = matchMedia('(max-width: 699px)');
 let activeView = 'library';
