@@ -1,15 +1,16 @@
-import { test, expect } from './saved-workspace.js';
+import { test, expect, prepareSavedWorkspace } from './saved-workspace.js';
 
 function wav(name = 'Review tango', amplitude = 10000) {
   const rate = 8000, length = rate * 10, b = Buffer.alloc(44 + length * 2);
   b.write('RIFF'); b.writeUInt32LE(b.length - 8, 4); b.write('WAVE', 8); b.write('fmt ', 12);
   b.writeUInt32LE(16,16); b.writeUInt16LE(1,20); b.writeUInt16LE(1,22); b.writeUInt32LE(rate,24); b.writeUInt32LE(rate*2,28); b.writeUInt16LE(2,32); b.writeUInt16LE(16,34); b.write('data',36); b.writeUInt32LE(length*2,40);
-  for (let i=0;i<length;i++) b.writeInt16LE(Math.round(Math.sin(i*2*Math.PI*440/rate)*amplitude),44+i*2);
+  for (let i=0;i<length;i++) b.writeInt16LE(Math.round(Math.sin(i*2*Math.PI*(440 + [...name].reduce((sum,c)=>sum+c.charCodeAt(0),0)%200)/rate)*amplitude),44+i*2);
   return { name: `${name}.wav`, mimeType: 'audio/wav', buffer: b };
 }
 async function view(page, area) {
+  await page.locator('button[data-view]').first().waitFor({ state: 'attached' });
   if (await page.locator('button[data-view]').first().isVisible()) await page.locator(`button[data-view=${area}]`).click();
-  else await page.locator(`#${area}`).scrollIntoViewIfNeeded();
+  else await page.locator(`.sidebar .nav[href="#${area}"]`).click();
 }
 async function menu(page, id) {
   if (await page.locator('#open-menu').isVisible() && !(await page.locator(`#${id}`).isVisible())) await page.locator('#open-menu').click();
@@ -26,7 +27,7 @@ async function upload(page, ...files) {
   await expect(page.locator('#import-progress')).toContainText('Done');
 }
 async function save(page) { await expect(page.locator('#save-status')).toHaveText('Saved in this browser'); }
-async function samples(page) { await menu(page,'open-examples'); await page.locator('#load-real-samples').click(); await expect(page.locator('#library-count')).toHaveText('28'); }
+async function samples(page) { await menu(page,'open-examples'); await page.locator('#load-real-samples').click(); await expect(page.locator('#library-count')).toHaveText('28'); await page.locator('.group.collapsed:not(.attached-cortina) [data-group-action=collapse]').evaluateAll(buttons=>buttons.forEach(button=>button.click())); }
 async function provider(page) {
   await page.addInitScript(() => {
     window.YT = { Player: class {
@@ -93,11 +94,11 @@ test('YouTube URL rejection, duplicate prevention, unavailable metadata and manu
 
 test('create/select/rename/reorder/delete groups and reorder/remove recordings with Undo', async ({page}) => {
   await upload(page,wav('A'),wav('B'));await view(page,'set');await page.locator('#add-tanda').click();await action(page,'add',0);await action(page,'add',1);await view(page,'set');
-  await page.locator('[data-group-action=track-down][data-index="0"]').click();await expect(page.locator('.group li>span').first()).toHaveText('B');
+  await page.locator('.group.collapsed:not(.attached-cortina) [data-group-action=collapse]').evaluateAll(buttons=>buttons.forEach(button=>button.click()));await page.locator('[data-group-action=track-down][data-index="0"]').click();await expect(page.locator('.group li>span').first()).toHaveText('B');
   await page.locator('[data-group-action=track-up][data-index="1"]').click();await expect(page.locator('.group li>span').first()).toHaveText('A');
   page.once('dialog',d=>d.accept('Renamed tanda'));await page.locator('[data-group-action=rename]').click();await expect(page.locator('.group-select strong')).toHaveText('Renamed tanda');
-  await page.locator('#add-cortina').click();await page.locator('[data-group-action=up]').last().click();await expect(page.locator('.group').first()).toContainText('Cortina');
-  await page.locator('[data-group-action=down]').first().click();await expect(page.locator('.group').first()).toContainText('Renamed tanda');
+  await page.locator('#add-cortina').click();await expect(page.locator('.group').last()).toContainText('Cortina');
+  await expect(page.locator('.group').first()).toContainText('Renamed tanda');
   await page.locator('[data-group-action=remove]').first().click();await expect(page.locator('.group li')).toHaveCount(1);await page.locator('#undo-set').click();await expect(page.locator('.group li')).toHaveCount(2);
   page.once('dialog',d=>d.dismiss());await page.locator('[data-group-action=delete]').last().click();await expect(page.locator('.group')).toHaveCount(2);
   page.once('dialog',d=>d.accept());await page.locator('[data-group-action=delete]').last().click();await expect(page.locator('.group')).toHaveCount(1);await save(page);await page.reload();await expect(page.locator('.group')).toHaveCount(1);
@@ -127,7 +128,7 @@ test('local transport: pause/resume, previous/next, seek, volume/mute, keyboard,
 
 test('cortina segment cue/play reaches deck on phone, copies position, waits and resumes next tanda', async ({page}) => {
   await upload(page,wav());await view(page,'set');await page.locator('#add-cortina').click();await action(page,'add');await view(page,'set');
-  await page.locator('[data-cortina-start]').fill('2');await page.locator('[data-cortina-start]').blur();await page.locator('[data-cortina-end]').fill('5');await page.locator('[data-cortina-end]').blur();await page.locator('[data-cortina-hold]').check();
+  await page.locator('[data-cortina-full]').uncheck();await page.locator('[data-cortina-start]').fill('2');await page.locator('[data-cortina-start]').blur();await page.locator('[data-cortina-end]').fill('5');await page.locator('[data-cortina-end]').blur();await page.locator('[data-cortina-hold]').check();
   await page.locator('[data-group-action=cue-play]').click();await expect(page.locator('#deck')).toBeVisible();await expect(page.locator('#position')).toContainText('/ 0:03');
   await expect(page.locator('#play-pause')).toHaveText('▶',{timeout:7000});await page.locator('#play-pause').click();await expect(page.locator('#position')).toContainText('0:00');
   await view(page,'set');await page.locator('[data-group-action=cue-position]').click();await expect(page.locator('[data-cortina-start]')).not.toHaveValue('0');
@@ -150,7 +151,7 @@ test('YouTube recovery: retry, open URL, replace invalid/valid link, use local r
   await page.locator('#youtube-retry').click();await expect(page.locator('#youtube-error')).toBeHidden();
   await page.evaluate(()=>reviewProvider.options.events.onError({data:100}));await page.locator('#youtube-replace').click();await page.locator('[name=videoUrl]').fill('https://example.com');await page.getByRole('button',{name:'Save details'}).click();await expect(page.locator('#metadata-dialog')).toBeVisible();await page.locator('[name=videoUrl]').fill('https://youtu.be/abcdefghijk');await page.getByRole('button',{name:'Save details'}).click();await page.locator('#play-pause').click();await expect.poll(()=>page.evaluate(()=>reviewProvider.videoId)).toBe('abcdefghijk');
   await page.evaluate(()=>reviewProvider.options.events.onError({data:101}));await page.locator('#youtube-local').click({trial:true});
-  const chooser=page.waitForEvent('filechooser');await page.locator('#youtube-local').click();await (await chooser).setFiles(wav('Replacement'));await expect(page.locator('#notice')).toContainText('File relinked');await page.locator('#play-pause').click();await expect(page.locator('#youtube-wrap')).toBeHidden();
+  const chooser=page.waitForEvent('filechooser');await page.locator('#youtube-local').click();page.once('dialog',d=>d.accept());await (await chooser).setFiles(wav('Replacement'));await expect(page.locator('#notice')).toContainText('File relinked');await page.locator('#play-pause').click();await expect(page.locator('#youtube-wrap')).toBeHidden();
   await page.locator('#next').click();await page.evaluate(()=>reviewProvider.options.events.onError({data:153}));await page.locator('#youtube-skip').click();await expect(page.locator('#playing-title')).toHaveText('El bulín de la calle Ayacucho');
 });
 
@@ -171,21 +172,21 @@ async function importSet(page, contents, accept=true) {
 
 test('portable export/import in another browser, canceled import, malformed/oversized input and file relink', async ({page,browser}) => {
   await upload(page,wav('Portable'));await view(page,'set');await page.locator('#add-cortina').click();await action(page,'add');await view(page,'set');
-  await page.locator('[data-cortina-start]').fill('2');await page.locator('[data-cortina-start]').blur();await page.locator('[data-cortina-end]').fill('6');await page.locator('[data-cortina-end]').blur();await page.locator('[data-cortina-hold]').check();await save(page);
+  await page.locator('[data-cortina-full]').uncheck();await page.locator('[data-cortina-start]').fill('2');await page.locator('[data-cortina-start]').blur();await page.locator('[data-cortina-end]').fill('6');await page.locator('[data-cortina-end]').blur();await page.locator('[data-cortina-hold]').check();await save(page);
   const exported=await exportSet(page);const value=JSON.parse(exported);expect(value.groups[0]).toMatchObject({startSeconds:2,limitSeconds:4,holdAfter:true});
   await importSet(page,Buffer.from(JSON.stringify({version:1,tracks:[],groups:[]})),false);await expect(page.locator('#library-count')).toHaveText('1');
   await menu(page,'import-set');await page.locator('#set-input').setInputFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from('{bad')});await expect(page.locator('#notice')).toContainText('Import failed');await expect(page.locator('#library-count')).toHaveText('1');
   await page.locator('#set-input').setInputFiles({name:'large.json',mimeType:'application/json',buffer:Buffer.alloc(10*1024*1024+1)});await expect(page.locator('#notice')).toContainText('10 MB');
-  const context=await browser.newContext({locale:'en-US'}),other=await context.newPage();await other.goto('/');await expect(other.locator('#library')).toBeVisible();await importSet(other,exported);
+  const context=await browser.newContext({locale:'en-US'}),other=await context.newPage();await prepareSavedWorkspace(other);await other.goto('/');await expect(other.locator('#library')).toBeVisible();await importSet(other,exported);
   await expect(other.locator('#library-count')).toHaveText('1');await expect(other.locator('.missing')).toHaveCount(1);expect(JSON.parse(await exportSet(other))).toEqual(value);
-  await action(other,'relink');await other.locator('#relink-input').setInputFiles(wav('Portable'));await expect(other.locator('.missing')).toHaveCount(0);
+  await action(other,'relink');other.once('dialog',d=>d.accept());await other.locator('#relink-input').setInputFiles(wav('Portable'));await expect(other.locator('.missing')).toHaveCount(0);
   await action(other,'play');await expect(other.locator('#position')).toContainText('0:01');await save(other);await other.reload();await expect(other.locator('#library-count')).toHaveText('1');await expect(other.locator('.missing')).toHaveCount(0);await context.close();
 });
 
 test('prepared-deck button, queue selection, stale queue update, Undo and restored queue', async ({page}) => {
   await provider(page);await page.reload();await samples(page);await view(page,'deck');await page.locator('#deck-start-set').click();await expect(page.locator('#queue-count')).toHaveText('28');
   await page.locator('[data-queue-index="5"]').click();await expect(page.locator('#playing-title')).toHaveText('Poema');
-  const loads=await page.evaluate(()=>reviewProvider.loads);await view(page,'set');await page.locator('[data-group-action=track-down][data-id="real-group-canaro"][data-index="1"]').click();
+  const loads=await page.evaluate(()=>reviewProvider.loads);await view(page,'set');await page.locator('.group.collapsed:not(.attached-cortina) [data-group-action=collapse]').evaluateAll(buttons=>buttons.forEach(button=>button.click()));await page.locator('[data-group-action=track-down][data-id="real-group-canaro"][data-index="1"]').click();
   await expect(page.locator('#queue-stale')).toBeVisible();await page.locator('#refresh-queue').click();await expect(page.locator('#queue-stale')).toBeHidden();expect(await page.evaluate(()=>reviewProvider.loads)).toBe(loads);
   await page.locator('#undo-set').click();await page.locator('#refresh-queue').click();await save(page);await page.reload();await expect(page.locator('#queue-count')).toHaveText('28');await view(page,'deck');await expect(page.locator('#queue-resume')).toBeVisible();await page.locator('#play-pause').click();await expect(page.locator('#playing-title')).toHaveText('Poema');
 });
@@ -193,7 +194,7 @@ test('prepared-deck button, queue selection, stale queue update, Undo and restor
 test('local decode failure and preview failure report errors, playback relink and skip recover', async ({page}) => {
   await upload(page,{name:'broken.mp3',mimeType:'audio/mpeg',buffer:Buffer.from('invalid codec')},wav('Valid'));await action(page,'analyze',0);await expect(page.locator('#notice')).toContainText('failed');
   await action(page,'preview',0);await expect(page.locator('#notice')).toHaveClass(/error/);
-  await action(page,'play',0);await expect(page.locator('#playback-recovery')).toBeVisible();const chooser=page.waitForEvent('filechooser');await page.locator('#playback-relink').click();await (await chooser).setFiles(wav('Fixed'));await expect(page.locator('#notice')).toContainText('File relinked');await page.locator('#play-pause').click();await expect(page.locator('#youtube-wrap')).toBeHidden();
+  await action(page,'play',0);await expect(page.locator('#playback-recovery')).toBeVisible();const chooser=page.waitForEvent('filechooser');await page.locator('#playback-relink').click();page.once('dialog',d=>d.accept());await (await chooser).setFiles(wav('Fixed'));await expect(page.locator('#notice')).toContainText('File relinked');await page.locator('#play-pause').click();await expect(page.locator('#youtube-wrap')).toBeHidden();
   await action(page,'play',1);await page.locator('#stop').click();await action(page,'play',0);await expect(page.locator('#playing-title')).toHaveText('broken');
 });
 

@@ -27,3 +27,14 @@ export async function prepareSavedWorkspace(page) {
     }));
     await page.unroute(`**${path}`);
 }
+
+// Exercise the same management menu users open at every viewport size.
+export async function recordingAction(page, name, id) {
+  const row = id ? page.locator('#tracks tr').filter({ has: page.locator(`[data-action="more"][data-id="${id}"]`) }) : page.locator('#tracks tr').first();
+  const button = row.locator(`[data-action="${name}"]`);
+  if (await button.isVisible()) await button.click();
+  else {
+    await row.locator('[data-action="more"]').click();
+    await page.locator(`#recording-actions [data-action="${name}"]`).click();
+  }
+}

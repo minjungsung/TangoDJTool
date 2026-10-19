@@ -13,7 +13,7 @@ async function provider(page) {
 }
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }]) {
-  test(`first visit prepares examples and opens Play without autoplay at ${viewport.width}px`, async ({ page }) => {
+  test(`first visit prepares examples and opens Playback without autoplay at ${viewport.width}px`, async ({ page }) => {
     await page.setViewportSize(viewport); await provider(page);
     await page.goto('/');
     await expect(page.locator('body')).toHaveAttribute('data-view', 'deck');
@@ -21,6 +21,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 768 
     await expect(page.locator('#library-count')).toHaveText('28');
     await expect(page.locator('#queue-count')).toHaveText('28');
     await expect(page.locator('#groups .group')).toHaveCount(12);
+    await expect(page.locator('[data-collection]')).toHaveCount(7);
     await expect(page.locator('#play-pause')).toBeEnabled();
     expect(await page.evaluate(() => window.onboardingProvider)).toBeUndefined();
     await page.locator('#play-pause').click();
@@ -48,6 +49,7 @@ test('clearing examples is retained across reload; first-use defaults do not ret
   await page.reload();
   await expect(page.locator('#library-count')).toHaveText('0');
   await expect(page.locator('#queue-count')).toHaveText('0');
+  await expect(page.locator('[data-collection]')).toHaveCount(0);
 });
 
 test('database failure still starts with playable examples and explicit temporary storage', async ({ page }) => {
@@ -60,4 +62,33 @@ test('database failure still starts with playable examples and explicit temporar
   await expect(page.locator('#save-status')).toHaveText('Temporary · not saved');
   await page.locator('#play-pause').click();
   await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+});
+
+
+test('curated candidate sets contain valid recordings, survive deletion, and can be explicitly restored', async ({ page }) => {
+  await page.goto('/');
+  const navigate = async area => {
+    const button = page.locator(`button[data-view="${area}"]`);
+    if (await button.isVisible()) await button.click(); else await page.locator(`.sidebar a[href="#${area}"]`).click();
+  };
+  await navigate('collections');
+  await expect(page.locator('[data-collection]')).toHaveCount(7);
+  const saved = await page.evaluate(async () => {
+    const db = await new Promise(resolve => { const request=indexedDB.open('tango-dj-studio',2); request.onsuccess=()=>resolve(request.result); });
+    const state=await new Promise(resolve => { const request=db.transaction('state').objectStore('state').get('current'); request.onsuccess=()=>resolve(request.result); }); db.close(); return state;
+  });
+  expect(saved.collections.map(set=>set.trackIds.length)).toEqual([4,4,3,4,4,3,6]);
+  for (const set of saved.collections) for (const id of set.trackIds) expect(saved.tracks.some(track=>track.id===id)).toBeTruthy();
+  await page.locator('[data-collection="real-set-tango"]').click();
+  await expect(page.locator('[data-candidate]')).toHaveCount(4);
+  for (const checkbox of await page.locator('[data-candidate]').all()) await checkbox.check();
+  await page.locator('#collection-tanda').click();
+  await expect(page.locator('#groups .group')).toHaveCount(13);
+  await navigate('collections'); page.once('dialog',dialog=>dialog.accept());
+  await page.locator('[data-collection-delete="real-set-tango"]').click();
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser'); await page.reload();
+  await expect(page.locator('[data-collection]')).toHaveCount(6);
+  await page.locator('#open-examples').click(); await page.locator('#load-real-samples').click();
+  await expect(page.locator('[data-collection]')).toHaveCount(7);
+  await expect(page.locator('#groups .group')).toHaveCount(13);
 });

@@ -56,11 +56,18 @@ export function realGroups() {
   ].map(([key, kind, name, ids]) => ({ id: `real-group-${key}`, kind, name, trackIds: ids.map(id => `real-${id}`), samplePack: REAL_SAMPLE_PACK,
     ...(kind === 'cortina' ? { limitSeconds: 20 } : {}) }));
 }
+export function realCollections() {
+  const groups = realGroups().filter(group => group.kind === 'tanda');
+  return [
+    ...groups.map(group => ({ id: group.id.replace('real-group-', 'real-set-'), name: group.name.replace(/^\d+ · /, ''), trackIds: [...group.trackIds], samplePack: REAL_SAMPLE_PACK })),
+    { id: 'real-set-cortinas', name: 'Cortina selections', trackIds: realTracks.filter(track => track.style === 'Cortina').map(track => track.id), samplePack: REAL_SAMPLE_PACK },
+  ];
+}
 export function removeOldExamples(state) {
   const oldPacks = ['studio-practice-v1', 'tango-recordings-v1'];
   const keepIds = new Set(realTracks.map(t => t.id));
   const removed = state.tracks.filter(t => oldPacks.includes(t.samplePack) && !keepIds.has(t.id));
   const removedIds = new Set(removed.map(t => t.id));
-  return { removed, state: { tracks: state.tracks.filter(t => !removedIds.has(t.id)),
+  return { removed, state: { ...state, tracks: state.tracks.filter(t => !removedIds.has(t.id)),
     groups: state.groups.filter(g => !oldPacks.includes(g.samplePack)).map(g => ({ ...g, trackIds: g.trackIds.filter(id => !removedIds.has(id)) })) } };
 }

@@ -1,17 +1,17 @@
 {
   "status": "passed",
-  "duration": 144430.287,
+  "duration": 118894.34400000001,
   "tests": [
     {
       "project": "desktop-chromium",
       "title": "file picker, keyboard drop zone, batch import, duplicate and unsupported file handling",
-      "file": "feature-review.spec.js",
-      "line": 56,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 57,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 721,
+          "duration": 1795,
           "errors": []
         }
       ]
@@ -19,13 +19,13 @@
     {
       "project": "desktop-chromium",
       "title": "file drop and recording drag into a group use their actual event paths",
-      "file": "feature-review.spec.js",
-      "line": 67,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 68,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 606,
+          "duration": 1731,
           "errors": []
         }
       ]
@@ -33,13 +33,13 @@
     {
       "project": "desktop-chromium",
       "title": "all metadata fields, cancel, validation, accent search, style and source filters",
-      "file": "feature-review.spec.js",
-      "line": 74,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 75,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 862,
+          "duration": 2019,
           "errors": []
         }
       ]
@@ -47,13 +47,13 @@
     {
       "project": "desktop-chromium",
       "title": "YouTube URL rejection, duplicate prevention, unavailable metadata and manual correction",
-      "file": "feature-review.spec.js",
-      "line": 86,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 87,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 760,
+          "duration": 1708,
           "errors": []
         }
       ]
@@ -61,13 +61,13 @@
     {
       "project": "desktop-chromium",
       "title": "create/select/rename/reorder/delete groups and reorder/remove recordings with Undo",
-      "file": "feature-review.spec.js",
-      "line": 94,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 95,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 1075,
+          "duration": 1966,
           "errors": []
         }
       ]
@@ -75,13 +75,13 @@
     {
       "project": "desktop-chromium",
       "title": "individual/bulk analysis, gain adjustment, preview/stop preview, and preview from a filtered guide",
-      "file": "feature-review.spec.js",
-      "line": 106,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 107,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 1976,
+          "duration": 1932,
           "errors": []
         }
       ]
@@ -89,13 +89,13 @@
     {
       "project": "desktop-chromium",
       "title": "local transport: pause/resume, previous/next, seek, volume/mute, keyboard, final endpoint and Auto next",
-      "file": "feature-review.spec.js",
-      "line": 116,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 117,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 4377,
+          "duration": 4451,
           "errors": []
         }
       ]
@@ -103,13 +103,13 @@
     {
       "project": "desktop-chromium",
       "title": "cortina segment cue/play reaches deck on phone, copies position, waits and resumes next tanda",
-      "file": "feature-review.spec.js",
-      "line": 128,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 129,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 4127,
+          "duration": 4268,
           "errors": []
         }
       ]
@@ -117,13 +117,13 @@
     {
       "project": "desktop-chromium",
       "title": "empty guide actions, sample link, reset walkthrough, practice link and persistent language/settings",
-      "file": "feature-review.spec.js",
-      "line": 136,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 137,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 1303,
+          "duration": 1162,
           "errors": []
         }
       ]
@@ -131,13 +131,13 @@
     {
       "project": "desktop-chromium",
       "title": "YouTube recovery: retry, open URL, replace invalid/valid link, use local recording and skip",
-      "file": "feature-review.spec.js",
-      "line": 147,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 148,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 1178,
+          "duration": 1110,
           "errors": []
         }
       ]
@@ -145,470 +145,8 @@
     {
       "project": "desktop-chromium",
       "title": "delete library recording: cancel then confirm while previewing stops deleted preview",
-      "file": "feature-review.spec.js",
-      "line": 157,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1059,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "desktop-chromium",
-      "title": "portable export/import in another browser, canceled import, malformed/oversized input and file relink",
-      "file": "feature-review.spec.js",
-      "line": 172,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 3089,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "desktop-chromium",
-      "title": "prepared-deck button, queue selection, stale queue update, Undo and restored queue",
-      "file": "feature-review.spec.js",
-      "line": 185,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1021,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "desktop-chromium",
-      "title": "local decode failure and preview failure report errors, playback relink and skip recover",
-      "file": "feature-review.spec.js",
-      "line": 193,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1453,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "desktop-chromium",
-      "title": "temporary database failure: example-only queue, backup export, local import guard and saving recovery",
-      "file": "feature-review.spec.js",
-      "line": 200,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1437,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "desktop-chromium",
-      "title": "dialog Escape, guide editing/group handoffs, notification dismissal and mobile menu state",
-      "file": "feature-review.spec.js",
-      "line": 207,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 699,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "desktop-chromium",
-      "title": "partial file import preserves successful audio when a later file hits quota, then permits retry",
-      "file": "feature-review.spec.js",
-      "line": 215,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1857,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "desktop-chromium",
-      "title": "busy import protects analysis/import/sample actions and completes the pending operation",
-      "file": "feature-review.spec.js",
-      "line": 221,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 505,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "desktop-chromium",
-      "title": "analysis during playback refreshes normalized gain without restarting the current recording",
-      "file": "feature-review.spec.js",
-      "line": 228,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1727,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "desktop-chromium",
-      "title": "local playback waiting longer than fifteen seconds exposes retry and relink",
-      "file": "feature-review.spec.js",
-      "line": 234,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1199,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "file picker, keyboard drop zone, batch import, duplicate and unsupported file handling",
-      "file": "feature-review.spec.js",
-      "line": 56,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 532,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "file drop and recording drag into a group use their actual event paths",
-      "file": "feature-review.spec.js",
-      "line": 67,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 545,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "all metadata fields, cancel, validation, accent search, style and source filters",
-      "file": "feature-review.spec.js",
-      "line": 74,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 911,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "YouTube URL rejection, duplicate prevention, unavailable metadata and manual correction",
-      "file": "feature-review.spec.js",
-      "line": 86,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 866,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "create/select/rename/reorder/delete groups and reorder/remove recordings with Undo",
-      "file": "feature-review.spec.js",
-      "line": 94,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 2783,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "individual/bulk analysis, gain adjustment, preview/stop preview, and preview from a filtered guide",
-      "file": "feature-review.spec.js",
-      "line": 106,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 7276,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "local transport: pause/resume, previous/next, seek, volume/mute, keyboard, final endpoint and Auto next",
-      "file": "feature-review.spec.js",
-      "line": 116,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 10092,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "cortina segment cue/play reaches deck on phone, copies position, waits and resumes next tanda",
-      "file": "feature-review.spec.js",
-      "line": 128,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 4344,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "empty guide actions, sample link, reset walkthrough, practice link and persistent language/settings",
-      "file": "feature-review.spec.js",
-      "line": 136,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1124,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "YouTube recovery: retry, open URL, replace invalid/valid link, use local recording and skip",
-      "file": "feature-review.spec.js",
-      "line": 147,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 6856,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "delete library recording: cancel then confirm while previewing stops deleted preview",
-      "file": "feature-review.spec.js",
-      "line": 157,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 788,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "portable export/import in another browser, canceled import, malformed/oversized input and file relink",
-      "file": "feature-review.spec.js",
-      "line": 172,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 4030,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "prepared-deck button, queue selection, stale queue update, Undo and restored queue",
-      "file": "feature-review.spec.js",
-      "line": 185,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1329,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "local decode failure and preview failure report errors, playback relink and skip recover",
-      "file": "feature-review.spec.js",
-      "line": 193,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1128,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "temporary database failure: example-only queue, backup export, local import guard and saving recovery",
-      "file": "feature-review.spec.js",
-      "line": 200,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 540,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "dialog Escape, guide editing/group handoffs, notification dismissal and mobile menu state",
-      "file": "feature-review.spec.js",
-      "line": 207,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 776,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "partial file import preserves successful audio when a later file hits quota, then permits retry",
-      "file": "feature-review.spec.js",
-      "line": 215,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1789,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "busy import protects analysis/import/sample actions and completes the pending operation",
-      "file": "feature-review.spec.js",
-      "line": 221,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 531,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "analysis during playback refreshes normalized gain without restarting the current recording",
-      "file": "feature-review.spec.js",
-      "line": 228,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1588,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "phone-chromium",
-      "title": "local playback waiting longer than fifteen seconds exposes retry and relink",
-      "file": "feature-review.spec.js",
-      "line": 234,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1105,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "tablet-webkit",
-      "title": "file picker, keyboard drop zone, batch import, duplicate and unsupported file handling",
-      "file": "feature-review.spec.js",
-      "line": 56,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1316,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "tablet-webkit",
-      "title": "file drop and recording drag into a group use their actual event paths",
-      "file": "feature-review.spec.js",
-      "line": 67,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1424,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "tablet-webkit",
-      "title": "all metadata fields, cancel, validation, accent search, style and source filters",
-      "file": "feature-review.spec.js",
-      "line": 74,
-      "outcome": "expected",
-      "results": [
-        {
-          "status": "passed",
-          "duration": 1652,
-          "errors": []
-        }
-      ]
-    },
-    {
-      "project": "tablet-webkit",
-      "title": "YouTube URL rejection, duplicate prevention, unavailable metadata and manual correction",
-      "file": "feature-review.spec.js",
-      "line": 86,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 158,
       "outcome": "expected",
       "results": [
         {
@@ -619,15 +157,477 @@
       ]
     },
     {
-      "project": "tablet-webkit",
-      "title": "create/select/rename/reorder/delete groups and reorder/remove recordings with Undo",
-      "file": "feature-review.spec.js",
-      "line": 94,
+      "project": "desktop-chromium",
+      "title": "portable export/import in another browser, canceled import, malformed/oversized input and file relink",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 173,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 3828,
+          "duration": 3246,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "desktop-chromium",
+      "title": "prepared-deck button, queue selection, stale queue update, Undo and restored queue",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 186,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1099,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "desktop-chromium",
+      "title": "local decode failure and preview failure report errors, playback relink and skip recover",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 194,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1446,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "desktop-chromium",
+      "title": "temporary database failure: example-only queue, backup export, local import guard and saving recovery",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 201,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 585,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "desktop-chromium",
+      "title": "dialog Escape, guide editing/group handoffs, notification dismissal and mobile menu state",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 208,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 730,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "desktop-chromium",
+      "title": "partial file import preserves successful audio when a later file hits quota, then permits retry",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 216,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1921,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "desktop-chromium",
+      "title": "busy import protects analysis/import/sample actions and completes the pending operation",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 222,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 515,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "desktop-chromium",
+      "title": "analysis during playback refreshes normalized gain without restarting the current recording",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 229,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1693,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "desktop-chromium",
+      "title": "local playback waiting longer than fifteen seconds exposes retry and relink",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 235,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1254,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "file picker, keyboard drop zone, batch import, duplicate and unsupported file handling",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 57,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 658,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "file drop and recording drag into a group use their actual event paths",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 68,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 622,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "all metadata fields, cancel, validation, accent search, style and source filters",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 75,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1046,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "YouTube URL rejection, duplicate prevention, unavailable metadata and manual correction",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 87,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 869,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "create/select/rename/reorder/delete groups and reorder/remove recordings with Undo",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 95,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1151,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "individual/bulk analysis, gain adjustment, preview/stop preview, and preview from a filtered guide",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 107,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 7255,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "local transport: pause/resume, previous/next, seek, volume/mute, keyboard, final endpoint and Auto next",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 117,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4689,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "cortina segment cue/play reaches deck on phone, copies position, waits and resumes next tanda",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 129,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 4428,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "empty guide actions, sample link, reset walkthrough, practice link and persistent language/settings",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 137,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1463,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "YouTube recovery: retry, open URL, replace invalid/valid link, use local recording and skip",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 148,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 6536,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "delete library recording: cancel then confirm while previewing stops deleted preview",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 158,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 904,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "portable export/import in another browser, canceled import, malformed/oversized input and file relink",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 173,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 3475,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "prepared-deck button, queue selection, stale queue update, Undo and restored queue",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 186,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 999,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "local decode failure and preview failure report errors, playback relink and skip recover",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 194,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1051,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "temporary database failure: example-only queue, backup export, local import guard and saving recovery",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 201,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 645,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "dialog Escape, guide editing/group handoffs, notification dismissal and mobile menu state",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 208,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 756,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "partial file import preserves successful audio when a later file hits quota, then permits retry",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 216,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1829,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "busy import protects analysis/import/sample actions and completes the pending operation",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 222,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 621,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "analysis during playback refreshes normalized gain without restarting the current recording",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 229,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1577,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "phone-chromium",
+      "title": "local playback waiting longer than fifteen seconds exposes retry and relink",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 235,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1132,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "tablet-webkit",
+      "title": "file picker, keyboard drop zone, batch import, duplicate and unsupported file handling",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 57,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1106,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "tablet-webkit",
+      "title": "file drop and recording drag into a group use their actual event paths",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 68,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 608,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "tablet-webkit",
+      "title": "all metadata fields, cancel, validation, accent search, style and source filters",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 75,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1386,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "tablet-webkit",
+      "title": "YouTube URL rejection, duplicate prevention, unavailable metadata and manual correction",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 87,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 940,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "project": "tablet-webkit",
+      "title": "create/select/rename/reorder/delete groups and reorder/remove recordings with Undo",
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 95,
+      "outcome": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 1234,
           "errors": []
         }
       ]
@@ -635,13 +635,13 @@
     {
       "project": "tablet-webkit",
       "title": "individual/bulk analysis, gain adjustment, preview/stop preview, and preview from a filtered guide",
-      "file": "feature-review.spec.js",
-      "line": 106,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 107,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 3668,
+          "duration": 1667,
           "errors": []
         }
       ]
@@ -649,13 +649,13 @@
     {
       "project": "tablet-webkit",
       "title": "local transport: pause/resume, previous/next, seek, volume/mute, keyboard, final endpoint and Auto next",
-      "file": "feature-review.spec.js",
-      "line": 116,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 117,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 10441,
+          "duration": 7760,
           "errors": []
         }
       ]
@@ -663,13 +663,13 @@
     {
       "project": "tablet-webkit",
       "title": "cortina segment cue/play reaches deck on phone, copies position, waits and resumes next tanda",
-      "file": "feature-review.spec.js",
-      "line": 128,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 129,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 8396,
+          "duration": 5803,
           "errors": []
         }
       ]
@@ -677,13 +677,13 @@
     {
       "project": "tablet-webkit",
       "title": "empty guide actions, sample link, reset walkthrough, practice link and persistent language/settings",
-      "file": "feature-review.spec.js",
-      "line": 136,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 137,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 1399,
+          "duration": 2104,
           "errors": []
         }
       ]
@@ -691,13 +691,13 @@
     {
       "project": "tablet-webkit",
       "title": "YouTube recovery: retry, open URL, replace invalid/valid link, use local recording and skip",
-      "file": "feature-review.spec.js",
-      "line": 147,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 148,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 1296,
+          "duration": 1172,
           "errors": []
         }
       ]
@@ -705,13 +705,13 @@
     {
       "project": "tablet-webkit",
       "title": "delete library recording: cancel then confirm while previewing stops deleted preview",
-      "file": "feature-review.spec.js",
-      "line": 157,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 158,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 2705,
+          "duration": 909,
           "errors": []
         }
       ]
@@ -719,13 +719,13 @@
     {
       "project": "tablet-webkit",
       "title": "portable export/import in another browser, canceled import, malformed/oversized input and file relink",
-      "file": "feature-review.spec.js",
-      "line": 172,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 173,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 6932,
+          "duration": 3753,
           "errors": []
         }
       ]
@@ -733,13 +733,13 @@
     {
       "project": "tablet-webkit",
       "title": "prepared-deck button, queue selection, stale queue update, Undo and restored queue",
-      "file": "feature-review.spec.js",
-      "line": 185,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 186,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 2945,
+          "duration": 1267,
           "errors": []
         }
       ]
@@ -747,13 +747,13 @@
     {
       "project": "tablet-webkit",
       "title": "local decode failure and preview failure report errors, playback relink and skip recover",
-      "file": "feature-review.spec.js",
-      "line": 193,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 194,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 3782,
+          "duration": 1368,
           "errors": []
         }
       ]
@@ -761,13 +761,13 @@
     {
       "project": "tablet-webkit",
       "title": "temporary database failure: example-only queue, backup export, local import guard and saving recovery",
-      "file": "feature-review.spec.js",
-      "line": 200,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 201,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 1551,
+          "duration": 738,
           "errors": []
         }
       ]
@@ -775,13 +775,13 @@
     {
       "project": "tablet-webkit",
       "title": "dialog Escape, guide editing/group handoffs, notification dismissal and mobile menu state",
-      "file": "feature-review.spec.js",
-      "line": 207,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 208,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 1699,
+          "duration": 820,
           "errors": []
         }
       ]
@@ -789,13 +789,13 @@
     {
       "project": "tablet-webkit",
       "title": "partial file import preserves successful audio when a later file hits quota, then permits retry",
-      "file": "feature-review.spec.js",
-      "line": 215,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 216,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 2177,
+          "duration": 2623,
           "errors": []
         }
       ]
@@ -803,13 +803,13 @@
     {
       "project": "tablet-webkit",
       "title": "busy import protects analysis/import/sample actions and completes the pending operation",
-      "file": "feature-review.spec.js",
-      "line": 221,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 222,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 755,
+          "duration": 629,
           "errors": []
         }
       ]
@@ -817,13 +817,13 @@
     {
       "project": "tablet-webkit",
       "title": "analysis during playback refreshes normalized gain without restarting the current recording",
-      "file": "feature-review.spec.js",
-      "line": 228,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 229,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 2470,
+          "duration": 2188,
           "errors": []
         }
       ]
@@ -831,13 +831,13 @@
     {
       "project": "tablet-webkit",
       "title": "local playback waiting longer than fifteen seconds exposes retry and relink",
-      "file": "feature-review.spec.js",
-      "line": 234,
+      "file": "tests/browser/feature-review.spec.js",
+      "line": 235,
       "outcome": "expected",
       "results": [
         {
           "status": "passed",
-          "duration": 2013,
+          "duration": 1501,
           "errors": []
         }
       ]

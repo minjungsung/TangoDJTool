@@ -176,6 +176,22 @@ export class Player {
     } else if (this.track) { await this.context(); if (this.audio.paused) await this.audio.play(); else this.audio.pause(); }
   }
   seek(seconds) { if (this.track?.source === 'youtube') this.youtube?.seekTo?.(seconds, true); else if (Number.isFinite(this.audio.duration)) this.audio.currentTime = seconds; this.updateEnvelope(); }
+  async fadeOut(seconds) {
+    const token = this.token, initial = this.level;
+    if (seconds > 0 && this.isPlaying()) {
+      this.switching = true;
+      const started = performance.now();
+      await new Promise(resolve => {
+        const timer = setInterval(() => {
+          if (token !== this.token) { clearInterval(timer); resolve(); return; }
+          const progress = Math.min(1, (performance.now() - started) / (seconds * 1000));
+          this.applyLevel(initial * (1 - progress));
+          if (progress === 1) { clearInterval(timer); resolve(); }
+        }, 25);
+      });
+    }
+    if (token === this.token) this.stop();
+  }
   stop() {
     ++this.token; this.onNeedsGesture?.(false); this.switching = false; this.youtubeArmed = false; this.stallNotified = false; this.onStall?.(false); this.audio.pause(); this.youtube?.pauseVideo?.(); this.preview.pause();
     if (this.gain) { this.gain.gain.cancelScheduledValues(this.ctx.currentTime); this.gain.gain.setValueAtTime(this.targetGain(), this.ctx.currentTime); }

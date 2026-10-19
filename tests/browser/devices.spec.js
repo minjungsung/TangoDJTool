@@ -1,6 +1,13 @@
 import { test, expect, prepareSavedWorkspace } from './saved-workspace.js';
 import { devices } from '@playwright/test';
 
+
+async function view(page, area) {
+  await page.locator('button[data-view]').first().waitFor({ state: 'attached' });
+  const button = page.locator(`button[data-view="${area}"]`);
+  if (await button.isVisible()) await button.click();
+  else await page.locator(`.sidebar .nav[href="#${area}"]`).click();
+}
 function tone() {
   const rate = 8000, length = rate * 12, buffer = Buffer.alloc(44 + length * 2);
   buffer.write('RIFF'); buffer.writeUInt32LE(buffer.length - 8, 4); buffer.write('WAVE', 8); buffer.write('fmt ', 12);
@@ -21,23 +28,23 @@ for (const device of ['iPhone 13', 'iPad (gen 7)', 'Pixel 7']) {
     await page.locator('#file-input').setInputFiles({ name: 'device-tango.wav', mimeType: 'audio/wav', buffer: tone() });
     await expect(page.locator('#notice')).toContainText('1 recording added');
     if (phone) {
-      await page.locator('[data-action=more]').click();
+      await view(page, 'library'); await page.locator('[data-action=more]').click();
       await page.locator('#recording-actions [data-action=edit]').click();
       await page.getByLabel('Title', { exact: true }).fill('Device tango'); await page.getByRole('button', { name: 'Save details' }).click();
       await page.locator('button[data-view=set]').click();
     }
-    await page.locator('#add-tanda').click(); await page.locator('#choose-recordings').click();
-    await page.locator('[data-action=add]').click();
-    if (phone) await page.locator('button[data-view=set]').click();
-    await page.locator('#start-set').click();
+    await view(page, 'set'); await page.locator('#add-tanda').click(); await view(page, 'set'); await page.locator('#choose-recordings').click();
+    await view(page, 'library'); await page.locator('[data-action=add]').click();
+    await view(page, 'set');
+    await view(page, 'set'); await page.locator('#start-set').click();
     await expect(page.locator('#deck')).toBeVisible(); await expect(page.locator('#position')).toContainText('0:01', { timeout: 10000 });
     await page.locator('button[data-view=library]').click();
     await expect(page.locator('#mini-deck')).toBeVisible(); await page.locator('#mini-play').click();
     await expect(page.locator('#mini-play')).toHaveText('▶');
     await page.setViewportSize({ width: 1024, height: 768 });
-    await expect(page.locator('#library')).toBeVisible(); await expect(page.locator('#set')).toBeVisible();
-    const layout = await page.locator('.workspace').evaluate(el => getComputedStyle(el).gridTemplateColumns.split(' ').length);
-    expect(layout).toBe(2); expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1024);
+    await expect(page.locator('#library')).toBeVisible(); await expect(page.locator('#set')).toBeHidden();
+    const layout = await page.locator('.workspace').evaluate(el => getComputedStyle(el).display);
+    expect(layout).toBe('block'); expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1024);
     await page.reload(); await expect(page.locator('#library-count')).toHaveText('1'); await expect(page.locator('.missing')).toHaveCount(0);
     expect(errors).toEqual([]); await context.close();
   });
@@ -92,7 +99,7 @@ test('blocked playback exposes explicit retry and keeps the queue', async ({ pag
   await page.goto('/'); await expect(page.locator('#library')).toBeVisible(); await page.locator('#file-input').setInputFiles({ name: 'retry.wav', mimeType: 'audio/wav', buffer: tone() });
   await expect(page.locator('#notice')).toContainText('1 recording added');
   await page.evaluate(() => { const original = HTMLMediaElement.prototype.play; let blocked = true; HTMLMediaElement.prototype.play = function() { if (blocked) { blocked = false; return Promise.reject(new DOMException('Denied', 'NotAllowedError')); } return original.call(this); }; });
-  await page.locator('[data-action=play]').click();
+  await view(page, 'library'); await page.locator('[data-action=play]').click();
   await expect(page.locator('#playback-recovery')).toBeVisible(); await expect(page.locator('#playback-recovery-message')).toContainText('permission');
   await expect(page.locator('#queue-count')).toHaveText('1'); await page.locator('#playback-retry').click();
   await expect(page.locator('#playback-recovery')).toBeHidden(); await expect(page.locator('#play-pause')).toHaveText('Ⅱ');

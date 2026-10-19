@@ -1,10 +1,12 @@
 import './style.css';
 import { parseBlob } from 'music-metadata';
 import { uid, youtubeId, flattenSet, removeTrack, validateSet } from './model.js';
-import { saveState, loadState, saveFile, getFile, deleteFile, replaceRecording, storageMessage } from './storage.js';
+import { saveState, loadState, saveFile, getFile, deleteFile, replaceRecording, storageMessage, saveSource, reconnectRecording } from './storage.js';
+import { normalizeProgram, insertNext } from './program.js';
+import { canConnectFiles, canConnectFolder, contentHash, resolveSource, attachIdentical, folderFiles } from './file-sources.js';
 import { Player } from './player.js';
 import { playbackMessage } from './fade.js';
-import { REAL_SAMPLE_PACK, realTracks, realGroups, removeOldExamples } from './samples.js';
+import { REAL_SAMPLE_PACK, realTracks, realGroups, realCollections, removeOldExamples } from './samples.js';
 import { guideMarkup } from './guide.js';
 import { groupDuration, queueSignature, locateInQueue } from './workspace.js';
 import { t, startI18n, setLanguage, getLanguage } from './i18n.js';
@@ -14,13 +16,15 @@ const time = seconds => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}:
 let state = { tracks: [], groups: [] }, selected = null, queue = [], queueIndex = -1, current = null, busy = false;
 let playRequest = 0, timedEnd = false, loadedSignature = null, resumeIndex = 0;
 let undoGroups = null, transitioning = false, stopped = false, lastRenderedIndex = -1;
-const files = new Map();
+const files = new Map(), sourceStatuses = new Map();
+let activeCollection = null, collectingInto = null, reconnectMode = false, addingNext = false;
 let savedQueue = [], revision = 0, firstVisit = true;
 let settings = {};
 try { settings = JSON.parse(localStorage.getItem('studio-settings') || '{}'); } catch {}
 let persistence = Promise.resolve(), temporaryWorkspace = false;
 function workspaceSnapshot(tracks = state.tracks) {
-  return structuredClone({ ...state, tracks, queue: queue.map(item => ({ trackId: item.track.id, groupId: item.groupId, groupName: item.groupName, kind: item.kind, limitSeconds: item.limitSeconds, startSeconds: item.startSeconds, holdAfter: item.holdAfter })), queueIndex: queueIndex >= 0 ? queueIndex : resumeIndex, selected, loadedSignature });
+  normalizeProgram(state);
+  return structuredClone({ ...state, tracks, queue: queue.map(item => ({ trackId: item.track.id, occurrenceId: item.occurrenceId, addedAfter: item.addedAfter, pendingAddition: item.pendingAddition, groupId: item.groupId, groupName: item.groupName, kind: item.kind, limitSeconds: item.limitSeconds, startSeconds: item.startSeconds, holdAfter: item.holdAfter })), queueIndex: queueIndex >= 0 ? queueIndex : resumeIndex, selected, loadedSignature });
 }
 function persist() {
   const snapshot = workspaceSnapshot();
@@ -40,38 +44,38 @@ function notify(message, error = false) {
   <aside class="sidebar">
     <a class="brand" href="#"><span class="brand-icon">◈</span><span>TANGO<br><b>DJ STUDIO</b></span></a>
     <div class="workspace-label">YOUR WORKSPACE</div>
-    <a href="#library" class="nav active">♫ <span>Music library</span><span id="nav-count" class="count">0</span></a>
-    <a href="#set" class="nav">▤ <span>Set builder</span></a>
-    <a href="#deck" class="nav">◉ <span>Live deck</span></a>
+    <a href="#library" class="nav active">♫ <span>1 · Music</span><span id="nav-count" class="count">0</span></a>
+    <a href="#collections" class="nav">▤ <span>2 · Sets</span></a><a href="#set" class="nav">▤ <span>3 · Tandas</span></a>
+    <a href="#deck" class="nav">◉ <span>4 · Playback</span></a>
     <div class="sidebar-bottom"><span class="status-dot"></span> Local-first workspace<p>Music stays in this browser.<br>YouTube plays online.</p></div>
   </aside>
-  <nav class="device-nav" aria-label="Workspace navigation"><button data-view="library" aria-current="page">1 · Music</button><button data-view="set">2 · Set</button><button data-view="deck">3 · Play</button></nav>
+  <nav class="device-nav" aria-label="Workspace navigation"><button data-view="library" aria-current="page">1 · Music</button><button data-view="collections">2 · Sets</button><button data-view="set">3 · Tandas</button><button data-view="deck">4 · Playback</button></nav>
   <main>
     <header class="workspace-header"><div class="workspace-title"><h1>DJ workspace</h1><span id="save-status" role="status">Saved in this browser</span></div><button id="open-menu" class="phone-menu" aria-expanded="false">Menu</button><div class="header-actions"><button id="open-examples">Example sets</button><button id="open-guide">User guide</button><button id="open-settings">Settings</button><button id="import-set">Import set</button><button id="export-set">Export set ↗</button></div></header>
     <div id="notice" role="status" aria-live="polite" hidden><span id="notice-message"></span><button id="dismiss-notice" aria-label="Dismiss notification">×</button></div><div id="undo-bar" hidden><span>Set changed</span><button id="undo-set">Undo last set edit</button></div>
-    <p class="workflow-hint">Add music, arrange your tandas, then play your set.</p><div id="storage-recovery" class="storage-recovery" role="status" hidden><strong>Temporary workspace · not saved</strong><p id="storage-recovery-message"></p><p>You can play the example set in this tab. Export your edits before closing or reloading.</p><div><button id="retry-saving">Retry saving</button><button id="temporary-export">Export set</button></div></div><div class="workspace">
+    <p class="workflow-hint">Add music, arrange your tandas, then play your set.</p><div id="storage-recovery" class="storage-recovery" role="status" hidden><strong>Temporary workspace · not saved</strong><p id="storage-recovery-message"></p><p>You can play the example set in this tab. Export your edits before closing or reloading.</p><div><button id="retry-saving">Retry saving</button><button id="temporary-export">Export set</button></div></div><section id="collections" class="panel collections-panel"><div class="section-head"><div><div class="eyebrow">02 / CANDIDATES</div><h2>Sets</h2></div><button id="new-collection" class="primary">Create set</button></div><p class="hint">Collect candidate recordings here, then choose 3–4 for a tanda.</p><div id="collection-list"></div><div id="collection-detail"></div></section><div class="workspace">
       <section id="library" class="panel library">
         <div class="section-head"><div><div class="eyebrow">01 / COLLECTION</div><h2>Music library <span id="library-count">0</span></h2></div><button id="add-files" class="primary">+ Local files</button></div>
         <div id="drop-zone" tabindex="0" role="button" aria-label="Choose or drop local music files"><span class="drop-icon">↥</span><div><strong>Drop your music here</strong><span>MP3, WAV, FLAC, M4A and other browser-supported audio</span></div><span class="drop-link">Browse files</span></div>
-        <form id="youtube-form" class="youtube-form"><span class="youtube-mark">▶</span><input name="url" type="url" aria-label="YouTube video URL" placeholder="Paste a YouTube video link" required><button type="submit">Add video</button></form>
-        <p id="library-target" class="selection-summary"></p><p id="import-progress" class="hint" role="status" hidden></p><div class="filters"><input id="search" type="search" aria-label="Search library" placeholder="Search title, orchestra, singer…"><select id="style-filter" aria-label="Filter dance style"><option value="">All styles</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select><select id="source-filter" aria-label="Filter source"><option value="">All sources</option><option value="local">Local</option><option value="youtube">YouTube</option></select></div>
+        <div class="file-tools"><button id="connect-files">Connect originals</button><button id="check-files">Check files</button><button id="reconnect-folder">Reconnect from folder</button></div><p class="hint storage-explanation">Local files keeps an app copy. Connect originals reads files in place on supported browsers.</p><form id="youtube-form" class="youtube-form"><span class="youtube-mark">▶</span><input name="url" type="url" aria-label="YouTube video URL" placeholder="Paste a YouTube video link" required><button type="submit">Add video</button></form>
+        <div class="library-destination"><label for="add-target">Add recordings to</label><select id="add-target" aria-label="Recording destination"></select><button id="finish-adding" hidden>Back to set</button><p id="library-target" class="hint"></p></div><p id="import-progress" class="hint" role="status" hidden></p><div class="filters"><input id="search" type="search" aria-label="Search library" placeholder="Search title, orchestra, singer…"><select id="collection-filter" aria-label="Filter set"><option value="">All sets</option></select><select id="style-filter" aria-label="Filter dance style"><option value="">All styles</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select><select id="source-filter" aria-label="Filter source"><option value="">All sources</option><option value="local">Local</option><option value="youtube">YouTube</option></select></div>
         <div class="table-scroll"><table><thead><tr><th>RECORDING</th><th>STYLE / YEAR</th><th>BPM</th><th>LENGTH</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="tracks"></tbody></table></div>
         <div id="empty-library" class="empty"><span>♫</span><h3>A home for your collection</h3><p>Bring in your recordings, organize the details,<br>and find the right music for each moment.</p></div>
         <div class="panel-foot"><span id="library-summary">0 recordings · 0:00 known duration</span><button id="analyze-all" class="text-button">Analyze local tracks</button></div>
       </section>
       <section id="set" class="panel set-panel">
-        <div class="section-head"><div><div class="eyebrow">02 / THE FLOW</div><h2>Set builder</h2></div><span id="set-duration" class="badge">0:00</span></div>
-        <div class="builder-actions"><button id="add-tanda">+ Tanda</button><button id="add-cortina">+ Cortina</button></div>
-        <p id="selected-group" class="selection-summary"></p><p class="hint">Select a group, then use + on a recording. Drag recordings into a group to add them.</p>
-        <button id="choose-recordings" class="wide">Choose recordings for this group</button><div id="groups"></div>
+        <div class="section-head"><div><div class="eyebrow">03 / TANDAS</div><h2>Tandas</h2></div><span id="set-duration" class="badge">0:00</span></div>
+        <div class="builder-actions"><button id="add-tanda">+ Tanda</button><button id="add-cortina">+ Cortina</button><button id="save-preset">Save tanda</button></div>
+        <p id="selected-group" class="selection-summary"></p><p class="hint">Choose a tanda, then use Add to tanda in Music. Collect in set only saves candidates.</p>
+        <button id="choose-recordings" class="wide">Choose recordings for this group</button><div id="presets"></div><div id="groups"></div>
         <div id="empty-set" class="empty"><span>▤</span><h3>Give your set a shape</h3><p>Create a tanda, choose its recordings,<br>then add a cortina between groups.</p></div>
         <button id="refresh-queue" class="wide" hidden>Update upcoming queue</button><p id="queue-stale" class="hint" hidden>Set changed. Update upcoming queue to keep the current recording, or load the whole set from the start.</p><button id="start-set" class="primary wide">▶ Load & play set</button>
       </section>
     </div>
     <section id="deck" class="panel deck">
-      <div class="deck-main"><button id="deck-start-set" class="primary" hidden>Play prepared set</button><div class="eyebrow">03 / LIVE DECK</div><div class="now-playing"><div class="record-art">♫</div><div><span id="playing-group" class="eyebrow">READY WHEN YOU ARE</span><h2 id="playing-title">No recording loaded</h2><p id="playing-artist">Play a track or load your prepared set.</p></div></div>
+      <div class="deck-main"><button id="deck-start-set" class="primary" hidden>Play prepared set</button><div class="eyebrow">04 / PLAYBACK</div><div class="now-playing"><div class="record-art">♫</div><div><span id="playing-group" class="eyebrow">READY WHEN YOU ARE</span><h2 id="playing-title">No recording loaded</h2><p id="playing-artist">Play a track or load your prepared set.</p></div></div>
         <div class="transport"><button id="previous" aria-label="Previous track">⏮</button><button id="play-pause" class="play-button" aria-label="Play or pause">▶</button><button id="next" aria-label="Next track">⏭</button><button id="stop" aria-label="Stop playback">■</button><span id="position">0:00 / 0:00</span></div>
-        <div class="deck-context"><span id="recording-number"></span><span id="remaining-time"></span></div><div id="up-next" class="up-next" hidden></div>
+        <button id="next-tanda" class="primary wide" hidden>Next tanda</button><div id="pending-additions"></div><div class="deck-context"><span id="recording-number"></span><span id="remaining-time"></span></div><div id="up-next" class="up-next" hidden></div>
         <input id="seek" type="range" min="0" max="100" value="0" aria-label="Playback position">
         <details class="playback-options" open><summary>Playback settings</summary><div class="deck-settings"><label>Volume <input id="volume" type="range" min="0" max="100" value="85"></label><label>Fade <select id="fade"><option value="0" selected>Off</option><option value="1">1 sec</option><option value="2">2 sec</option><option value="4">4 sec</option></select></label><label><input id="normalize" type="checkbox"> Level local audio</label><label><input id="auto-next" type="checkbox" checked> Auto next</label></div>
         <p class="hint">Fade follows the beginning and end of each recording. YouTube fades depend on device volume support; use local files for reliable fades. Preview uses the live output.</p></details><p id="playback-loading" class="hint" role="status" hidden>Loading recording…</p><div id="playback-recovery" class="playback-stall" hidden><span id="playback-recovery-message"></span><button id="playback-retry">Retry</button><button id="playback-relink">Relink file</button><button id="playback-skip">Skip recording</button></div>
@@ -89,7 +93,7 @@ function notify(message, error = false) {
   <dialog id="actions-dialog"><div class="dialog-heading"><h2>Recording actions</h2><button data-close="actions-dialog" aria-label="Close">×</button></div><p id="actions-title" data-preserve></p><div id="recording-actions"></div></dialog><input id="file-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" multiple hidden>
   <input id="set-input" type="file" accept="application/json,.json" hidden>
   <input id="relink-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" hidden>
-  <dialog id="metadata-dialog"><form id="metadata-form"><div class="eyebrow">RECORDING DETAILS</div><h2>Edit metadata</h2><input name="id" type="hidden"><label>Title<input name="title" required maxlength="300"></label><label>Orchestra / artist<input name="artist" maxlength="300"></label><label>Singer<input name="singer" maxlength="300"></label><div class="form-row"><label>Year<input name="year" maxlength="30"></label><label>Style<select name="style" aria-label="Style"><option value="">Unspecified</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select></label><label>BPM<input name="bpm" type="number" min="20" max="300" step="1"></label></div><label id="video-url-label" hidden>Video URL<input name="videoUrl" type="url" placeholder="https://www.youtube.com/watch?v=..."></label><p id="analysis-details" class="hint"></p><div class="dialog-actions"><button id="close-metadata" type="button">Cancel</button><button class="primary" type="submit">Save details</button></div></form></dialog>
+  <dialog id="target-dialog"><div class="dialog-heading"><h2 id="target-heading">Choose target tanda</h2><button data-close="target-dialog" aria-label="Close">×</button></div><p id="target-recording" data-preserve></p><p id="target-explanation" class="hint"></p><label id="target-label" for="next-target">Target tanda</label><select id="next-target" aria-label="Target tanda"></select><button id="confirm-next" class="primary">Add to play next</button></dialog><dialog id="repair-dialog"><div class="dialog-heading"><h2>Review reconnection</h2><button data-close="repair-dialog">×</button></div><div id="repair-results"></div></dialog><dialog id="metadata-dialog"><form id="metadata-form"><div class="eyebrow">RECORDING DETAILS</div><h2>Edit metadata</h2><input name="id" type="hidden"><label>Title<input name="title" required maxlength="300"></label><label>Orchestra / artist<input name="artist" maxlength="300"></label><label>Singer<input name="singer" maxlength="300"></label><div class="form-row"><label>Year<input name="year" maxlength="30"></label><label>Style<select name="style" aria-label="Style"><option value="">Unspecified</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select></label><label>BPM<input name="bpm" type="number" min="20" max="300" step="1"></label></div><label id="video-url-label" hidden>Video URL<input name="videoUrl" type="url" placeholder="https://www.youtube.com/watch?v=..."></label><p id="analysis-details" class="hint"></p><div class="dialog-actions"><button id="close-metadata" type="button">Cancel</button><button class="primary" type="submit">Save details</button></div></form></dialog>
 `;
 const $ = selector => document.querySelector(selector);
 $('#dismiss-notice').onclick = () => { $('#notice').hidden = true; clearTimeout(notify.timer); };
@@ -103,15 +107,16 @@ function showView(view, scroll = true) {
   for (const button of document.querySelectorAll('button[data-view]')) {
     if (button.dataset.view === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   }
-  if (scroll) $(phoneLayout.matches ? 'main' : `#${view}`).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (scroll) window.scrollTo({ top: 0, behavior: 'instant' });
+  for (const link of document.querySelectorAll('.sidebar .nav')) { link.classList.toggle('active', link.hash === `#${view}`); if (link.hash === `#${view}`) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); }
   updateMiniDeck();
 }
 for (const button of document.querySelectorAll('button[data-view]')) button.onclick = () => showView(button.dataset.view);
-for (const link of document.querySelectorAll('.sidebar .nav')) link.onclick = () => showView(link.hash.slice(1), false);
+for (const link of document.querySelectorAll('.sidebar .nav')) link.onclick = event => { event.preventDefault(); showView(link.hash.slice(1)); };
 $('#open-menu').onclick = () => {
   const expanded = document.body.classList.toggle('menu-expanded'); $('#open-menu').setAttribute('aria-expanded', String(expanded));
 };
-$('#choose-recordings').onclick = () => { showView('library'); $('#search').focus({ preventScroll: true }); };
+$('#choose-recordings').onclick = () => { collectingInto = null; syncDestination(); renderLibrary(); showView('library'); $('#search').focus({ preventScroll: true }); };
 function syncDeviceLayout() { $('.playback-options').open = !phoneLayout.matches; showView(activeView, false); }
 phoneLayout.addEventListener('change', syncDeviceLayout);
 document.body.dataset.view = activeView;
@@ -170,17 +175,17 @@ player.onStall = waiting => { $('#playback-stall').hidden = !waiting; };
 player.onNeedsGesture = needed => { $('#playback-permission').hidden = !needed; };
 $('#resume-video').onclick = () => { const yt = player.youtube; if (!yt || !player.track) return; const position = yt.getCurrentTime() || 0; yt.loadVideoById({ videoId: player.track.videoId, startSeconds: position }); player.lastProgress = Date.now(); player.stallNotified = false; $('#playback-stall').hidden = true; };
 $('#playback-retry').onclick = () => { if (queueIndex >= 0) void playIndex(queueIndex); };
-$('#playback-relink').onclick = () => { relinkId = current?.id; $('#relink-input').click(); };
+$('#playback-relink').onclick = () => { reconnectMode = false; relinkId = current?.id; $('#relink-input').click(); };
 $('#playback-skip').onclick = next;
 $('#youtube-retry').onclick = () => { if (queueIndex >= 0) void playIndex(queueIndex); };
 $('#youtube-skip').onclick = next;
-$('#youtube-local').onclick = () => { relinkId = player.track?.id; $('#relink-input').click(); };
+$('#youtube-local').onclick = () => { reconnectMode = false; relinkId = player.track?.id; $('#relink-input').click(); };
 $('#youtube-replace').onclick = () => { const track = state.tracks.find(t => t.id === player.track?.id); if (track) editTrack(track); };
 function saveSettings() {
   const value = { volume: Number($('#volume').value), fade: $('#fade').value, normalize: $('#normalize').checked, autoNext: $('#auto-next').checked, guideHidden: $('#practice-guide').hidden };
   try { localStorage.setItem('studio-settings', JSON.stringify(value)); } catch { notify('Save failed — export a backup', true); }
 }
-$('#language').onchange = event => setLanguage(event.target.value);
+$('#language').onchange = event => { setLanguage(event.target.value); render(); };
 for (const id of ['volume','fade','normalize','auto-next']) $(`#${id}`).addEventListener('change', saveSettings);
 if (Number.isFinite(settings.volume)) $('#volume').value = Math.max(0, Math.min(100, settings.volume));
 if (['0','1','2','4'].includes(settings.fade)) $('#fade').value = settings.fade;
@@ -196,18 +201,22 @@ void storageDetails();
 $('#language').addEventListener('change', storageDetails);
 for (const option of document.querySelectorAll('select option')) if (!option.hasAttribute('value')) option.value = option.textContent;
 
+const tStatus = id => t(sourceStatuses.get(id) || (files.has(id) ? 'Stored copy' : 'File missing'));
 const searchKey = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 function renderLibrary() {
+  syncDestination();
+  const filteredCollection = $('#collection-filter').value || null;
   const search = searchKey($('#search').value), style = $('#style-filter').value, source = $('#source-filter').value;
-  const visible = state.tracks.filter(t => searchKey(`${t.title} ${t.artist} ${t.singer} ${t.year}`).includes(search) && (!style || t.style === style) && (!source || t.source === source));
-  $('#tracks').innerHTML = visible.map(t => `<tr draggable="true" data-track="${esc(t.id)}"><td><div class="track-title">${esc(t.title)}</div><div class="track-detail"><span class="source-tag ${t.source}">${t.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(t.artist || 'Unknown orchestra')}${t.singer ? ` · ${esc(t.singer)}` : ''}${t.source === 'local' && !files.has(t.id) ? ' · <span class="missing">File needed</span>' : ''}</div></td><td>${esc(t.style || '—')}<small>${esc(t.year || '')}</small></td><td>${t.bpm ? esc(t.bpm) : '—'}</td><td>${time(t.duration)}</td><td class="track-actions"><button data-action="play" data-id="${esc(t.id)}" aria-label="Play ${esc(t.title)}" title="Play">▶ Play</button>${t.source === 'local' ? `<button class="secondary-action" data-action="preview" data-id="${esc(t.id)}" aria-label="Preview ${esc(t.title)}" title="Preview on current output">♬ Preview</button><button class="secondary-action" data-action="analyze" data-id="${esc(t.id)}" aria-label="Analyze ${esc(t.title)}" title="Analyze BPM and level">⌁ Analyze</button>${!files.has(t.id) ? `<button data-action="relink" data-id="${esc(t.id)}" title="Relink file">↥ Relink</button>` : ''}` : ''}<button class="secondary-action" data-action="edit" data-id="${esc(t.id)}" aria-label="Edit ${esc(t.title)}" title="Edit metadata">✎ Edit</button><button data-action="add" data-id="${esc(t.id)}" aria-label="Add ${esc(t.title)} to selected group" title="Add to selected group">+ Add</button><button class="secondary-action" data-action="delete" data-id="${esc(t.id)}" aria-label="Delete ${esc(t.title)}" title="Remove from library">×</button><button class="more-action" data-action="more" data-id="${esc(t.id)}" aria-label="More actions for ${esc(t.title)}">More</button></td></tr>`).join('');
+  const visible = state.tracks.filter(t => (!filteredCollection || state.collections?.find(c => c.id === filteredCollection)?.trackIds.includes(t.id)) && searchKey(`${t.title} ${t.artist} ${t.singer} ${t.year}`).includes(search) && (!style || t.style === style) && (!source || t.source === source));
+  $('#tracks').innerHTML = visible.map(track => `<tr draggable="true" data-track="${esc(track.id)}"><td><div class="track-title">${esc(track.title)}</div><div class="track-detail"><span class="source-tag ${track.source}">${track.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(track.artist || 'Unknown orchestra')}${track.singer ? ` · ${esc(track.singer)}` : ''}${track.source === 'local' ? ` · <span class="source-status ${!files.has(track.id) ? 'missing' : ''}">${esc(track.source === 'local' ? tStatus(track.id) : '')}</span>` : ''}</div></td><td>${esc(track.style || '—')}<small>${esc(track.year || '')}</small></td><td>${track.bpm ? esc(track.bpm) : '—'}</td><td>${time(track.duration)}</td><td class="track-actions"><button data-action="play" data-id="${esc(track.id)}" aria-label="Play ${esc(track.title)}" title="Play">▶ Play</button>${track.source === 'local' ? `<button class="secondary-action" data-action="preview" data-id="${esc(track.id)}" aria-label="Preview ${esc(track.title)}" title="Preview on current output">♬ Preview</button><button class="secondary-action" data-action="analyze" data-id="${esc(track.id)}" aria-label="Analyze ${esc(track.title)}" title="Analyze BPM and level">⌁ Analyze</button>` : ''}<button class="next-action" data-action="play-next" data-id="${esc(track.id)}" ${current ? '' : 'hidden'}>${t('Play next')}</button><button class="collect-action" data-action="collection" data-id="${esc(track.id)}">${t('Collect in set')}</button>${track.source === 'local' ? `<button class="secondary-action" data-action="locate" data-id="${esc(track.id)}">Locate file</button><button class="secondary-action" data-action="copy" data-id="${esc(track.id)}">Keep an app copy</button><button class="secondary-action" data-action="relink" data-id="${esc(track.id)}">Replace recording</button>` : ''}<button class="secondary-action" data-action="edit" data-id="${esc(track.id)}" aria-label="Edit ${esc(track.title)}" title="Edit metadata">✎ Edit</button><button data-action="add" data-id="${esc(track.id)}" aria-label="Add ${esc(track.title)} to selected group" title="Add to selected group">${t(state.groups.find(group => group.id === selected)?.kind === 'cortina' ? 'Use as cortina' : 'Add to tanda')}</button><button class="secondary-action" data-action="delete" data-id="${esc(track.id)}" aria-label="Delete ${esc(track.title)}" title="Remove from library">×</button><button class="more-action" data-action="more" data-id="${esc(track.id)}" aria-label="More actions for ${esc(track.title)}">More</button></td></tr>`).join('');
   $('#empty-library').hidden = visible.length > 0;
   $('#empty-library h3').textContent = state.tracks.length ? 'No matching recordings' : 'A home for your collection';
   $('#library-count').textContent = state.tracks.length; $('#nav-count').textContent = state.tracks.length;
   $('#library-summary').textContent = `${state.tracks.length} recordings · ${time(state.tracks.reduce((s, t) => s + (t.duration || 0), 0))} known duration`;
 }
+function canMoveGroup(group, direction) { const top = state.groups.filter(g => !g.parentId); const index = top.findIndex(g => g.id === group.id); return !group.parentId && index >= 0 && Boolean(top[index + direction]); }
 function renderGroups() {
-  $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${g.kind.toUpperCase()}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${i === 0 ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${i === state.groups.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div><ol>${g.trackIds.map((id, j) => { const t = state.tracks.find(t => t.id === id); return `<li><span>${esc(t?.title || 'Missing track')}</span><div><button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<div class="cortina-range"><label><span>${t('From')}</span><input type="number" min="0" max="86400" step="1" value="${g.startSeconds || 0}" data-cortina-start="${esc(g.id)}" aria-label="${t('Cortina start position')}"></label><span class="range-arrow">→</span><label><span>${t('To')}</span><input type="number" min="1" max="90000" step="1" value="${(g.startSeconds || 0) + (g.limitSeconds || 20)}" data-cortina-end="${esc(g.id)}" aria-label="${t('Cortina end position')}"></label><span class="range-unit">${t('seconds')}</span><button data-group-action="cue-position" data-id="${esc(g.id)}" aria-label="${t('Use deck position')}" title="${t('Use deck position')}" ${!current || !g.trackIds.includes(current.id) ? 'disabled' : ''}>⌖</button><button data-group-action="cue-play" data-id="${esc(g.id)}" aria-label="${t('Play this cortina')}" title="${t('Play this cortina')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button></div><label class="cortina-hold"><input type="checkbox" data-cortina-hold="${esc(g.id)}" ${g.holdAfter ? 'checked' : ''}>${t('Wait before the next tanda')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select and use +</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
+  $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${g.collapsed ? 'collapsed' : ''} ${g.parentId ? 'attached-cortina' : ''} ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${t(g.kind === 'tanda' ? 'Tanda' : 'Cortina')}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="collapse" data-id="${esc(g.id)}" aria-expanded="${!g.collapsed}">${t(g.collapsed ? 'Expand' : 'Collapse')}</button>${g.kind === 'tanda' ? `<button data-group-action="cortina" data-id="${esc(g.id)}">${t('Cortina')}</button><button data-group-action="notes" data-id="${esc(g.id)}" aria-label="Tanda notes">Notes</button>` : ''}<button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${!canMoveGroup(g, -1) ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${!canMoveGroup(g, 1) ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div>${g.notes ? `<p class="tanda-notes" data-preserve>${esc(g.notes)}</p>` : ''}<ol>${g.trackIds.map((id, j) => { const t = state.tracks.find(t => t.id === id); return `<li><span>${esc(t?.title || 'Missing track')}</span><div><button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<div class="cortina-range"><label><span>${t('From')}</span><input type="number" min="0" max="86400" step="1" value="${g.startSeconds || 0}" data-cortina-start="${esc(g.id)}" aria-label="${t('Cortina start position')}"></label><span class="range-arrow">→</span><label><span>${t('To')}</span><input type="number" min="1" max="90000" step="1" value="${(g.startSeconds || 0) + (g.limitSeconds || 20)}" data-cortina-end="${esc(g.id)}" ${g.fullLength ? 'disabled' : ''} aria-label="${t('Cortina end position')}"></label><span class="range-unit">${t('seconds')}</span><button data-group-action="cue-position" data-id="${esc(g.id)}" aria-label="${t('Use deck position')}" title="${t('Use deck position')}" ${!current || !g.trackIds.includes(current.id) ? 'disabled' : ''}>⌖</button><button data-group-action="cue-play" data-id="${esc(g.id)}" aria-label="${t('Play this cortina')}" title="${t('Play this cortina')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button></div><label class="cortina-hold"><input type="checkbox" data-cortina-full="${esc(g.id)}" ${g.fullLength ? 'checked' : ''}>${t('Use the rest of the recording')}</label><label class="cortina-hold"><input type="checkbox" data-cortina-hold="${esc(g.id)}" ${g.holdAfter ? 'checked' : ''}>${t('Wait before the next tanda')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select Add to tanda</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
   refreshGroupSummaries();
 }
 function refreshGroupSummaries() {
@@ -215,10 +224,11 @@ function refreshGroupSummaries() {
   for (const group of state.groups) {
     const article = articles.get(group.id);
     if (!article) continue;
-    article.querySelector('.group-duration').textContent = `${group.trackIds.length} recordings · ${time(groupDuration(group, state.tracks))} known duration`;
+    const cortina = state.groups.find(g => g.parentId === group.id);
+    article.querySelector('.group-duration').textContent = `${group.trackIds.length} ${t('recordings')} · ${time(groupDuration(group, state.tracks))}${group.kind === 'tanda' && ![3,4].includes(group.trackIds.length) ? ` · ${t('Usually 3–4 recordings')}` : ''}${cortina ? ` · ${t('Cortina')}: ${cortina.name}` : ''}${group.trackIds.some(id => state.tracks.find(t => t.id === id)?.source === 'local' && !files.has(id)) ? ` · ${t('File needed')}` : ''}`;
     const startInput = article.querySelector('[data-cortina-start]'), endInput = article.querySelector('[data-cortina-end]');
     if (startInput && document.activeElement !== startInput) startInput.value = group.startSeconds || 0;
-    if (endInput && document.activeElement !== endInput) endInput.value = (group.startSeconds || 0) + (group.limitSeconds || 20);
+    if (endInput && document.activeElement !== endInput) endInput.value = group.fullLength ? (group.trackIds.map(id => state.tracks.find(track => track.id === id)?.duration).find(duration => Number.isFinite(duration)) || '') : (group.startSeconds || 0) + (group.limitSeconds || 20);
     const cueButton = article.querySelector('[data-group-action="cue-position"]');
     if (cueButton) cueButton.disabled = !current || !group.trackIds.includes(current.id);
   }
@@ -228,7 +238,7 @@ function refreshGroupSummaries() {
   $('#deck-start-set').hidden = $('#start-set').disabled || Boolean(current);
   const chosen = state.groups.find(g => g.id === selected);
   $('#choose-recordings').hidden = !chosen;
-  $('#library-target').textContent = chosen ? `${t('Adding to')}: ${chosen.name}` : t('Create a tanda in Set, then add recordings here.');
+  syncDestination();
   $('#selected-group').textContent = chosen ? `${t('Adding to')}: ${chosen.name}` : t('Select a tanda to add recordings');
   $('#queue-stale').hidden = !loadedSignature || loadedSignature === queueSignature(state.groups, state.tracks);
   $('#refresh-queue').hidden = $('#queue-stale').hidden || !current || queueIndex < 0; $('#refresh-queue').disabled = transitioning;
@@ -239,7 +249,7 @@ new IntersectionObserver(entries => { deckVisible = entries[0].isIntersecting; u
 $('#mini-open').onclick = () => showView('deck');
 $('#mini-play').onclick = () => $('#play-pause').click(); $('#mini-next').onclick = () => $('#next').click();
 function renderQueue() {
-  updateTransport();
+  renderPending(); updateTransport();
   const item = queue[queueIndex], upcoming = queue[(queueIndex >= 0 ? queueIndex : resumeIndex) + (queueIndex >= 0 ? 1 : 0)];
   const sameGroup = item?.groupId ? queue.filter(entry => entry.groupId === item.groupId) : [];
   $('#recording-number').textContent = item ? item.kind === 'cortina' ? `${t('Cortina')} · ${t('Start at')} ${time(item.startSeconds || 0)}` : sameGroup.length ? `${t('Recording')} ${sameGroup.indexOf(item) + 1} / ${sameGroup.length}` : `${t('Recording')} ${queueIndex + 1} / ${queue.length}` : '';
@@ -256,9 +266,9 @@ function renderQueue() {
     lastRenderedIndex = queueIndex;
   }
 }
-function render() { renderLibrary(); renderGroups(); renderQueue(); }
+function render() { normalizeProgram(state); renderCollections(); renderPresets(); renderLibrary(); renderGroups(); renderQueue(); }
 
-async function importFiles(list) {
+async function importFiles(list, handles = []) {
   if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
   if (temporaryWorkspace) { notify('Storage is unavailable. Retry saving before importing local audio. You can still play the example set.', true); return; }
   busy = true; let count = 0, skipped = 0;
@@ -269,16 +279,19 @@ async function importFiles(list) {
     for (const [index, file] of candidates.entries()) {
       progress.textContent = `${index + 1} / ${candidates.length} · ${file.name}`;
       if (!file.type.startsWith('audio/') && !/\.(mp3|wav|flac|m4a|ogg|aiff?|opus|aac)$/i.test(file.name)) { skipped++; continue; }
-      if (state.tracks.some(t => t.source === 'local' && t.fileName === file.name && t.fileSize === file.size && t.lastModified === file.lastModified)) { skipped++; continue; }
+      const hash = await contentHash(file);
+      const duplicate = state.tracks.find(t => t.source === 'local' && t.contentHash === hash);
+      if (duplicate) { if (handles[index] && confirm(t(`Connect this original to existing recording “${duplicate.title}”?`))) await reconnectSame(duplicate, file, handles[index]); skipped++; continue; }
       notify(`Reading ${file.name}…`);
       let metadata;
       try { metadata = await parseBlob(file); } catch { /* Tag failures do not prevent importing playable audio. */ }
       const common = metadata?.common || {};
       const genre = (common.genre || []).find(g => ['Tango', 'Vals', 'Milonga', 'Cortina'].some(s => s.toLowerCase() === g.toLowerCase()));
-      const track = { id: uid(), source: 'local', fileName: file.name, fileSize: file.size, lastModified: file.lastModified,
+      const track = { id: uid(), source: 'local', contentHash: hash, fileName: file.name, fileSize: file.size, lastModified: file.lastModified,
         title: common.title || file.name.replace(/\.[^.]+$/, ''), artist: common.artist || common.albumartist || '', singer: '', year: String(common.year || ''),
         style: genre ? genre[0].toUpperCase() + genre.slice(1).toLowerCase() : '', duration: metadata?.format.duration || null, bpm: common.bpm || null };
-      await saveFile(track.id, file); files.set(track.id, file); state.tracks.push(track);
+      if (handles[index]) await saveSource(track.id, { handle: handles[index] }); else await saveFile(track.id, file);
+      sourceStatuses.set(track.id, handles[index] ? 'Ready' : 'Stored copy'); files.set(track.id, file); state.tracks.push(track);
       if (!await persist()) { progress.textContent = t('Save failed — export a backup'); return; }
       count++; renderLibrary(); markStep('load');
     }
@@ -316,7 +329,7 @@ function workerAnalysis(samples, sampleRate) {
   });
 }
 async function analyzeTrack(track) {
-  const file = files.get(track.id); if (!file) throw new Error(`Relink ${track.title} first.`);
+  const file = await readyFile(track); if (!file) throw new Error(`Relink ${track.title} first.`);
   notify(`Analyzing ${track.title}…`);
   const context = new AudioContext();
   try {
@@ -352,6 +365,7 @@ async function runAnalysis(tracks) {
   } finally { busy = false; $('#analyze-all').disabled = false; }
 }
 function updateTransport() {
+  for (const button of document.querySelectorAll('#tracks [data-action=play-next]')) { button.hidden = !current; button.disabled = transitioning || addingNext; }
   const playing = !stopped && (player.track?.source === 'youtube' ? player.youtube?.getPlayerState?.() === 1 : !player.audio.paused);
   $('#play-pause').textContent = transitioning ? '…' : playing ? 'Ⅱ' : '▶';
   $('#previous').disabled = transitioning || queueIndex <= 0;
@@ -360,6 +374,9 @@ function updateTransport() {
   $('#play-pause').disabled = transitioning || (!queue.length && !player.track);
   $('#mini-play').textContent = $('#play-pause').textContent; $('#mini-play').disabled = $('#play-pause').disabled;
   $('#mini-next').disabled = $('#next').disabled;
+  const cortina = queue[queueIndex]?.kind === 'cortina';
+  $('#next-tanda').hidden = !cortina; $('#next-tanda').disabled = transitioning;
+  $('#next-tanda').textContent = t(queue.slice(queueIndex + 1).some(item => item.kind === 'tanda') ? 'Next tanda' : 'End cortina');
 }
 function rememberSetEdit() { undoGroups = { groups: structuredClone(state.groups), selected }; $('#undo-bar').hidden = false; }
 $('#undo-set').onclick = () => {
@@ -377,7 +394,9 @@ async function playIndex(index) {
   $('#playback-loading').hidden = false; $('#playback-recovery').hidden = true;
   try {
     $('#youtube-error').hidden = true;
-    if (!await player.play(item.track, files.get(item.track.id), Number($('#fade').value), $('#normalize').checked, item.startSeconds || 0, item.limitSeconds)) return;
+    const sourceFile = item.track.source === 'local' ? await readyFile(item.track, true) : null;
+    if (request !== playRequest) return;
+    if (!await player.play(item.track, sourceFile, Number($('#fade').value), $('#normalize').checked, item.startSeconds || 0, item.limitSeconds)) return;
     if (request !== playRequest) return;
     queueIndex = index; resumeIndex = index; current = item.track; timedEnd = false; stopped = false; $('#queue-resume').hidden = true; void persist();
     $('#playing-title').textContent = current.title; $('#playing-artist').textContent = [current.artist, current.singer, current.year].filter(Boolean).join(' · ') || (current.source === 'youtube' ? 'YouTube video' : 'Local recording');
@@ -403,7 +422,7 @@ function addToGroup(id, groupId = selected) {
   const group = state.groups.find(g => g.id === groupId);
   if (!group) { showView('set'); notify('Create or select a tanda or cortina first.'); return; }
   if (!state.tracks.some(t => t.id === id)) return;
-  rememberSetEdit(); group.trackIds.push(id); selected = group.id; void persist(); renderGroups(); markStep('build');
+  normalizeProgram(state); rememberSetEdit(); group.trackIds.push(id); group.occurrenceIds.push(uid()); selected = group.id; void persist(); renderGroups(); markStep('build'); notify(`${t('Added to')} ${t(group.kind === 'cortina' ? 'Cortina' : 'Tanda')}: ${group.name}`);
 }
 function editTrack(track) {
   const form = $('#metadata-form');
@@ -421,7 +440,7 @@ $('#drop-zone').ondragover = event => { event.preventDefault(); $('#drop-zone').
 $('#drop-zone').ondragleave = () => $('#drop-zone').classList.remove('dragging');
 $('#drop-zone').ondrop = event => { event.preventDefault(); $('#drop-zone').classList.remove('dragging'); void importFiles(event.dataTransfer.files); };
 $('#youtube-form').onsubmit = event => { event.preventDefault(); void addYouTube(new FormData(event.target).get('url')); };
-for (const id of ['search', 'style-filter', 'source-filter']) $(`#${id}`).oninput = renderLibrary;
+for (const id of ['search', 'style-filter', 'source-filter', 'collection-filter']) $(`#${id}`).oninput = renderLibrary;
 $('#tracks').ondragstart = event => { const row = event.target.closest('[data-track]'); if (row) event.dataTransfer.setData('text/plain', row.dataset.track); };
 let relinkId = null;
 $('#recording-actions').onclick = event => {
@@ -448,11 +467,15 @@ $('#tracks').onclick = async event => {
         else { queue.push({ track: structuredClone(track) }); loadedSignature = null; renderQueue(); await playIndex(queue.length - 1); }
         showView('deck'); break;
       }
-      case 'preview': await player.previewTrack(track, files.get(track.id)); $('#preview-status span').textContent = `Preview: ${track.title} · same output`; $('#preview-status').hidden = false; markStep('preview'); showView('deck'); break;
+      case 'play-next': await choosePlayNext(track); break;
+      case 'collection': addRecordingToCollection(track); break;
+      case 'locate': await locateRecording(track); break;
+      case 'copy': await keepCopy(track); break;
+      case 'preview': await player.previewTrack(track, await readyFile(track, true)); $('#preview-status span').textContent = `Preview: ${track.title} · same output`; $('#preview-status').hidden = false; markStep('preview'); showView('deck'); break;
       case 'analyze': await runAnalysis([track]); break;
       case 'edit': editTrack(track); break;
-      case 'add': addToGroup(track.id); break;
-      case 'relink': relinkId = track.id; $('#relink-input').click(); break;
+      case 'add': if (state.groups.some(group => group.id === selected)) addToGroup(track.id); else chooseTandaDestination(track); break;
+      case 'relink': reconnectMode = false; relinkId = track.id; $('#relink-input').click(); break;
       case 'delete':
         if (!confirm(t(`Remove “${track.title}” from the library and every group? Your original file will be kept.`))) return;
         if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
@@ -479,8 +502,10 @@ $('#relink-input').onchange = async event => {
   const file = event.target.files[0], track = state.tracks.find(t => t.id === relinkId);
   if (file && track) {
     try {
+      if (reconnectMode) { await reconnectSame(track, file); render(); notify('File reconnected. Cues and analysis retained.'); return; }
       await persistence;
-      const updated = { ...track, source: 'local', fileName: file.name, fileSize: file.size, lastModified: file.lastModified };
+      if (!confirm(t('Replace recording and reset analysis? Check all cortina cues after replacement.'))) return;
+      const updated = { ...track, source: 'local', contentHash: await contentHash(file), fileName: file.name, fileSize: file.size, lastModified: file.lastModified };
       delete updated.videoId;
       for (const field of ['duration', 'bpm', 'rmsDb', 'peakDb', 'gainDb']) updated[field] = null;
       const snapshot = workspaceSnapshot(state.tracks.map(item => item.id === track.id ? updated : item));
@@ -490,12 +515,14 @@ $('#relink-input').onchange = async event => {
       });
       persistence = replacement.catch(() => false);
       await replacement;
+      sourceStatuses.set(track.id, 'Stored copy');
       Object.assign(track, updated); delete track.videoId;
       player.revoke(track.id); files.set(track.id, file);
       for (const item of queue) if (item.track.id === track.id) item.track = structuredClone(track);
       sourceChanged(track);
       render(); notify('File relinked. Analyze it to refresh duration, BPM, and level.');
     } catch (error) { notify(error.message, true); }
+    finally { event.target.value = ''; reconnectMode = false; }
   }
   event.target.value = '';
 };
@@ -521,7 +548,7 @@ $('#metadata-form').onsubmit = event => {
   void persist(); render(); markStep('edit'); $('#metadata-dialog').close();
 };
 $('#close-metadata').onclick = () => $('#metadata-dialog').close();
-function addGroup(kind) { rememberSetEdit(); const group = { id: uid(), kind, name: `${kind === 'tanda' ? 'Tanda' : 'Cortina'} ${state.groups.filter(g => g.kind === kind).length + 1}`, trackIds: [], ...(kind === 'cortina' ? { limitSeconds: 20 } : {}) }; state.groups.push(group); selected = group.id; void persist(); renderGroups(); }
+function addGroup(kind) { normalizeProgram(state); rememberSetEdit(); const group = { id: uid(), kind, name: `${kind === 'tanda' ? 'Tanda' : 'Cortina'} ${state.groups.filter(g => g.kind === kind).length + 1}`, trackIds: [], ...(kind === 'cortina' ? { fullLength: true, holdAfter: true, parentId: state.groups.find(g => g.id === selected && g.kind === 'tanda')?.id || '' } : { collapsed: phoneLayout.matches }) }; if (group.parentId) { const old = state.groups.find(g => g.parentId === group.parentId); if (old) { selected = old.id; renderGroups(); notify('This tanda already has a cortina. Select it to edit.'); return; } state.groups.splice(state.groups.findIndex(g => g.id === group.parentId) + 1, 0, group); } else state.groups.push(group); selected = group.id; void persist(); renderGroups(); }
 $('#add-tanda').onclick = () => addGroup('tanda'); $('#add-cortina').onclick = () => addGroup('cortina');
 $('#groups').onclick = event => {
   const button = event.target.closest('[data-group-action]'); if (!button) return;
@@ -531,16 +558,20 @@ $('#groups').onclick = event => {
   let newName;
   if (action === 'rename') { newName = prompt(t('Group name'), group.name); if (!newName?.trim() || newName.trim() === group.name) return; }
   if (action === 'delete' && !confirm(t(`Remove “${group.name}” from your set? Recordings stay in the library.`))) return;
+  if (action === 'cortina') { selected = group.id; $('#add-cortina').click(); const attached = state.groups.find(g => g.parentId === group.id); if (attached) { group.collapsed = false; attached.collapsed = false; selected = attached.id; renderGroups(); void persist(); } return; }
+  if (action === 'collapse') { group.collapsed = !group.collapsed; const cortina = state.groups.find(g => g.parentId === group.id); if (cortina) cortina.collapsed = group.collapsed; void persist(); renderGroups(); return; }
+  if (action === 'notes') { const notes = prompt(t('Tanda notes'), group.notes || ''); if (notes !== null) { group.notes = notes; void persist(); renderGroups(); } return; }
   if (action === 'cue-play') {
     showView('deck');
     const clips = flattenSet([group], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
     if (!clips.length) return;
-    const index = queue.findIndex(item => item.groupId === group.id && (item.startSeconds || 0) === (group.startSeconds || 0) && item.limitSeconds === (group.limitSeconds || 20) && Boolean(item.holdAfter) === Boolean(group.holdAfter));
+    const index = queue.findIndex(item => item.groupId === group.id && (item.startSeconds || 0) === (group.startSeconds || 0) && item.limitSeconds === group.limitSeconds && Boolean(item.holdAfter) === Boolean(group.holdAfter));
     if (index >= 0) void playIndex(index);
     else { const start = queue.length; queue.push(...clips); loadedSignature = null; renderQueue(); void playIndex(start); }
     return;
   }
   if (action === 'cue-position' && (!current || !group.trackIds.includes(current.id))) return;
+  normalizeProgram(state);
   if (action !== 'select') rememberSetEdit();
   switch (button.dataset.groupAction) {
     case 'select': selected = group.id; break;
@@ -549,20 +580,21 @@ $('#groups').onclick = event => {
       const duration = current.source === 'youtube' ? player.youtube?.getDuration() : player.audio.duration;
       if (Number.isFinite(duration) && duration > 0 && position >= duration) { notify('The start must be before the recording ends. Choose an earlier cue.', true); return; }
       group.startSeconds = position;
-      if (Number.isFinite(duration) && duration > 0) group.limitSeconds = Math.min(group.limitSeconds || 20, Math.ceil(duration) - position);
+      if (!group.fullLength && Number.isFinite(duration) && duration > 0) group.limitSeconds = Math.min(group.limitSeconds || 20, Math.ceil(duration) - position);
       break;
     }
     case 'rename': group.name = newName.trim(); break;
-    case 'delete': state.groups.splice(i, 1); if (selected === group.id) selected = state.groups[0]?.id || null; break;
-    case 'up': if (i > 0) [state.groups[i - 1], state.groups[i]] = [state.groups[i], state.groups[i - 1]]; break;
-    case 'down': if (i < state.groups.length - 1) [state.groups[i + 1], state.groups[i]] = [state.groups[i], state.groups[i + 1]]; break;
-    case 'remove': group.trackIds.splice(j, 1); break;
-    case 'track-up': if (j > 0) [group.trackIds[j - 1], group.trackIds[j]] = [group.trackIds[j], group.trackIds[j - 1]]; break;
-    case 'track-down': if (j < group.trackIds.length - 1) [group.trackIds[j + 1], group.trackIds[j]] = [group.trackIds[j], group.trackIds[j + 1]]; break;
+    case 'delete': state.groups = state.groups.filter(g => g.id !== group.id && g.parentId !== group.id); if (selected === group.id) selected = state.groups[0]?.id || null; break;
+    case 'up': moveTanda(group, -1); break;
+    case 'down': moveTanda(group, 1); break;
+    case 'remove': group.trackIds.splice(j, 1); group.occurrenceIds.splice(j, 1); break;
+    case 'track-up': if (j > 0) { [group.trackIds[j - 1], group.trackIds[j]] = [group.trackIds[j], group.trackIds[j - 1]]; [group.occurrenceIds[j - 1], group.occurrenceIds[j]] = [group.occurrenceIds[j], group.occurrenceIds[j - 1]]; } break;
+    case 'track-down': if (j < group.trackIds.length - 1) { [group.trackIds[j + 1], group.trackIds[j]] = [group.trackIds[j], group.trackIds[j + 1]]; [group.occurrenceIds[j + 1], group.occurrenceIds[j]] = [group.occurrenceIds[j], group.occurrenceIds[j + 1]]; } break;
   }
   void persist(); renderGroups();
 };
 $('#groups').onchange = event => {
+  if (event.target.dataset.cortinaFull) { const group = state.groups.find(g => g.id === event.target.dataset.cortinaFull); rememberSetEdit(); group.fullLength = event.target.checked; if (group.fullLength) delete group.limitSeconds; else group.limitSeconds = 20; void persist(); renderGroups(); return; }
   if (event.target.dataset.cortinaHold) {
     const group = state.groups.find(g => g.id === event.target.dataset.cortinaHold); if (!group) return;
     rememberSetEdit(); group.holdAfter = event.target.checked; void persist(); refreshGroupSummaries(); return;
@@ -585,8 +617,8 @@ $('#groups').onchange = event => {
   if (!Number.isInteger(value) || start < 0 || start > 86400 || end <= start || end - start > 3600) {
     event.target.value = isStart ? priorStart : priorEnd; return;
   }
-  if (start === priorStart && end === priorEnd) return;
-  rememberSetEdit(); group.startSeconds = start; group.limitSeconds = end - start;
+  if (start === priorStart && (group.fullLength || end === priorEnd)) return;
+  rememberSetEdit(); group.startSeconds = start; if (!group.fullLength) group.limitSeconds = end - start;
   void persist(); refreshGroupSummaries();
 };
 $('#groups').ondragover = event => { if (event.target.closest('[data-group]')) event.preventDefault(); };
@@ -596,15 +628,22 @@ $('#refresh-queue').onclick = async () => {
   const active = queue[queueIndex]; if (!active || transitioning) return;
   const occurrence = queue.slice(0, queueIndex + 1).filter(item => item.groupId === active.groupId && item.track.id === active.track.id).length;
   const matches = prepared.map((item, index) => ({ item, index })).filter(({ item }) => item.groupId === active.groupId && item.track.id === active.track.id);
-  const match = matches[occurrence - 1];
+  const exact = prepared.findIndex(item => item.occurrenceId && item.occurrenceId === active.occurrenceId);
+  const match = exact >= 0 ? { index: exact } : matches[occurrence - 1];
   if (!match) { notify('The current recording is no longer in the edited set. Finish it before loading another set.', true); return; }
   queue = [...queue.slice(0, queueIndex + 1), ...prepared.slice(match.index + 1)];
   loadedSignature = queueSignature(state.groups, state.tracks); render(); await persist(); notify('Upcoming queue updated. Current recording keeps playing.');
 };
-$('#start-set').onclick = () => { showView('deck'); loadedSignature = queueSignature(state.groups, state.tracks); queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
+$('#start-set').onclick = async () => { normalizeProgram(state);
+  if (transitioning) return;
+  const unavailable = [];
+  for (const track of state.tracks.filter(t => t.source === 'local' && state.groups.some(group => group.trackIds.includes(t.id)))) if (!await readyFile(track)) unavailable.push(track.title);
+  renderLibrary();
+  if (unavailable.length) { notify(`${t('Files need attention before playback')}: ${unavailable.join(', ')}`, true); showView('library'); return; } showView('deck'); loadedSignature = queueSignature(state.groups, state.tracks); queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
 $('#deck-start-set').onclick = () => $('#start-set').click();
 $('#queue').onclick = event => { const item = event.target.closest('[data-queue-index]'); if (item) void playIndex(Number(item.dataset.queueIndex)); };
 $('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1)); else if (timedEnd || stopped) await playIndex(queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); } catch (error) { notify(playbackMessage(error), true); } };
+$('#next-tanda').onclick = async () => { if (transitioning) return; const nextIndex = queue.findIndex((item, index) => index > queueIndex && item.kind === 'tanda'); if (nextIndex >= 0) await playIndex(nextIndex); else { transitioning = true; updateTransport(); await player.fadeOut(Number($('#fade').value)); $('#stop').click(); } };
 $('#next').onclick = next; $('#previous').onclick = () => playIndex(queueIndex - 1);
 $('#stop').onclick = () => {
   ++playRequest; player.stop(); $('#playback-loading').hidden = true; $('#playback-stall').hidden = true; player.seek(queue[queueIndex]?.startSeconds || 0); stopped = true; transitioning = false;
@@ -637,11 +676,11 @@ $('#set-input').onchange = async event => {
     $('#position').textContent = '0:00 / 0:00'; $('#seek').value = 0;
     $('#playing-title').textContent = 'No recording loaded'; $('#playing-artist').textContent = 'Play a track or load your prepared set.'; $('#playing-group').textContent = 'READY WHEN YOU ARE'; $('#youtube-wrap').hidden = true;
     const oldIds = state.tracks.filter(t => t.source === 'local').map(t => t.id);
-    state = imported; selected = state.groups.some(g => g.id === selected) ? selected : state.groups[0]?.id || null;
+    state = imported; activeCollection = null; collectingInto = null; sourceStatuses.clear(); normalizeProgram(state); selected = state.groups.some(g => g.id === selected) ? selected : state.groups[0]?.id || null;
     if (!await persist()) { render(); return; }
     for (const id of oldIds) if (!state.tracks.some(t => t.id === id && t.source === 'local')) { await deleteFile(id); player.revoke(id); }
     files.clear();
-    for (const track of state.tracks.filter(t => t.source === 'local')) { const blob = await getFile(track.id); if (blob) files.set(track.id, blob); }
+    for (const track of state.tracks.filter(t => t.source === 'local')) await readyFile(track);
     render(); notify('Set imported. Relink any local recordings marked “File needed”.');
   } catch (error) { notify(`Import failed: ${error.message}`, true); }
   finally { event.target.value = ''; }
@@ -678,7 +717,7 @@ $('#guide-preview').onclick = async () => {
   closePanels(); const track = state.tracks.find(t => t.source === 'local' && files.has(t.id));
   if (!track) { notify('Import a local tango recording with + Local files to use Preview. YouTube recordings use Play.'); return; }
   try {
-    await player.previewTrack(track, files.get(track.id));
+    await player.previewTrack(track, await readyFile(track, true));
     $('#preview-status span').textContent = `Preview: ${track.title} · same output`;
     $('#preview-status').hidden = false; markStep('preview'); showView('deck');
   } catch (error) { notify(playbackMessage(error), true); }
@@ -692,7 +731,10 @@ $('#sample-export').onclick = () => { closePanels(); $('#export-set').click(); }
 async function loadRealSamples() {
   if (busy) { notify('Wait for the current import or analysis to finish.'); return false; }
   for (const track of realTracks) { const existing = state.tracks.find(t => t.id === track.id); if (!existing) state.tracks.push({ ...track }); else existing.samplePack = REAL_SAMPLE_PACK; }
-  for (const group of realGroups()) if (!state.groups.some(g => g.id === group.id)) state.groups.push(group);
+  for (const group of realGroups()) if (!state.groups.some(g => g.id === group.id)) state.groups.push({ ...group, collapsed: phoneLayout.matches });
+  state.collections ||= [];
+  for (const collection of realCollections()) if (!state.collections.some(item => item.id === collection.id)) state.collections.push(collection);
+  normalizeProgram(state);
   selected = 'real-group-tango'; const saved = await persist(); render(); markStep('load'); markStep('youtube');
   if (saved) notify('Real recordings ready: 6 DJ tandas in Tango / Tango / Vals / Tango / Tango / Milonga order, with 20-second cortinas. Press Play milonga set. Internet is required.');
   return true;
@@ -708,17 +750,255 @@ $('#real-sample-edit').onclick = async () => { closePanels(); if (await loadReal
 $('#real-sample-select').onclick = async () => { if (await loadRealSamples()) { closePanels(); markStep('build'); showView('set'); } };
 renderProgress();
 
+async function readyFile(track, requestPermission = false) {
+  if (track.source !== 'local') return null;
+  const result = await resolveSource(track, requestPermission);
+  sourceStatuses.set(track.id, result.status);
+  if (result.file) files.set(track.id, result.file); else files.delete(track.id);
+  return result.file;
+}
+async function checkSources() {
+  if (busy) return;
+  busy = true;
+  try {
+    for (const track of state.tracks.filter(t => t.source === 'local')) {
+      await readyFile(track);
+      if (!track.contentHash && files.has(track.id)) track.contentHash = await contentHash(files.get(track.id));
+    }
+    await persist(); render(); await storageDetails();
+    notify('File check complete. Locate missing files or grant access before playback.');
+  } finally { busy = false; }
+}
+$('#connect-files').hidden = !canConnectFiles();
+$('#reconnect-folder').hidden = !canConnectFolder();
+$('#check-files').onclick = () => checkSources().catch(error => notify(error.message, true));
+$('#connect-files').onclick = async () => {
+  if (busy || temporaryWorkspace) { notify('Finish saving or importing before connecting files.', true); return; }
+  try {
+    const handles = await window.showOpenFilePicker({ multiple: true, types: [{ description: 'Audio', accept: { 'audio/*': ['.mp3', '.wav', '.flac', '.m4a', '.ogg', '.aac', '.opus', '.aiff'] } }] });
+    await importFiles(await Promise.all(handles.map(handle => handle.getFile())), handles);
+  } catch (error) { if (error.name !== 'AbortError') notify(error.message, true); }
+};
+async function reconnectSame(track, file, handle) {
+  await attachIdentical(track, file, handle);
+  const updated = { ...track, fileName: file.name || track.fileName, fileSize: file.size, lastModified: file.lastModified || track.lastModified };
+  await persistence;
+  const snapshot = workspaceSnapshot(state.tracks.map(item => item.id === track.id ? updated : item));
+  const operation = persistence.then(() => reconnectRecording(track.id, file, handle, snapshot, revision));
+  persistence = operation.then(saved => { revision = saved; return true; }).catch(() => false);
+  revision = await operation;
+  Object.assign(track, updated); files.set(track.id, file); sourceStatuses.set(track.id, handle ? 'Ready' : 'Stored copy');
+  $('#save-status').textContent = t('Saved in this browser');
+}
+async function locateRecording(track) {
+  if (busy || temporaryWorkspace) throw new Error('Finish saving or importing before reconnecting files.');
+  if (canConnectFiles()) {
+    const [handle] = await window.showOpenFilePicker({ multiple: false });
+    const file = await handle.getFile();
+    await reconnectSame(track, file, handle); render(); notify('File reconnected. Cues and analysis retained.');
+  } else { reconnectMode = true; relinkId = track.id; $('#relink-input').click(); }
+}
+async function keepCopy(track) {
+  if (busy || temporaryWorkspace) throw new Error('Finish saving or importing before copying files.');
+  const file = await readyFile(track, true); if (!file) throw new Error('Locate the original file or grant access first.');
+  if (!confirm(t(`Keep an app copy (${Math.ceil(file.size / 1024 / 1024)} MB)?`))) return;
+  await reconnectSame(track, file); render(); await storageDetails();
+}
+$('#reconnect-folder').onclick = async () => {
+  if (busy || temporaryWorkspace) return;
+  try {
+    const directory = await window.showDirectoryPicker({ mode: 'read' }); busy = true;
+    const candidates = new Map();
+    for await (const candidate of folderFiles(directory)) {
+      $('#import-progress').hidden = false; $('#import-progress').textContent = `${t('Checking')}: ${candidate.file.name}`;
+      const hash = await contentHash(candidate.file);
+      if (!candidates.has(hash)) candidates.set(hash, []);
+      candidates.get(hash).push(candidate);
+    }
+    $('#repair-results').replaceChildren();
+    for (const track of state.tracks.filter(t => t.source === 'local')) {
+      const source = await resolveSource(track);
+      if (source.file) continue;
+      const matches = candidates.get(track.contentHash) || [];
+      const row = document.createElement('div'); row.className = 'repair-row';
+      const label = document.createElement('strong'); label.textContent = `${track.title} · ${matches.length ? t('Identical matches') : t('No verified match')}`; row.append(label);
+      for (const [i, candidate] of matches.entries()) {
+        const button = document.createElement('button'); button.textContent = `${t('Connect')} ${candidate.file.name} (${i + 1})`;
+        button.onclick = async () => {
+          button.disabled = true;
+          try { await reconnectSame(track, candidate.file, candidate.handle); render(); row.replaceChildren(label); label.textContent = `${track.title} · ${t('Ready')}`; }
+          catch (error) { button.disabled = false; notify(error.message, true); }
+        }; row.append(button);
+      }
+      $('#repair-results').append(row);
+    }
+    if (!$('#repair-results').children.length) $('#repair-results').textContent = t('All files are available.');
+    $('#repair-dialog').showModal();
+  } catch (error) { if (error.name !== 'AbortError') notify(error.message, true); }
+  finally { busy = false; $('#import-progress').hidden = true; }
+};
+function configureTarget(heading, label, explanation, track) {
+  $('#target-heading').textContent = t(heading);
+  $('#target-label').textContent = t(label);
+  $('#next-target').setAttribute('aria-label', t(label));
+  $('#target-explanation').textContent = t(explanation);
+  $('#target-recording').textContent = track.title;
+}
+function syncDestination() {
+  const collection = state.collections?.find(c => c.id === collectingInto);
+  const chosen = state.groups.find(g => g.id === selected);
+  $('#add-target').innerHTML = `<option value="">${t('Choose a tanda')}</option>` + state.groups.map(group => `<option value="${esc(group.id)}" data-preserve>${t(group.kind === 'cortina' ? 'Cortina' : 'Tanda')}: ${esc(group.name)}</option>`).join('');
+  $('#add-target').value = chosen?.id || '';
+  $('#library-target').textContent = collection ? `${t('Collecting candidates in')}: ${collection.name}` : t('Collect in set saves candidates. Add to tanda changes the selected tanda.');
+  $('#finish-adding').hidden = !collection;
+  for (const button of document.querySelectorAll('#tracks [data-action=add]')) button.textContent = t(chosen?.kind === 'cortina' ? 'Use as cortina' : 'Add to tanda');
+}
+$('#add-target').onchange = () => { selected = $('#add-target').value || null; void persist(); renderGroups(); renderLibrary(); };
+$('#finish-adding').onclick = () => { activeCollection = collectingInto; collectingInto = null; renderCollections(); renderLibrary(); showView('collections'); };
+function collectRecording(track, collectionId) {
+  const collection = state.collections.find(c => c.id === collectionId); if (!collection) return;
+  const exists = collection.trackIds.includes(track.id);
+  if (!exists) collection.trackIds.push(track.id);
+  void persist(); renderCollections(); syncDestination();
+  notify(`${t(exists ? 'Already in candidate set' : 'Collected in candidate set')}: ${collection.name}`);
+}
+function chooseTandaDestination(track) {
+  if (!state.groups.length) { showView('set'); notify('Create or select a tanda or cortina first.'); return; }
+  configureTarget('Choose target tanda', 'Target tanda', 'Add this recording to the chosen tanda. The live queue changes only when you update it.', track);
+  $('#next-target').innerHTML = state.groups.map(group => `<option value="${esc(group.id)}" data-preserve>${t(group.kind === 'cortina' ? 'Cortina' : 'Tanda')}: ${esc(group.name)}</option>`).join('');
+  $('#confirm-next').textContent = t('Add to tanda');
+  $('#confirm-next').onclick = () => { addToGroup(track.id, $('#next-target').value); $('#target-dialog').close(); };
+  $('#target-dialog').showModal();
+}
+function renderCollections() {
+  state.collections ||= [];
+  const previousFilter = $('#collection-filter').value;
+  $('#collection-filter').innerHTML = `<option value="">${t('All sets')}</option>` + state.collections.map(c => `<option value="${esc(c.id)}" data-preserve>${esc(c.name)}</option>`).join('');
+  $('#collection-filter').value = state.collections.some(c => c.id === previousFilter) ? previousFilter : '';
+  const collection = state.collections.find(c => c.id === activeCollection);
+  $('#collection-list').innerHTML = state.collections.map(c => `<div class="collection-row"><button data-collection="${esc(c.id)}" ${c.id === activeCollection ? 'aria-current="true"' : ''}><strong data-preserve>${esc(c.name)}</strong><span class="collection-count">${c.trackIds.length} ${t('recordings')}</span></button><button data-collection-delete="${esc(c.id)}">${t('Delete')}</button></div>`).join('') || `<p class="hint">${t('Create a set to collect candidate recordings.')}</p>`;
+  $('#collection-detail').innerHTML = collection ? `<div class="builder-actions"><button id="collection-browse">${t('Add recordings')}</button><button id="collection-tanda">${t('Create tanda from selected recordings')}</button><button id="collection-rename">${t('Rename')}</button></div>${collection.trackIds.map((id, index) => { const track = state.tracks.find(t => t.id === id); return `<div class="collection-recording"><label><input type="checkbox" data-candidate="${esc(id)}"><span data-preserve>${esc(track?.title)}</span></label><button data-candidate-remove="${index}">${t('Remove')}</button></div>`; }).join('')}` : '';
+  if (collection) {
+    $('#collection-browse').onclick = () => { collectingInto = collection.id; activeCollection = null; $('#collection-filter').value = ''; renderLibrary(); showView('library'); };
+    $('#collection-tanda').onclick = () => {
+      const ids = [...$('#collection-detail').querySelectorAll('[data-candidate]:checked')].map(el => el.dataset.candidate);
+      if (!ids.length) { notify('Choose recordings first.'); return; }
+      rememberSetEdit(); const group = { id: uid(), kind: 'tanda', name: collection.name, trackIds: ids, collapsed: phoneLayout.matches };
+      state.groups.push(group); selected = group.id; normalizeProgram(state); void persist(); render(); showView('set');
+    };
+    $('#collection-rename').onclick = () => { const name = prompt(t('Set name'), collection.name); if (name?.trim()) { collection.name = name.trim(); void persist(); renderCollections(); } };
+  }
+}
+$('#new-collection').onclick = () => { const name = prompt(t('Set name')); if (!name?.trim()) return; state.collections ||= []; const collection = { id: uid(), name: name.trim(), trackIds: [] }; state.collections.push(collection); activeCollection = collection.id; void persist(); renderCollections(); };
+$('#collection-list').onclick = event => {
+  const open = event.target.closest('[data-collection]'), remove = event.target.closest('[data-collection-delete]');
+  if (open) { activeCollection = open.dataset.collection; renderCollections(); renderLibrary(); }
+  if (remove && confirm(t('Delete this set? Recordings and tandas are kept.'))) { state.collections = state.collections.filter(c => c.id !== remove.dataset.collectionDelete); activeCollection = null; if (collectingInto === remove.dataset.collectionDelete) collectingInto = null; void persist(); renderCollections(); renderLibrary(); }
+};
+$('#collection-detail').onclick = event => { const remove = event.target.closest('[data-candidate-remove]'); if (remove) { state.collections.find(c => c.id === activeCollection).trackIds.splice(Number(remove.dataset.candidateRemove), 1); void persist(); renderCollections(); } };
+function addRecordingToCollection(track) {
+  if (!state.collections?.length) { notify('Create a set first.'); showView('collections'); return; }
+  if (collectingInto && state.collections.some(c => c.id === collectingInto)) { collectRecording(track, collectingInto); return; }
+  const dialog = $('#target-dialog'); configureTarget('Choose candidate set', 'Candidate set', 'Save this recording as a candidate. This does not change any tanda or playback order.', track); $('#next-target').innerHTML = state.collections.map(c => `<option value="${esc(c.id)}" data-preserve>${esc(c.name)}</option>`).join('');
+  $('#confirm-next').textContent = t('Collect in set');
+  $('#confirm-next').onclick = () => { collectRecording(track, $('#next-target').value); dialog.close(); };
+  dialog.showModal();
+}
+function renderPresets() {
+  $('#presets').innerHTML = (state.presets || []).map(preset => `<div class="preset-row"><strong data-preserve>${esc(preset.name)}</strong><button data-preset="${esc(preset.id)}">${t('Add tanda to playback')}</button><button data-preset-delete="${esc(preset.id)}">${t('Delete')}</button></div>`).join('');
+}
+$('#save-preset').onclick = () => {
+  const group = state.groups.find(g => g.id === selected && g.kind === 'tanda'); if (!group) { notify('Select a tanda first.'); return; }
+  const name = prompt(t('Tanda name'), group.name); if (!name?.trim()) return;
+  state.presets ||= [];
+  const cortina = state.groups.find(g => g.parentId === group.id);
+  state.presets.push({ id: uid(), name: name.trim(), notes: group.notes || '', trackIds: [...group.trackIds], ...(cortina ? { cortina: structuredClone(cortina) } : {}) });
+  void persist(); renderPresets(); notify('Reusable tanda saved. Playback edits keep this original unchanged.');
+};
+$('#presets').onclick = event => {
+  const add = event.target.closest('[data-preset]'), remove = event.target.closest('[data-preset-delete]');
+  if (remove) { state.presets = state.presets.filter(p => p.id !== remove.dataset.presetDelete); void persist(); renderPresets(); return; }
+  if (!add) return;
+  const preset = state.presets.find(p => p.id === add.dataset.preset);
+  const group = { id: uid(), kind: 'tanda', name: preset.name, notes: preset.notes, trackIds: [...preset.trackIds], presetId: preset.id, collapsed: phoneLayout.matches };
+  rememberSetEdit(); state.groups.push(group); selected = group.id;
+  if (preset.cortina) state.groups.push({ ...structuredClone(preset.cortina), id: uid(), parentId: group.id, occurrenceIds: undefined });
+  normalizeProgram(state); void persist(); renderGroups();
+};
+function moveTanda(group, direction) {
+  if (group.parentId) return;
+  const top = state.groups.filter(g => !g.parentId), position = top.indexOf(group), other = top[position + direction];
+  if (!other) return;
+  [top[position], top[position + direction]] = [top[position + direction], top[position]];
+  state.groups = top.flatMap(g => [g, ...state.groups.filter(c => c.parentId === g.id)]);
+}
+let nextTrack = null;
+async function choosePlayNext(track) {
+  if (transitioning || addingNext || queueIndex < 0) { notify('Start a tanda before adding a recording to play next.'); return; }
+  const active = queue[queueIndex];
+  if (active.kind === 'tanda' && state.groups.some(g => g.id === active.groupId)) { await addNext(track, active.groupId); return; }
+  nextTrack = track; configureTarget('Choose target tanda', 'Target tanda', 'Insert after the current recording. During a cortina, insert at the beginning of the next tanda.', track);
+  const passed = new Set(queue.slice(0, queueIndex + 1).filter(item => item.kind === 'tanda').map(item => item.groupId));
+  const groups = state.groups.filter(g => g.kind === 'tanda' && !passed.has(g.id));
+  if (!groups.length) { const name = prompt(t('Tanda name')); if (!name?.trim()) return; const group = { id: uid(), kind: 'tanda', name: name.trim(), trackIds: [], collapsed: phoneLayout.matches }; state.groups.push(group); groups.push(group); normalizeProgram(state); await persist(); renderGroups(); }
+  $('#next-target').innerHTML = groups.map(g => `<option value="${esc(g.id)}">${esc(g.name)}</option>`).join('');
+  if (active.kind === 'cortina') $('#next-target').value = queue.slice(queueIndex + 1).find(item => item.kind === 'tanda')?.groupId || groups[0].id;
+  $('#confirm-next').textContent = t('Add to play next');
+  $('#confirm-next').onclick = async () => { try { await addNext(nextTrack, $('#next-target').value); $('#target-dialog').close(); } catch (error) { notify(error.message, true); } };
+  $('#target-dialog').showModal();
+}
+async function addNext(track, targetId) {
+  if (transitioning || addingNext) return;
+  addingNext = true; updateTransport();
+  const token = playRequest, active = queue[queueIndex];
+  try {
+    if (track.source === 'local' && !await readyFile(track, true)) throw new Error('Locate the file or grant access before adding it.');
+    if (token !== playRequest || active !== queue[queueIndex] || transitioning) throw new Error('Playback advanced. Choose the target tanda again.');
+    if (loadedSignature && loadedSignature !== queueSignature(state.groups, state.tracks)) throw new Error('Update the upcoming queue before adding a recording.');
+    const previousGroups = structuredClone(state.groups), previousQueue = [...queue], previousSignature = loadedSignature;
+    if (!queue.slice(queueIndex + 1).some(item => item.groupId === targetId) && active.groupId !== targetId) {
+      const group = state.groups.find(g => g.id === targetId); const cortina = state.groups.find(g => g.parentId === targetId);
+      queue.push(...flattenSet([group, ...(cortina ? [cortina] : [])], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })));
+    }
+    insertNext(state, queue, queueIndex, track, targetId); loadedSignature = queueSignature(state.groups, state.tracks);
+    if (!await persist()) { state.groups = previousGroups; queue = previousQueue; loadedSignature = previousSignature; renderGroups(); renderQueue(); throw new Error('Could not save the added recording. The queue is unchanged.'); } renderGroups(); renderQueue(); notify('Recording added to this tanda. Current recording keeps playing.');
+  } finally { addingNext = false; updateTransport(); }
+}
+function renderPending() {
+  $('#pending-additions').innerHTML = queue.map((item, index) => ({ item, index })).filter(({ item, index }) => item.pendingAddition && index > queueIndex).map(({ item, index }) => `<div class="pending-row"><span data-preserve>${esc(item.groupName)} · ${esc(item.track.title)}</span><button data-pending-up="${index}">↑</button><button data-pending-down="${index}">↓</button><button data-pending-remove="${index}">${t('Cancel addition')}</button></div>`).join('');
+}
+$('#pending-additions').onclick = event => {
+  if (transitioning) return;
+  const button = event.target.closest('button'); if (!button) return;
+  const index = Number(button.dataset.pendingRemove ?? button.dataset.pendingUp ?? button.dataset.pendingDown), item = queue[index];
+  if (!item?.pendingAddition || index <= queueIndex) return;
+  const group = state.groups.find(g => g.id === item.groupId); if (!group) return;
+  const position = group.occurrenceIds.indexOf(item.occurrenceId);
+  if (button.dataset.pendingRemove !== undefined) { queue.splice(index, 1); group.trackIds.splice(position, 1); group.occurrenceIds.splice(position, 1); }
+  else {
+    const nextIndex = index + (button.dataset.pendingUp !== undefined ? -1 : 1), other = queue[nextIndex];
+    if (nextIndex <= queueIndex || !other?.pendingAddition || other.groupId !== item.groupId) return;
+    const otherPosition = group.occurrenceIds.indexOf(other.occurrenceId);
+    [queue[index], queue[nextIndex]] = [other, item];
+    [group.trackIds[position], group.trackIds[otherPosition]] = [group.trackIds[otherPosition], group.trackIds[position]];
+    [group.occurrenceIds[position], group.occurrenceIds[otherPosition]] = [group.occurrenceIds[otherPosition], group.occurrenceIds[position]];
+  }
+  loadedSignature = queueSignature(state.groups, state.tracks); void persist(); renderGroups(); renderQueue();
+};
+
 try {
   const saved = await loadState(); firstVisit = !saved; if (saved) { revision = saved.revision || 0; state = validateSet({ version: 1, ...saved }); selected = saved.selected; loadedSignature = typeof saved.loadedSignature === 'string' ? saved.loadedSignature : null; resumeIndex = Number.isInteger(saved.queueIndex) && saved.queueIndex >= 0 ? saved.queueIndex : 0; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; }
-  const migrated = removeOldExamples(state); state = migrated.state;
+  const migrated = removeOldExamples(state); state = migrated.state; normalizeProgram(state);
   for (const group of state.groups) if (group.samplePack === REAL_SAMPLE_PACK && group.kind === 'cortina') {
     const defaults = realGroups().find(item => item.id === group.id);
     if (defaults && [defaults.name + ' · 20-second cortina', defaults.name + ' · Closing cortina'].includes(group.name)) group.name = defaults.name;
   }
   for (const track of migrated.removed) if (track.source === 'local') await deleteFile(track.id);
   queue = savedQueue.filter(item => state.tracks.some(t => t.id === item.trackId)).map(item => ({ ...item, kind: item.kind || state.groups.find(group => group.id === item.groupId)?.kind, track: structuredClone(state.tracks.find(t => t.id === item.trackId)) }));
+  const occurrenceCounts = new Map();
+  for (const item of queue) { const key = `${item.groupId}:${item.track.id}`; const index = occurrenceCounts.get(key) || 0; occurrenceCounts.set(key, index + 1); if (!item.occurrenceId) { const group = state.groups.find(g => g.id === item.groupId); const positions = group?.trackIds.map((id, index) => ({ id, index })).filter(entry => entry.id === item.track.id); item.occurrenceId = group?.occurrenceIds[positions?.[index]?.index]; } }
   if (saved) { queueIndex = -1; $('#queue-resume').hidden = !queue.length; }
-  for (const track of state.tracks.filter(t => t.source === 'local')) { const file = await getFile(track.id); if (file) files.set(track.id, file); }
+  for (const track of state.tracks.filter(t => t.source === 'local')) { await readyFile(track); if (!track.contentHash && files.has(track.id)) track.contentHash = await contentHash(files.get(track.id)); }
   selected = state.groups.some(g => g.id === selected) ? selected : state.groups[0]?.id || null;
 } catch (error) { showStorageRecovery(error); notify(`Could not restore your library: ${storageMessage(error)}`, true); }
 render();

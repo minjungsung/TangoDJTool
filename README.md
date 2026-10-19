@@ -15,15 +15,15 @@ Open the local URL printed by Vite. For a production build, run `npm run build`;
 
 ## Phone, tablet, and computer workflows
 
-On a first visit, the example set is already prepared and the Play work area opens. Press Play to start the examples; YouTube requires a connection. Saved workspaces, including deliberately cleared sets, are preserved.
+On a first visit, the example set is already prepared and the Playback work area opens. Press Play to start the examples; YouTube requires a connection. Saved workspaces, including deliberately cleared sets, are preserved.
 
-On phones, use **1 · Music → 2 · Set → 3 · Play** in the bottom navigation. Add files in Music, create a tanda in Set, then choose **Choose recordings for this group** and use **Add** on each recording. Return to Set and choose **Load & play set**, or start the prepared set from Play. Playback opens the deck; compact pause/next controls stay available while browsing. **More** opens recording details, preview, analysis, and deletion. **Menu** contains examples, the guide, settings, and set backup/import. Playback settings expand inside Play.
+Use **1 · Music → 2 · Sets → 3 · Tandas → 4 · Playback**. Music is the master catalog. Sets collect candidate recordings without copying audio. First visits include seven curated candidate sets: four tango sets, one vals set, one milonga set, and a cortina collection, covering all 28 sample recordings. Explicitly loading the examples restores missing sample sets; ordinary reloads preserve deletions and existing workspaces. **Collect in set** saves a candidate in a chosen set; **Add to tanda** adds it to the destination shown above the library. **Use as cortina** appears for a cortina destination. Browse from a set to collect directly into it, then use **Back to set**. Recording management actions are available through **More** on every screen size. Select candidates to create a tanda, attach a cortina, and use **Save tanda** to keep a reusable original. Playback-program edits do not alter that original. Tanda cards expand/collapse and store notes; 3–4 recordings is a recommendation rather than a hard limit.
 
-Portrait tablets keep readable cards and labeled navigation. At 900–1199 CSS pixels the library and builder sit side by side. Computer layouts retain the full workspace, tabular library, and keyboard controls. Resizing changes the presentation while preserving playback and the queue.
+During a tanda, **Play next** inserts a recording after the current song while keeping its playback position. Multiple additions keep their selection order; pending additions can be reordered or canceled. During a cortina, choose the next tanda as the target. **Next tanda** manually ends the cortina using the selected fade. New cortinas use the rest of the recording and wait for manual advance by default; existing saved advance settings remain intact.
 
-Loading failures keep the selected recording ready for **Retry**, file relinking, or skipping. A YouTube permission hint explains when to press play inside the video. File imports display progress; quota errors explain how to free space or reduce the import. Previously imported recordings remain available if a later file fails. If browser database initialization or example saving fails, the examples can play in a clearly labeled temporary workspace. Use Retry saving to restore persistence; export edits before closing the tab. Local import requires working storage. Audio files are still separate from exported set JSON.
+**Local files** copies audio into browser storage. **Connect originals**, where the browser supports file handles, reads originals without storing a full audio copy. **Check files** shows permission and availability; **Locate file** and **Reconnect from folder** verify identical content even after renaming. Different audio requires reviewed replacement and fresh analysis. Connecting an identical original can reuse an existing recording ID; **Keep an app copy** offers independent storage at the displayed space cost. Filesystem permission may require renewal, and handles are not portable backups.
 
-The [device and playback plan](docs/device-playback-improvement-plan.md) records requirements, implementation order, acceptance criteria, and the physical-device verification checklist.
+Phones and tablets use labeled navigation and recording action menus. Playback continues while moving between work areas; compact controls remain available. DJ performance histories and event records are outside this feature scope.
 
 ## Milonga DJ playlist
 
@@ -52,7 +52,7 @@ The walkthrough uses this playlist for library, metadata, composition, playback,
 - Read embedded title, artist, year, genre, BPM, and duration where available; edit title, orchestra, singer, year, style, and BPM.
 - Add individual YouTube watch, short, live, or share URLs. Video titles are fetched when available and can be edited manually.
 - Search recordings and filter by dance style or source.
-- Create, rename, reorder, and remove tandas and cortinas. Add tracks with the library's + button or drag them into a group; reorder tracks within groups.
+- Create, rename, reorder, and remove tandas and cortinas. Add tracks with **Add to tanda** or drag them into a group; reorder tracks within groups.
 - Load an ordered set into the play queue, switch between local and YouTube recordings, pause, seek, adjust volume, and optionally advance automatically.
 - Preview local recordings, fade recordings in and out at segment boundaries and during manual transitions, and optionally apply analyzed gain.
 - Estimate local BPM, RMS level, peak, and suggested gain. BPM remains editable.
@@ -102,7 +102,7 @@ The [complete feature validation](docs/all-features-validation.md) maps current 
 
 ## Personal browser workspace and languages
 
-Each visitor has an independent workspace for the same site origin in their browser profile. IndexedDB stores library metadata, local audio (Blob values or a byte-based fallback for affected WebKit environments), group order, and the loaded queue; localStorage stores language, volume, fade, normalization, automatic advance, and walkthrough preferences. Reloading restores the queue without automatically starting audio. Regular visits preserve deleted/reordered sample groups; **Load milonga playlist** explicitly adds missing sample groups again.
+Each visitor has an independent workspace for the same site origin in their browser profile. IndexedDB stores library metadata, local audio (Blob values or a byte-based fallback for affected WebKit environments), group order, candidate sets, reusable tandas, original-file handles where supported, and the loaded queue; localStorage stores language, volume, fade, normalization, automatic advance, and walkthrough preferences. Reloading restores the queue without automatically starting audio. Regular visits preserve deleted/reordered sample groups; **Load milonga playlist** explicitly adds missing sample groups again.
 
 The language selector supports Korean, English, and Spanish, including the walkthrough and playback recovery controls. Recording titles, artist names, and user-entered metadata are preserved. The initial language follows the browser language and subsequent choices are saved. Interface text uses larger, readable sizes and controls remain usable on mobile.
 
@@ -114,7 +114,7 @@ The embedded player starts with an explicit video ID and origin, with a referrer
 
 ## Everyday workspace
 
-The main screen opens directly onto the library, set builder, and player. The toolbar provides **Example sets**, **User guide**, **Settings**, **Import set**, and **Export set**. Examples and help are available in dialogs and do not occupy the working area. Settings contains the language selector and detailed browser storage controls. Successful action messages disappear automatically; notifications can also be dismissed. Errors remain visible until dismissed or replaced.
+The workspace has four work areas for music, candidate sets, tandas, and playback. The toolbar provides **Example sets**, **User guide**, **Settings**, **Import set**, and **Export set**. Examples and help are available in dialogs and do not occupy the working area. Settings contains the language selector and detailed browser storage controls. Successful action messages disappear automatically; notifications can also be dismissed. Errors remain visible until dismissed or replaced.
 
 Adding an example imports six editable tandas and their cortinas. Normal reloads restore your edits, queue, and preferences without playing audio or adding removed groups again. The legacy `?practice=1` link imports the example once and removes that query parameter from the URL. Use the normal site URL for everyday work.
 

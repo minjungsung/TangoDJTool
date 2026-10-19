@@ -7,8 +7,8 @@ async function db() {
     let settled = false;
     const timeout = setTimeout(() => { settled = true; reject(new Error('Browser storage did not respond. Try a normal browser tab or retry saving.')); }, 8000);
     let req;
-    try { req = indexedDB.open('tango-dj-studio', 1); } catch (error) { clearTimeout(timeout); reject(error); return; }
-    req.onupgradeneeded = () => { req.result.createObjectStore('files'); req.result.createObjectStore('state'); };
+    try { req = indexedDB.open('tango-dj-studio', 2); } catch (error) { clearTimeout(timeout); reject(error); return; }
+    req.onupgradeneeded = () => { for (const name of ['files', 'state', 'sources']) if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name); };
     req.onsuccess = () => {
       clearTimeout(timeout); if (settled) { req.result.close(); return; } settled = true;
       req.result.onversionchange = () => { req.result.close(); database = null; };
@@ -29,7 +29,7 @@ async function write(store, action) {
 }
 const conflictMessage = 'This workspace changed in another tab. Export your edits, then reload to use the latest saved workspace.';
 async function writeWorkspace(state, expectedRevision, replacement) {
-  const stores = replacement ? ['state', 'files'] : ['state'];
+  const stores = replacement ? ['state', 'files', 'sources'] : ['state'];
   const tx = (await db()).transaction(stores, 'readwrite'), store = tx.objectStore('state');
   return new Promise((resolve, reject) => {
     let revision, operationError, conflict = false;
@@ -44,7 +44,12 @@ async function writeWorkspace(state, expectedRevision, replacement) {
       revision = currentRevision + 1;
       try {
         const saving = store.put({ ...state, revision }, 'current'); saving.onerror = () => { operationError = saving.error; };
-        if (replacement) { const file = tx.objectStore('files').put(replacement.file, replacement.id); file.onerror = () => { operationError = file.error; }; }
+        if (replacement) {
+          if (replacement.file) { const file = tx.objectStore('files').put(replacement.file, replacement.id); file.onerror = () => { operationError = file.error; }; }
+          const sources = tx.objectStore('sources');
+          const source = replacement.handle ? sources.put({ handle: replacement.handle }, replacement.id) : sources.delete(replacement.id);
+          source.onerror = () => { operationError = source.error; };
+        }
       } catch (error) { operationError = error; tx.abort(); }
     };
   });
@@ -66,11 +71,14 @@ export const getFile = async id => {
   const value = await request((await db()).transaction('files').objectStore('files').get(id));
   return value?.audioBytes instanceof ArrayBuffer ? new Blob([value.audioBytes], { type: value.type }) : value;
 };
-export const deleteFile = id => write('files', s => s.delete(id));
+export const deleteFile = async id => { await write('files', s => s.delete(id)); await write('sources', s => s.delete(id)); };
+export const getSource = async id => request((await db()).transaction('sources').objectStore('sources').get(id));
+export const saveSource = (id, source) => write('sources', store => source ? store.put(source, id) : store.delete(id));
 
 
 // Commit replacement audio and its metadata in one transaction.
 export const replaceRecording = async (id, file, state, expectedRevision) => writeWorkspace(state, expectedRevision, { id, file: await recordingData(file) });
+export const reconnectRecording = async (id, file, handle, state, expectedRevision) => writeWorkspace(state, expectedRevision, { id, handle, file: handle ? null : await recordingData(file) });
 
 export function storageMessage(error) {
   if (error?.name === 'QuotaExceededError') return 'Browser storage is full. Free space or import fewer files, then retry. Keep your original audio files.';

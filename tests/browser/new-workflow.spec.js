@@ -1,0 +1,258 @@
+import { test, expect, recordingAction } from './saved-workspace.js';
+
+async function bootstrap(page) {
+  await page.addInitScript(() => {
+    localStorage.setItem('studio-language', 'en');
+    window.YT = { Player: class {
+      constructor(id, options) { this.options = options; this.state = 2; this.position = 0; window.testYT = this; setTimeout(() => options.events.onReady(), 0); }
+      loadVideoById(value) { this.id = typeof value === 'string' ? value : value.videoId; this.position = value.startSeconds || 0; this.state = 1; this.options.events.onStateChange({ data: 1 }); }
+      getCurrentTime() { return this.position; } getDuration() { return 180; } getPlayerState() { return this.state; }
+      getVideoUrl() { return `https://www.youtube.com/watch?v=${this.id}`; } setVolume() {} pauseVideo() { this.state = 2; } playVideo() { this.state = 1; } seekTo(value) { this.position = value; }
+    } };
+  });
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const tracks = ['a','b','c','x'].map((id, i) => ({ id, source: 'youtube', videoId: `abcdefghij${i}`, title: id.toUpperCase(), duration: 180 }));
+    const db = await new Promise(resolve => { const r = indexedDB.open('tango-dj-studio', 2); r.onsuccess = () => resolve(r.result); });
+    await new Promise(resolve => { const tx = db.transaction('state', 'readwrite'); tx.objectStore('state').put({ tracks, groups: [{ id: 't', name: 'My tanda', kind: 'tanda', trackIds: ['a','b','a'] }, { id: 'cortina', name: 'My cortina', kind: 'cortina', trackIds: ['c'], fullLength: true, holdAfter: true }, { id: 't2', name: 'Second tanda', kind: 'tanda', trackIds: ['b'] }], revision: 2 }, 'current'); tx.oncomplete = resolve; }); db.close();
+  });
+  await page.reload();
+}
+async function nav(page, view) { await page.locator(`.sidebar a[href="#${view}"]`).click(); }
+
+test('sets create tandas; presets and collapsed cards survive reload and export', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'collections');
+  page.once('dialog', dialog => dialog.accept('Candidates')); await page.locator('#new-collection').click();
+  await nav(page, 'library');
+  for (const id of ['a','b','x']) {
+    await page.locator(`[data-action="collection"][data-id="${id}"]`).click();
+    await page.locator('#confirm-next').click();
+  }
+  await nav(page, 'collections'); await page.locator('[data-collection]').click();
+  for (const input of await page.locator('[data-candidate]').all()) await input.check();
+  await page.locator('#collection-tanda').click();
+  await expect(page.locator('#groups .group').last()).toContainText('Candidates');
+  page.once('dialog', dialog => dialog.accept('Reusable')); await page.locator('#save-preset').click();
+  const group = page.locator('#groups .group').last(); await group.locator('[data-group-action="collapse"]').click();
+  await expect(group.locator('ol')).toBeHidden();
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  await page.reload(); await nav(page, 'set');
+  await expect(page.locator('#presets')).toContainText('Reusable');
+  await expect(page.locator('#groups .group').last().locator('ol')).toBeHidden();
+  await page.locator('[data-preset]').click();
+  await expect(page.locator('#groups .group')).toHaveCount(5);
+  const download = page.waitForEvent('download'); await page.locator('#export-set').click();
+  const path = await (await download).path();
+  page.once('dialog', dialog => dialog.accept()); await page.locator('#set-input').setInputFiles(path);
+  await expect(page.locator('#notice')).toContainText('Set imported');
+  await expect(page.locator('#presets')).toContainText('Reusable');
+});
+
+test('play-next keeps active position, preserves addition order, and leaves preset unchanged', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set'); await page.locator('[data-group-action="select"][data-id="t"]').click();
+  page.once('dialog', dialog => dialog.accept('Original')); await page.locator('#save-preset').click();
+  await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('A');
+  await page.evaluate(() => { window.testYT.position = 42; window.testYT.pauseVideo(); });
+  await nav(page, 'library');
+  await page.locator('[data-action="play-next"][data-id="x"]').click();
+  await page.locator('[data-action="play-next"][data-id="b"]').click();
+  expect(await page.evaluate(() => [window.testYT.position, window.testYT.state])).toEqual([42,2]);
+  await nav(page, 'deck');
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','X','B','B','A','C','B']);
+  await page.locator('[data-pending-remove]').last().click();
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','X','B','A','C','B']);
+  await page.locator('#next').click(); await expect(page.locator('#playing-title')).toHaveText('X');
+  await nav(page, 'set'); await page.locator('[data-preset]').click();
+  await expect(page.locator('#groups .group').filter({ has: page.locator('.group-select strong', { hasText: 'Original' }) }).locator('li')).toHaveCount(3);
+});
+
+test('manual cortina waits at endpoint, inserts in next tanda, and advances on explicit button', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
+  await page.locator('[data-queue-index="3"]').click();
+  await expect(page.locator('#next-tanda')).toBeVisible();
+  await page.evaluate(() => { window.testYT.position = 180; window.testYT.state = 0; window.testYT.options.events.onStateChange({ data: 0 }); });
+  await expect(page.locator('#playing-title')).toHaveText('C');
+  await nav(page, 'library'); await page.locator('[data-action="play-next"][data-id="x"]').click();
+  await page.locator('#confirm-next').click(); await nav(page, 'deck');
+  await page.locator('#next-tanda').click(); await expect(page.locator('#playing-title')).toHaveText('X');
+});
+
+test('copied audio uses content identity for duplicate detection and identical relinking', async ({ page }) => {
+  await page.goto('/');
+  const audio = Buffer.from('a local source identity fixture');
+  await page.locator('#file-input').setInputFiles({ name: 'original.mp3', mimeType: 'audio/mpeg', buffer: audio });
+  await expect(page.locator('#library-count')).toHaveText('1');
+  await page.locator('#file-input').setInputFiles({ name: 'renamed.mp3', mimeType: 'audio/mpeg', buffer: audio });
+  await expect(page.locator('#import-progress')).toContainText('Skipped');
+  await expect(page.locator('#library-count')).toHaveText('1');
+  await page.locator('#file-input').setInputFiles({ name: 'original.mp3', mimeType: 'audio/mpeg', buffer: Buffer.from('a different source') });
+  await expect(page.locator('#library-count')).toHaveText('2');
+  const ids = await page.locator('#tracks tr').evaluateAll(rows => rows.map(row => row.dataset.track));
+  await page.evaluate(async id => {
+    const db = await new Promise(resolve => { const req = indexedDB.open('tango-dj-studio', 2); req.onsuccess = () => resolve(req.result); });
+    await new Promise(resolve => { const tx = db.transaction('files','readwrite'); tx.objectStore('files').delete(id); tx.oncomplete = resolve; }); db.close();
+  }, ids[0]);
+  await page.locator('#check-files').click(); await expect(page.locator('.missing')).toHaveCount(1);
+  const picker = page.waitForEvent('filechooser');
+  // Force the copied-file fallback instead of opening a real OS picker.
+  await page.evaluate(() => { window.showOpenFilePicker = undefined; });
+  await recordingAction(page, 'locate', ids[0]);
+  await (await picker).setFiles({ name: 'moved.mp3', mimeType: 'audio/mpeg', buffer: audio });
+  await expect(page.locator('.missing')).toHaveCount(0);
+  await expect(page.locator('#notice')).toContainText('Cues and analysis retained');
+  await page.reload(); await expect(page.locator('.missing')).toHaveCount(0);
+});
+
+test('linked sources renew permission and folder repair verifies renamed bytes without copying', async ({ page }) => {
+  await page.addInitScript(() => {
+    const handles = new Map(); window.testHandles = handles;
+    const native = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function(value, key) {
+      if (this.name === 'sources' && value?.handle) { handles.set(key, value.handle); return native.call(this, { fakeHandle: key }, key); }
+      return native.call(this, value, key);
+    };
+    const getter = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.get = function(key) {
+      const req = getter.call(this, key);
+      if (this.name === 'sources') req.addEventListener('success', () => { if (req.result?.fakeHandle) Object.defineProperty(req, 'result', { value: { handle: handles.get(key) } }); });
+      return req;
+    };
+    const file = () => new File(['original bytes'], 'source.mp3', { type: 'audio/mpeg' });
+    const original = { kind: 'file', name: 'source.mp3', allowed: true, missing: false,
+      async queryPermission() { return this.allowed ? 'granted' : 'prompt'; }, async requestPermission() { this.allowed = true; return 'granted'; },
+      async getFile() { if (this.missing) throw new Error('Moved'); return file(); } };
+    window.originalHandle = original;
+    window.showOpenFilePicker = async () => [original];
+    window.showDirectoryPicker = async () => ({ async *values() {
+      yield { kind: 'file', name: 'renamed.mp3', async queryPermission() { return 'granted'; }, async getFile() { return new File(['original bytes'], 'renamed.mp3', { type: 'audio/mpeg' }); } };
+      yield { kind: 'file', name: 'source.mp3', async queryPermission() { return 'granted'; }, async getFile() { return new File(['different bytes'], 'source.mp3', { type: 'audio/mpeg' }); } };
+    } });
+  });
+  await page.goto('/'); await page.locator('#connect-files').click();
+  await expect(page.locator('#library-count')).toHaveText('1'); await expect(page.locator('.source-status')).toHaveText('Ready');
+  const count = await page.evaluate(async () => { const db = await new Promise(resolve => { const r = indexedDB.open('tango-dj-studio',2); r.onsuccess = () => resolve(r.result); }); const n = await new Promise(resolve => { const r = db.transaction('files').objectStore('files').count(); r.onsuccess = () => resolve(r.result); }); db.close(); return n; });
+  expect(count).toBe(0);
+  await page.evaluate(() => { window.originalHandle.allowed = false; });
+  await page.locator('#check-files').click(); await expect(page.locator('.source-status')).toHaveText('Permission needed');
+  page.once('dialog', dialog => dialog.dismiss());
+  await recordingAction(page, 'copy');
+  await page.evaluate(() => { window.originalHandle.missing = true; });
+  await page.locator('#check-files').click(); await expect(page.locator('.source-status')).toHaveText('File missing');
+  await page.locator('#reconnect-folder').click();
+  await expect(page.locator('#repair-results button')).toHaveCount(1);
+  await expect(page.locator('#repair-results button')).toContainText('renamed.mp3');
+  await page.locator('#repair-results button').click();
+  await expect(page.locator('#repair-results')).toContainText('Ready');
+});
+
+for (const width of [390, 1024]) {
+  test(`four work areas and collapsed tanda controls fit ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 }); await bootstrap(page);
+    for (const area of ['library','collections','set','deck']) {
+      await page.locator(`button[data-view="${area}"]`).click();
+      await expect(page.locator(`#${area}`)).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    }
+    await page.locator('button[data-view="set"]').click();
+    await page.locator('[data-group-action="collapse"][data-id="t"]').click();
+    await expect(page.locator('[data-group="t"] ol')).toBeHidden();
+    await page.locator('[data-group-action="collapse"][data-id="t"]').click();
+    await expect(page.locator('[data-group="t"] ol')).toBeVisible();
+  });
+}
+
+test('failed next insertion rolls back the queue and tanda', async ({ page }) => {
+  await bootstrap(page); await nav(page,'set'); await page.locator('#start-set').click();
+  await page.evaluate(() => {
+    const original = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function(...args) { if (this.name === 'state') throw new DOMException('Full', 'QuotaExceededError'); return original.apply(this,args); };
+  });
+  await nav(page,'library'); await page.locator('[data-action="play-next"][data-id="x"]').click();
+  await expect(page.locator('#notice')).toContainText('queue is unchanged');
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A','C','B']);
+  await expect(page.locator('[data-group="t"] li')).toHaveCount(3);
+});
+
+test('manual cortina fade can be canceled by Stop without starting another recording', async ({ page }) => {
+  await bootstrap(page); await nav(page,'set'); await page.locator('#start-set').click();
+  await page.locator('[data-queue-index="3"]').click();
+  await page.evaluate(() => { window.testYT.position = 10; }); await page.waitForTimeout(150);
+  await page.locator('.playback-options').evaluate(el => el.open = true); await page.locator('#fade').selectOption('1');
+  await page.locator('#next-tanda').click(); await page.locator('#stop').click();
+  await expect(page.locator('#playing-title')).toHaveText('C');
+  await expect(page.locator('#play-pause')).toHaveText('▶');
+  await page.waitForTimeout(1100);
+  await expect(page.locator('#playing-title')).toHaveText('C');
+});
+
+test('collecting candidates and choosing a tanda change separate destinations', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'collections');
+  page.once('dialog', dialog => dialog.accept('Candidates')); await page.locator('#new-collection').click();
+  await nav(page, 'library');
+  await page.locator('[data-action=collection][data-id=x]').click();
+  await expect(page.locator('#target-heading')).toHaveText('Choose candidate set');
+  await expect(page.locator('#target-recording')).toHaveText('X');
+  await expect(page.locator('#target-explanation')).toContainText('does not change any tanda');
+  await page.locator('#confirm-next').click();
+  await expect(page.locator('[data-group=t] li')).toHaveCount(3);
+  await page.locator('#add-target').selectOption('t2');
+  await page.locator('[data-action=add][data-id=x]').click();
+  await expect(page.locator('[data-group=t2] li')).toHaveCount(2);
+  await expect(page.locator('[data-group=t] li')).toHaveCount(3);
+  await page.locator('#add-target').selectOption('');
+  await page.locator('[data-action=add][data-id=a]').click();
+  await expect(page.locator('#target-heading')).toHaveText('Choose target tanda');
+  await expect(page.locator('#target-recording')).toHaveText('A');
+  await page.locator('#next-target').selectOption('t2'); await page.locator('#confirm-next').click();
+  await expect(page.locator('[data-group=t2] li')).toHaveCount(3);
+  await nav(page, 'collections'); await page.locator('[data-collection]').click();
+  await expect(page.locator('[data-candidate]')).toHaveCount(1);
+  await page.locator('#collection-browse').click();
+  await expect(page.locator('#library-target')).toContainText('Candidates');
+  await page.locator('[data-action=collection][data-id=b]').click();
+  await expect(page.locator('#target-dialog')).toBeHidden();
+  await page.locator('#finish-adding').click();
+  await expect(page.locator('#collections')).toBeVisible();
+  await expect(page.locator('[data-candidate]')).toHaveCount(2);
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  await page.reload(); await nav(page, 'collections'); await page.locator('[data-collection]').click();
+  await expect(page.locator('[data-candidate]')).toHaveCount(2);
+});
+
+for (const language of ['en','ko','es']) {
+  test(`recording actions and tanda toolbars fit narrow and wide screens in ${language}`, async ({ page }) => {
+    await bootstrap(page);
+    await page.locator('#open-settings').click();
+    await page.locator('#language').selectOption(language);
+    await page.locator('[data-close=settings-dialog]').click();
+    for (const width of [320,390,1024,1440]) {
+      await page.setViewportSize({width,height:900});
+      const navigate = async area => {
+        const button = page.locator(`button[data-view="${area}"]`);
+        if (await button.isVisible()) await button.click(); else await nav(page,area);
+      };
+      await navigate('library');
+      if (await page.locator('#dismiss-notice').isVisible()) await page.locator('#dismiss-notice').click();
+      const row = page.locator('#tracks tr').first();
+      await row.scrollIntoViewIfNeeded();
+      for (const name of ['play','collection','add','more']) {
+        await expect.poll(async () => {
+          const box = await row.locator(`[data-action="${name}"]`).boundingBox();
+          return box && box.x >= 0 && box.x + box.width <= width && box.height >= 40;
+        }).toBeTruthy();
+      }
+      await expect(row.locator('[data-action=play-next]')).toBeHidden();
+      await navigate('set');
+      const tools = page.locator('[data-group=t] .group-tools');
+      const boxes = await tools.locator('button').evaluateAll(buttons => buttons.map(button => {
+        const {x,y,width,height}=button.getBoundingClientRect(); return {x,y,width,height};
+      }));
+      for (const box of boxes) { expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x+box.width).toBeLessThanOrEqual(width); expect(box.height).toBeGreaterThanOrEqual(40); }
+      for (let i=0;i<boxes.length;i++) for (let j=i+1;j<boxes.length;j++) {
+        const a=boxes[i],b=boxes[j]; expect(a.x+a.width <= b.x+0.1 || b.x+b.width <= a.x+0.1 || a.y+a.height <= b.y+0.1 || b.y+b.height <= a.y+0.1).toBeTruthy();
+      }
+      const checkbox = await page.locator('[data-cortina-hold]').boundingBox(); expect(checkbox.height).toBe(18);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    }
+  });
+}
