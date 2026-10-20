@@ -37,6 +37,7 @@ for (const device of ['iPhone 13', 'iPad (gen 7)', 'Pixel 7']) {
     await view(page, 'library'); await page.locator('[data-action=add]').click();
     await view(page, 'set');
     await view(page, 'set'); await page.locator('#start-set').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'set'); await view(page, 'deck');
     await expect(page.locator('#deck')).toBeVisible(); await expect(page.locator('#position')).toContainText('0:01', { timeout: 10000 });
     await page.locator('button[data-view=library]').click();
     await expect(page.locator('#mini-deck')).toBeVisible(); await page.locator('#mini-play').click();

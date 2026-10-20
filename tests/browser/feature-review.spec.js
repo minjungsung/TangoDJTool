@@ -110,8 +110,8 @@ test('individual/bulk analysis, gain adjustment, preview/stop preview, and previ
   await page.locator('#analyze-all').click();await expect(page.locator('#notice')).toContainText('2 tracks analyzed');
   await action(page,'play',0);await view(page,'deck');await page.locator('.playback-options').evaluate(el=>el.open=true);await page.locator('#normalize').check();await expect.poll(()=>page.evaluate(()=>window.reviewGain.gain.value)).toBeGreaterThan(1);
   await page.locator('#normalize').uncheck();await expect.poll(()=>page.evaluate(()=>window.reviewGain.gain.value)).toBeLessThan(.9);
-  await action(page,'preview',1);await expect(page.locator('#preview-status')).toBeVisible();await page.locator('#stop-preview').click();await expect(page.locator('#preview-status')).toBeHidden();
-  await view(page,'library');await page.locator('#search').fill('No matching track');await menu(page,'open-guide');await page.locator('#guide-preview').click();await expect(page.locator('#preview-status')).toBeVisible();
+  await action(page,'preview',1);await view(page,'deck');await expect(page.locator('#preview-status')).toBeVisible();await page.locator('#stop-preview').click();await expect(page.locator('#preview-status')).toBeHidden();
+  await view(page,'library');await page.locator('#search').fill('No matching track');await menu(page,'open-guide');await page.locator('#guide-preview').click();await view(page,'deck');await expect(page.locator('#preview-status')).toBeVisible();
 });
 
 test('local transport: pause/resume, previous/next, seek, volume/mute, keyboard, final endpoint and Auto next', async ({page}) => {
@@ -129,7 +129,7 @@ test('local transport: pause/resume, previous/next, seek, volume/mute, keyboard,
 test('cortina segment cue/play reaches deck on phone, copies position, waits and resumes next tanda', async ({page}) => {
   await upload(page,wav());await view(page,'set');await page.locator('#add-cortina').click();await action(page,'add');await view(page,'set');
   await page.locator('[data-cortina-full]').uncheck();await page.locator('[data-cortina-start]').fill('2');await page.locator('[data-cortina-start]').blur();await page.locator('[data-cortina-end]').fill('5');await page.locator('[data-cortina-end]').blur();await page.locator('[data-cortina-hold]').check();
-  await page.locator('[data-group-action=cue-play]').click();await expect(page.locator('#deck')).toBeVisible();await expect(page.locator('#position')).toContainText('/ 0:03');
+  await page.locator('[data-group-action=cue-play]').click();await view(page,'deck');await expect(page.locator('#deck')).toBeVisible();await expect(page.locator('#position')).toContainText('/ 0:03');
   await expect(page.locator('#play-pause')).toHaveText('▶',{timeout:7000});await page.locator('#play-pause').click();await expect(page.locator('#position')).toContainText('0:00');
   await view(page,'set');await page.locator('[data-group-action=cue-position]').click();await expect(page.locator('[data-cortina-start]')).not.toHaveValue('0');
 });
@@ -156,7 +156,7 @@ test('YouTube recovery: retry, open URL, replace invalid/valid link, use local r
 });
 
 test('delete library recording: cancel then confirm while previewing stops deleted preview', async ({page}) => {
-  await upload(page,wav());await action(page,'preview');await expect(page.locator('#preview-status')).toBeVisible();
+  await upload(page,wav());await action(page,'preview');await view(page,'deck');await expect(page.locator('#preview-status')).toBeVisible();
   page.once('dialog',d=>d.dismiss());await action(page,'delete');await expect(page.locator('#library-count')).toHaveText('1');
   page.once('dialog',d=>d.accept());await action(page,'delete');await expect(page.locator('#library-count')).toHaveText('0');await view(page,'deck');await expect(page.locator('#preview-status')).toBeHidden();
 });
@@ -183,8 +183,8 @@ test('portable export/import in another browser, canceled import, malformed/over
   await action(other,'play');await expect(other.locator('#position')).toContainText('0:01');await save(other);await other.reload();await expect(other.locator('#library-count')).toHaveText('1');await expect(other.locator('.missing')).toHaveCount(0);await context.close();
 });
 
-test('prepared-deck button, queue selection, stale queue update, Undo and restored queue', async ({page}) => {
-  await provider(page);await page.reload();await samples(page);await view(page,'deck');await page.locator('#deck-start-set').click();await expect(page.locator('#queue-count')).toHaveText('28');
+test('full program playback, queue selection, stale queue update, Undo and restored queue', async ({page}) => {
+  await provider(page);await page.reload();await samples(page);await view(page,'set');await page.locator('#start-set').click();await view(page,'deck');await expect(page.locator('#queue-count')).toHaveText('28');
   await page.locator('[data-queue-index="5"]').click();await expect(page.locator('#playing-title')).toHaveText('Poema');
   const loads=await page.evaluate(()=>reviewProvider.loads);await view(page,'set');await page.locator('.group.collapsed:not(.attached-cortina) [data-group-action=collapse]').evaluateAll(buttons=>buttons.forEach(button=>button.click()));await page.locator('[data-group-action=track-down][data-id="real-group-canaro"][data-index="1"]').click();
   await expect(page.locator('#queue-stale')).toBeVisible();await page.locator('#refresh-queue').click();await expect(page.locator('#queue-stale')).toBeHidden();expect(await page.evaluate(()=>reviewProvider.loads)).toBe(loads);

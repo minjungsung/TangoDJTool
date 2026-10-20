@@ -74,7 +74,7 @@ test('play-next keeps active position, preserves addition order, and leaves pres
 
 test('manual cortina waits at endpoint, inserts in next tanda, and advances on explicit button', async ({ page }) => {
   await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
-  await page.locator('[data-queue-index="3"]').click();
+  await nav(page, 'deck'); await page.locator('[data-queue-index="3"]').click();
   await expect(page.locator('#next-tanda')).toBeVisible();
   await page.evaluate(() => { window.testYT.position = 180; window.testYT.state = 0; window.testYT.options.events.onStateChange({ data: 0 }); });
   await expect(page.locator('#playing-title')).toHaveText('C');
@@ -181,7 +181,7 @@ test('failed next insertion rolls back the queue and tanda', async ({ page }) =>
 
 test('manual cortina fade can be canceled by Stop without starting another recording', async ({ page }) => {
   await bootstrap(page); await nav(page,'set'); await page.locator('#start-set').click();
-  await page.locator('[data-queue-index="3"]').click();
+  await nav(page, 'deck'); await page.locator('[data-queue-index="3"]').click();
   await page.evaluate(() => { window.testYT.position = 10; }); await page.waitForTimeout(150);
   await page.locator('.playback-options').evaluate(el => el.open = true); await page.locator('#fade').selectOption('1');
   await page.locator('#next-tanda').click(); await page.locator('#stop').click();
@@ -305,7 +305,7 @@ for (const width of [1440, 390]) {
     await page.locator('[data-group-action="play-tanda"][data-id="t"]').click();
     await expect(page.locator('#playing-title')).toHaveText('A');
     await expect(page.locator('.queue-item strong')).toHaveText(['A', 'B', 'A']);
-    await page.locator('#next').click(); await expect(page.locator('#playing-title')).toHaveText('B');
+    await nav(page, 'deck'); await page.locator('#next').click(); await expect(page.locator('#playing-title')).toHaveText('B');
     await page.locator('#next').click(); await expect(page.locator('#playing-title')).toHaveText('A');
     await page.evaluate(() => { window.testYT.state = 0; window.testYT.options.events.onStateChange({ data: 0 }); });
     await expect(page.locator('#notice')).toContainText('End of play queue');
@@ -398,13 +398,14 @@ test('an empty search can clear every filter without changing the recording dest
   await expect(page.locator('#source-filter')).toHaveValue('');
 });
 
-test('the playback screen can return from tanda listening to the full prepared set', async ({ page }) => {
+test('Tandas can switch from one tanda to the full program without changing screens', async ({ page }) => {
   await bootstrap(page); await nav(page, 'set');
   await page.locator('[data-group-action=play-tanda][data-id=t2]').click();
   await expect(page.locator('#playing-title')).toHaveText('B');
   await expect(page.locator('.queue-item')).toHaveCount(1);
-  await expect(page.locator('#deck-start-set')).toBeVisible();
-  await page.locator('#deck-start-set').click();
+  await expect(page.locator('#deck-start-set')).toHaveCount(0);
+  await expect(page.locator('body')).toHaveAttribute('data-view', 'set');
+  await page.locator('#start-set').click();
   await expect(page.locator('#playing-title')).toHaveText('A');
   await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A','C','B']);
 });
@@ -473,7 +474,7 @@ test('tanda-only queue edits and play-next stay inside the tanda after refresh a
   await page.locator('[data-group-action=track-down][data-id=t][data-index="1"]').click();
   await page.locator('#refresh-queue').click();
   await expect(page.locator('.queue-item strong')).toHaveText(['A','X','B','A']);
-  await nav(page, 'deck'); await expect(page.locator('#deck-start-set')).toBeVisible();
+  await nav(page, 'deck'); await expect(page.locator('#deck-start-set')).toHaveCount(0);
 });
 
 
@@ -598,7 +599,7 @@ test('restored cortina position stays relative to its cue and honors its origina
   await page.locator('[data-cortina-start=cortina]').fill('30'); await page.locator('[data-cortina-start=cortina]').blur();
   await page.locator('[data-cortina-end=cortina]').fill('50'); await page.locator('[data-cortina-end=cortina]').blur();
   await page.locator('[data-group-action=cue-play][data-id=cortina]').click();
-  await expect(page.locator('#play-pause')).toBeEnabled();
+  await nav(page, 'deck'); await expect(page.locator('#play-pause')).toBeEnabled();
   await page.locator('#play-pause').click(); await page.locator('#seek').fill('50');
   await expect(page.locator('#position')).toHaveText('0:10 / 0:20');
   await page.reload(); await nav(page, 'deck');
@@ -617,7 +618,7 @@ test('restored cortina position stays relative to its cue and honors its origina
 
 test('a stale checkpoint cannot move playback in a newer workspace revision', async ({ page }) => {
   await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
-  await expect(page.locator('#play-pause')).toBeEnabled(); await page.locator('#play-pause').click();
+  await nav(page, 'deck'); await expect(page.locator('#play-pause')).toBeEnabled(); await page.locator('#play-pause').click();
   await page.locator('#seek').fill('25');
   const checkpoint = await page.evaluate(() => localStorage.getItem('studio-playback-position'));
   await nav(page, 'set'); page.once('dialog', dialog => dialog.accept('Renamed'));
@@ -631,7 +632,7 @@ test('a stale checkpoint cannot move playback in a newer workspace revision', as
 
 test('seeking after Stop resumes from the chosen position and Retry keeps it', async ({ page }) => {
   await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
-  await expect(page.locator('#play-pause')).toBeEnabled(); await page.locator('#stop').click();
+  await nav(page, 'deck'); await expect(page.locator('#play-pause')).toBeEnabled(); await page.locator('#stop').click();
   await page.locator('#seek').fill('25'); await page.locator('#play-pause').click();
   expect(await page.evaluate(() => testYT.position)).toBe(45);
   await page.evaluate(() => { testYT.position = 57; testYT.options.events.onError({ data: 100 }); });
@@ -643,7 +644,7 @@ test('seeking after Stop resumes from the chosen position and Retry keeps it', a
 
 test('deleting the restored recording cannot apply its saved position to the next recording', async ({ page }) => {
   await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
-  await expect(page.locator('#play-pause')).toBeEnabled(); await page.locator('#play-pause').click();
+  await nav(page, 'deck'); await expect(page.locator('#play-pause')).toBeEnabled(); await page.locator('#play-pause').click();
   await page.locator('#seek').fill('25'); await page.reload(); await nav(page, 'library');
   page.once('dialog', dialog => dialog.accept()); await recordingAction(page, 'delete', 'a');
   await nav(page, 'deck'); await page.locator('#play-pause').click();
@@ -680,5 +681,27 @@ for (const width of [1440, 390]) {
     await expect(page.locator('body')).toHaveAttribute('data-view', 'library');
     await expect(page.locator('#mini-open strong')).toHaveText('X');
     await expect(page.locator('.queue-item strong')).toHaveText(['X']);
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`${width}px set and tanda playback stay in place until Playback is explicitly opened`, async ({ page }) => {
+    await page.setViewportSize({width,height:844}); await bootstrap(page); await nav(page,'collections');
+    page.once('dialog', dialog => dialog.accept('Listening set')); await page.locator('#new-collection').click();
+    await expect(page.locator('#collection-play')).toBeDisabled();
+    await page.locator('#collection-browse').click();
+    for (const id of ['b','a']) await page.locator(`[data-action=collection][data-id=${id}]`).click();
+    await page.locator('#finish-adding').click(); await page.locator('[data-candidate=a]').check();
+    await page.locator('#collection-play').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view','collections');
+    await expect(page.locator('#mini-open strong')).toHaveText('B');
+    await expect(page.locator('.queue-item strong')).toHaveText(['B','A']);
+    await expect(page.locator('[data-candidate=a]')).toBeChecked();
+    await page.locator('#mini-next').click(); await expect(page.locator('#mini-open strong')).toHaveText('A');
+    await nav(page,'set'); await page.locator('[data-group-action=play-tanda][data-id=t]').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view','set');
+    await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A']);
+    await page.locator('#mini-open').click(); await expect(page.locator('body')).toHaveAttribute('data-view','deck');
+    await expect(page.locator('#deck-start-set')).toHaveCount(0);
   });
 }

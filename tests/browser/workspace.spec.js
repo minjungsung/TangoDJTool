@@ -169,7 +169,7 @@ test('YouTube queue uses the iframe API and advances after the video ends', asyn
   await view(page, 'set'); await page.getByRole('button', { name: 'Load & play set' }).click();
   await expect(page.locator('#playing-title')).toHaveText('Video tanda');
   expect(await page.evaluate(() => window.testYouTube.videoId)).toBe('abcdefghijk');
-  await expect(page.locator('#youtube-wrap')).toBeVisible();
+  await view(page, 'deck'); await expect(page.locator('#youtube-wrap')).toBeVisible();
   await view(page, 'deck'); await page.locator('#seek').fill('50');
   expect(await page.evaluate(() => window.testYouTube.position)).toBe(60);
   await page.evaluate(() => { window.testYouTube.options.events.onStateChange({ data: 1 }); window.testYouTube.state = 0; window.testYouTube.options.events.onStateChange({ data: 0 }); });
@@ -193,7 +193,7 @@ test('milonga playlist preserves personal music and does not duplicate entries',
   await page.getByRole('button', { name: 'Save details' }).click();
   await page.locator('#open-guide').click();
   await page.locator('#guide-preview').click();
-  await expect(page.locator('#preview-status')).toBeVisible();
+  await view(page, 'deck'); await expect(page.locator('#preview-status')).toBeVisible();
   await page.getByRole('button', { name: 'Stop preview', exact: true }).click();
   const download = page.waitForEvent('download');
   await page.locator('#export-set').click();
@@ -280,7 +280,7 @@ test('YouTube errors expose recovery and a replacement link is saved', async ({ 
   await page.goto('/?practice=1');
   await page.locator('#open-examples').click();
   await page.locator('#real-sample-play').click();
-  await expect(page.locator('#youtube-error')).toBeVisible();
+  await view(page, 'deck'); await expect(page.locator('#youtube-error')).toBeVisible();
   await expect(page.locator('#youtube-error-message')).toContainText('blocked embedded playback');
   await expect(page.locator('#youtube-open')).toHaveAttribute('href', /c9UaO1KQwpI/);
   await page.locator('#youtube-replace').click();
@@ -636,7 +636,7 @@ test('YouTube buffering is visible and retry preserves the current source positi
   });
   await page.goto('/?practice=1');await view(page, 'set'); await page.locator('#start-set').click();await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
   await page.evaluate(()=>window.stallPlayer.position=30);await expect(page.locator('#position')).toHaveText('0:30 / 3:00');
-  await page.evaluate(()=>{window.stallPlayer.state=3;window.advanceStallClock();});await expect(page.locator('#playback-stall')).toBeVisible();
+  await page.evaluate(()=>{window.stallPlayer.state=3;window.advanceStallClock();});await view(page, 'deck'); await expect(page.locator('#playback-stall')).toBeVisible();
   await view(page, 'deck'); await page.locator('#resume-video').click();expect(await page.evaluate(()=>window.stallPlayer.position)).toBe(30);await expect(page.locator('#playback-stall')).toBeHidden();
   await view(page, 'deck'); await page.locator('#stop').click();await page.evaluate(()=>window.advanceStallClock());await expect(page.locator('#playback-stall')).toBeHidden();
 });
