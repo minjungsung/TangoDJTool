@@ -100,6 +100,7 @@ test('blocked playback exposes explicit retry and keeps the queue', async ({ pag
   await expect(page.locator('#notice')).toContainText('1 recording added');
   await page.evaluate(() => { const original = HTMLMediaElement.prototype.play; let blocked = true; HTMLMediaElement.prototype.play = function() { if (blocked) { blocked = false; return Promise.reject(new DOMException('Denied', 'NotAllowedError')); } return original.call(this); }; });
   await view(page, 'library'); await page.locator('[data-action=play]').click();
+  await expect(page.locator('#mini-deck')).toBeVisible(); await view(page, 'deck');
   await expect(page.locator('#playback-recovery')).toBeVisible(); await expect(page.locator('#playback-recovery-message')).toContainText('permission');
   await expect(page.locator('#queue-count')).toHaveText('1'); await page.locator('#playback-retry').click();
   await expect(page.locator('#playback-recovery')).toBeHidden(); await expect(page.locator('#play-pause')).toHaveText('Ⅱ');

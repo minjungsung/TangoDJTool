@@ -8,7 +8,7 @@ import { Player } from './player.js';
 import { playbackMessage } from './fade.js';
 import { REAL_SAMPLE_PACK, realTracks, realGroups, realCollections, removeOldExamples } from './samples.js';
 import { guideMarkup } from './guide.js';
-import { groupDuration, queueSignature, locateInQueue } from './workspace.js';
+import { groupDuration, queueSignature } from './workspace.js';
 import { t, startI18n, setLanguage, getLanguage } from './i18n.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -252,7 +252,7 @@ function renderLibrary() {
 }
 function canMoveGroup(group, direction) { const top = state.groups.filter(g => !g.parentId); const index = top.findIndex(g => g.id === group.id); return !group.parentId && index >= 0 && Boolean(top[index + direction]); }
 function renderGroups() {
-  $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${g.collapsed ? 'collapsed' : ''} ${g.parentId ? 'attached-cortina' : ''} ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${t(g.kind === 'tanda' ? 'Tanda' : 'Cortina')}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="collapse" data-id="${esc(g.id)}" aria-expanded="${!g.collapsed}">${t(g.collapsed ? 'Expand' : 'Collapse')}</button>${g.kind === 'tanda' ? `<button data-group-action="play-tanda" data-id="${esc(g.id)}" aria-label="${t('Play this tanda')}" title="${t('Play this tanda')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button><button data-group-action="cortina" data-id="${esc(g.id)}">${t('Cortina')}</button><button data-group-action="notes" data-id="${esc(g.id)}" aria-label="Tanda notes">Notes</button>` : ''}<button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${!canMoveGroup(g, -1) ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${!canMoveGroup(g, 1) ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div>${g.notes ? `<p class="tanda-notes" data-preserve>${esc(g.notes)}</p>` : ''}<ol>${g.trackIds.map((id, j) => { const track = state.tracks.find(t => t.id === id); return `<li><span>${esc(track?.title || 'Missing track')}</span><div>${g.kind === 'tanda' ? `<button data-group-action="play-recording" data-id="${esc(g.id)}" data-index="${j}" aria-label="${esc(`${t('Play from this recording')}: ${track?.title || 'Missing track'}`)}" title="${t('Play from this recording')}">▶</button>` : ''}<button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<div class="cortina-range"><label><span>${t('From')}</span><input type="number" min="0" max="86400" step="1" value="${g.startSeconds || 0}" data-cortina-start="${esc(g.id)}" aria-label="${t('Cortina start position')}"></label><span class="range-arrow">→</span><label><span>${t('To')}</span><input type="number" min="1" max="90000" step="1" value="${(g.startSeconds || 0) + (g.limitSeconds || 20)}" data-cortina-end="${esc(g.id)}" ${g.fullLength ? 'disabled' : ''} aria-label="${t('Cortina end position')}"></label><span class="range-unit">${t('seconds')}</span><button data-group-action="cue-position" data-id="${esc(g.id)}" aria-label="${t('Use deck position')}" title="${t('Use deck position')}" ${!current || !g.trackIds.includes(current.id) ? 'disabled' : ''}>⌖</button><button data-group-action="cue-play" data-id="${esc(g.id)}" aria-label="${t('Play this cortina')}" title="${t('Play this cortina')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button></div><label class="cortina-hold"><input type="checkbox" data-cortina-full="${esc(g.id)}" ${g.fullLength ? 'checked' : ''}>${t('Use the rest of the recording')}</label><label class="cortina-hold"><input type="checkbox" data-cortina-hold="${esc(g.id)}" ${g.holdAfter ? 'checked' : ''}>${t('Wait before the next tanda')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select Add to tanda</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
+  $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${g.collapsed ? 'collapsed' : ''} ${g.parentId ? 'attached-cortina' : ''} ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${t(g.kind === 'tanda' ? 'Tanda' : 'Cortina')}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="collapse" data-id="${esc(g.id)}" aria-expanded="${!g.collapsed}">${t(g.collapsed ? 'Expand' : 'Collapse')}</button>${g.kind === 'tanda' ? `<button data-group-action="play-tanda" data-id="${esc(g.id)}" aria-label="${t('Play this tanda')}" title="${t('Play this tanda')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button><button data-group-action="cortina" data-id="${esc(g.id)}">${t('Cortina')}</button><button data-group-action="notes" data-id="${esc(g.id)}" aria-label="Tanda notes">Notes</button>` : ''}<button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${!canMoveGroup(g, -1) ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${!canMoveGroup(g, 1) ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div>${g.notes ? `<p class="tanda-notes" data-preserve>${esc(g.notes)}</p>` : ''}<ol>${g.trackIds.map((id, j) => { const track = state.tracks.find(t => t.id === id); return `<li><span>${esc(track?.title || 'Missing track')}</span><div>${g.kind === 'tanda' ? `<button data-group-action="play-recording" data-id="${esc(g.id)}" data-index="${j}" aria-label="${esc(`${t('Play only this recording')}: ${track?.title || 'Missing track'}`)}" title="${t('Play only this recording')}">▶</button>` : ''}<button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<div class="cortina-range"><label><span>${t('From')}</span><input type="number" min="0" max="86400" step="1" value="${g.startSeconds || 0}" data-cortina-start="${esc(g.id)}" aria-label="${t('Cortina start position')}"></label><span class="range-arrow">→</span><label><span>${t('To')}</span><input type="number" min="1" max="90000" step="1" value="${(g.startSeconds || 0) + (g.limitSeconds || 20)}" data-cortina-end="${esc(g.id)}" ${g.fullLength ? 'disabled' : ''} aria-label="${t('Cortina end position')}"></label><span class="range-unit">${t('seconds')}</span><button data-group-action="cue-position" data-id="${esc(g.id)}" aria-label="${t('Use deck position')}" title="${t('Use deck position')}" ${!current || !g.trackIds.includes(current.id) ? 'disabled' : ''}>⌖</button><button data-group-action="cue-play" data-id="${esc(g.id)}" aria-label="${t('Play this cortina')}" title="${t('Play this cortina')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button></div><label class="cortina-hold"><input type="checkbox" data-cortina-full="${esc(g.id)}" ${g.fullLength ? 'checked' : ''}>${t('Use the rest of the recording')}</label><label class="cortina-hold"><input type="checkbox" data-cortina-hold="${esc(g.id)}" ${g.holdAfter ? 'checked' : ''}>${t('Wait before the next tanda')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select Add to tanda</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
   refreshGroupSummaries();
 }
 function playbackGroups() { return queueGroupId ? state.groups.filter(group => group.id === queueGroupId) : state.groups; }
@@ -462,6 +462,10 @@ async function playIndex(index, fromPosition = null) {
   }
   finally { if (request === playRequest) { transitioning = false; $('#playback-loading').hidden = true; updateTransport(); } }
 }
+async function playRecording(track) {
+  queue = [{ track: structuredClone(track) }]; queueIndex = -1; queueGroupId = null; loadedSignature = null;
+  renderGroups(); renderQueue(); await playIndex(0);
+}
 async function next() { if (queueIndex + 1 < queue.length) await playIndex(queueIndex + 1); else { notify('End of play queue.'); } }
 function addToGroup(id, groupId = selected) {
   const group = state.groups.find(g => g.id === groupId);
@@ -512,13 +516,7 @@ $('#tracks').onclick = async event => {
   const track = state.tracks.find(t => t.id === button.dataset.id); if (!track) return;
   try {
     switch (button.dataset.action) {
-      case 'play': {
-        const sourcePlayback = track.style === 'Cortina';
-        const existingIndex = sourcePlayback ? queue.findIndex(item => item.track.id === track.id && !item.limitSeconds && !item.startSeconds) : locateInQueue(queue, track.id, queueIndex);
-        if (existingIndex >= 0) await playIndex(existingIndex);
-        else { queue.push({ track: structuredClone(track) }); queueGroupId = null; loadedSignature = null; renderQueue(); await playIndex(queue.length - 1); }
-        showView('deck'); break;
-      }
+      case 'play': await playRecording(track); break;
       case 'play-next': await choosePlayNext(track); break;
       case 'collection': addRecordingToCollection(track); break;
       case 'locate': await locateRecording(track); break;
@@ -622,11 +620,16 @@ $('#groups').onclick = event => {
   if (action === 'cortina') { selected = group.id; $('#add-cortina').click(); const attached = state.groups.find(g => g.parentId === group.id); if (attached) { group.collapsed = false; attached.collapsed = false; selected = attached.id; renderGroups(); void persist(); } revealSelectedGroup(); return; }
   if (action === 'collapse') { group.collapsed = !group.collapsed; const cortina = state.groups.find(g => g.parentId === group.id); if (cortina) cortina.collapsed = group.collapsed; void persist(); renderGroups(); return; }
   if (action === 'notes') { const notes = prompt(t('Tanda notes'), group.notes || ''); if (notes !== null) { group.notes = notes; void persist(); renderGroups(); } return; }
-  if (action === 'play-tanda' || action === 'play-recording') {
+  if (action === 'play-recording') {
+    const track = state.tracks.find(track => track.id === group.trackIds[j]);
+    if (track) void playRecording(track);
+    return;
+  }
+  if (action === 'play-tanda') {
     const clips = flattenSet([group], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
     if (!clips.length) return;
     selected = group.id; queue = clips; queueIndex = -1; queueGroupId = group.id; loadedSignature = playbackSignature();
-    renderGroups(); renderQueue(); showView('deck'); void playIndex(action === 'play-recording' ? j : 0);
+    renderGroups(); renderQueue(); showView('deck'); void playIndex(0);
     return;
   }
   if (action === 'cue-play') {
@@ -974,7 +977,7 @@ function renderCollections() {
   const collection = state.collections.find(c => c.id === activeCollection);
   detail.dataset.selectionCollection = collection?.id || '';
   $('#collection-list').innerHTML = state.collections.map(c => `<div class="collection-row"><button data-collection="${esc(c.id)}" ${c.id === activeCollection ? 'aria-current="true"' : ''}><strong data-preserve>${esc(c.name)}</strong><span class="collection-count">${c.trackIds.length} ${t('recordings')}</span></button><button data-collection-delete="${esc(c.id)}">${t('Delete')}</button></div>`).join('') || `<p class="hint">${t('Create a set to collect candidate recordings.')}</p>`;
-  $('#collection-detail').innerHTML = collection ? `<div class="builder-actions"><button id="collection-browse">${t('Add recordings')}</button><button id="collection-tanda">${t('Create tanda from selected recordings')}</button><button id="collection-rename">${t('Rename')}</button></div>${collection.trackIds.map((id, index) => { const track = state.tracks.find(t => t.id === id); return `<div class="collection-recording"><label><input type="checkbox" data-candidate="${esc(id)}"><span data-preserve>${esc(track?.title)}</span></label><button data-candidate-remove="${index}">${t('Remove')}</button></div>`; }).join('')}` : '';
+  $('#collection-detail').innerHTML = collection ? `<div class="builder-actions"><button id="collection-browse">${t('Add recordings')}</button><button id="collection-tanda">${t('Create tanda from selected recordings')}</button><button id="collection-rename">${t('Rename')}</button></div>${collection.trackIds.map((id, index) => { const track = state.tracks.find(t => t.id === id); return `<div class="collection-recording"><label><input type="checkbox" data-candidate="${esc(id)}"><span data-preserve>${esc(track?.title)}</span></label><div class="candidate-actions"><button data-candidate-play="${esc(id)}" aria-label="${esc(`${t('Play only this recording')}: ${track?.title || 'Missing track'}`)}" title="${t('Play only this recording')}" ${track ? '' : 'disabled'}>▶ ${t('Play')}</button><button data-candidate-remove="${index}">${t('Remove')}</button></div></div>`; }).join('')}` : '';
   if (collection) {
     for (const input of detail.querySelectorAll('[data-candidate]')) input.checked = candidateSelections.get(collection.id)?.has(input.dataset.candidate) || false;
     $('#collection-browse').onclick = () => { collectingInto = collection.id; choosingForGroup = false; activeCollection = null; $('#collection-filter').value = ''; renderLibrary(); showView('library'); };
@@ -993,7 +996,12 @@ $('#collection-list').onclick = event => {
   if (open) { activeCollection = open.dataset.collection; renderCollections(); renderLibrary(); }
   if (remove && confirm(t('Delete this set? Recordings and tandas are kept.'))) { state.collections = state.collections.filter(c => c.id !== remove.dataset.collectionDelete); activeCollection = null; if (collectingInto === remove.dataset.collectionDelete) collectingInto = null; void persist(); renderCollections(); renderLibrary(); }
 };
-$('#collection-detail').onclick = event => { const remove = event.target.closest('[data-candidate-remove]'); if (remove) { state.collections.find(c => c.id === activeCollection).trackIds.splice(Number(remove.dataset.candidateRemove), 1); void persist(); renderCollections(); } };
+$('#collection-detail').onclick = event => {
+  const play = event.target.closest('[data-candidate-play]');
+  if (play) { const track = state.tracks.find(track => track.id === play.dataset.candidatePlay); if (track) void playRecording(track); return; }
+  const remove = event.target.closest('[data-candidate-remove]');
+  if (remove) { state.collections.find(c => c.id === activeCollection).trackIds.splice(Number(remove.dataset.candidateRemove), 1); void persist(); renderCollections(); }
+};
 function addRecordingToCollection(track) {
   if (!state.collections?.length) { notify('Create a set first.'); showView('collections'); return; }
   if (collectingInto && state.collections.some(c => c.id === collectingInto)) { collectRecording(track, collectingInto); return; }

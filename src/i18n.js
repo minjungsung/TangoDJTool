@@ -108,6 +108,7 @@ const pairs = {
   'Start at': ['시작 지점', 'Empezar en'], 'Cortina start position': ['꼬르띠나 시작 지점', 'Inicio de la cortina'],
   'Use deck position': ['현재 재생 지점 사용', 'Usar posición actual'], 'Play this cortina': ['이 꼬르띠나 재생', 'Reproducir esta cortina'],
   'Play this tanda': ['이 딴따 재생', 'Reproducir esta tanda'],
+  'Play only this recording': ['이 곡만 재생', 'Reproducir solo esta grabación'],
   'Play from this recording': ['이 곡부터 딴따 재생', 'Reproducir tanda desde esta grabación'],
   'Plays on the live output': ['주 재생 출력으로 들립니다', 'Se escucha por la salida principal'],
   'Recording source changed. Press Play to use the updated recording.': ['음악 소스가 변경되었습니다. 재생을 눌러 변경한 곡을 들으세요.', 'La fuente cambió. Pulsa reproducir para escuchar la grabación actualizada.'],

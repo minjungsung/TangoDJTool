@@ -119,6 +119,10 @@ body[data-view] .deck{margin-top:0}
 .collection-recording{display:flex;justify-content:space-between;align-items:center;padding:10px 22px;border-top:1px solid var(--border);gap:12px}
 .collection-recording label{display:flex;align-items:center;gap:12px;min-width:0}
 .collection-recording span{overflow-wrap:anywhere}
+.candidate-actions{display:flex;flex-shrink:0;gap:8px}
+.candidate-actions button{min-height:44px}
+#collection-detail>.builder-actions{flex-wrap:wrap}
+#collection-detail>.builder-actions button{flex:1 1 140px;min-width:0;overflow-wrap:anywhere;line-height:1.4}
 .group.collapsed>ol,.group.collapsed>.cortina-range,.group.collapsed>.cortina-hold,.group.collapsed>.group-drop,.group.collapsed>.tanda-notes{display:none}
 .attached-cortina{margin-left:20px!important;border-style:dashed}
 .tanda-notes{margin:10px 12px;color:var(--muted);overflow-wrap:anywhere}
@@ -134,6 +138,9 @@ body[data-view] .deck{margin-top:0}
   body[data-view=deck] #deck{display:block}
  .file-tools{margin-left:16px;margin-right:16px}.file-tools button{min-height:44px}
  .collections-panel>.hint,#collection-list>.hint{margin-left:16px;margin-right:16px}
+ .collection-recording{flex-wrap:wrap;padding-left:16px;padding-right:16px}
+ .collection-recording label{flex-basis:100%}
+ .candidate-actions{margin-left:30px;flex-wrap:wrap}
   .builder-actions{flex-wrap:wrap}.builder-actions button{min-width:90px}
   .group-header{flex-wrap:wrap}.group-tools button{min-height:36px}
 }

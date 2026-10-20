@@ -323,7 +323,7 @@ test('DJ edits preserve queue, can be undone, and resume the last track after re
   await expect(page.locator('#set-duration')).toHaveText('2:00');
   await view(page, 'set'); await page.locator('#start-set').click();
   await expect(page.locator('#queue-count')).toHaveText('28');
-  await view(page, 'library'); await page.locator('[data-action="play"][data-id="real-vals-1"]').click();
+  await view(page, 'deck'); await page.locator('.queue-item').filter({ has: page.locator('strong', { hasText: 'Cofrecito' }) }).click();
   await expect(page.locator('#playing-title')).toHaveText('Cofrecito');
   await expect(page.locator('#queue-count')).toHaveText('28');
   await expect(page.locator('#play-pause')).toHaveText('Ⅱ');
@@ -652,13 +652,13 @@ test('local session can play, edit and export while the network is offline', asy
   await context.setOffline(false);await page.reload();await expect(page.locator('.missing')).toHaveCount(0);await expect(page.locator('.track-detail')).toContainText('Offline orchestra');
 });
 
-test('library cortina playback opens the full source for cue preparation without removing the set queue', async ({ page }) => {
+test('library cortina playback opens only the full source for cue preparation', async ({ page }) => {
   await simulatedDeck(page);await page.goto('/?practice=1');await view(page, 'set'); await page.locator('#start-set').click();await expect(page.locator('#queue-count')).toHaveText('28');
-  await view(page, 'library'); await page.locator('[data-action="play"][data-id="real-cortina-1"]').click();await expect(page.locator('#playing-title')).toHaveText('L-O-V-E');await expect(page.locator('#queue-count')).toHaveText('29');
+  await view(page, 'library'); await page.locator('[data-action="play"][data-id="real-cortina-1"]').click();await expect(page.locator('#playing-title')).toHaveText('L-O-V-E');await expect(page.locator('#queue-count')).toHaveText('1');
   await page.evaluate(()=>{window.testYouTube.position=35;});await expect(page.locator('#position')).toHaveText('0:35 / 3:00');
   await view(page, 'set'); await page.locator('[data-group-action="cue-position"][data-id="real-group-cortina-1"]').click();
   await expect(page.locator('[data-cortina-start]').first()).toHaveValue('35');await expect(page.locator('[data-cortina-end]').first()).toHaveValue('55');
-  await view(page, 'library'); await page.locator('[data-action="play"][data-id="real-cortina-1"]').click();await expect(page.locator('#queue-count')).toHaveText('29');
+  await view(page, 'library'); await page.locator('[data-action="play"][data-id="real-cortina-1"]').click();await expect(page.locator('#queue-count')).toHaveText('1');
 });
 
 test('cortina intervals respect known source length and retain a usable endpoint near the end', async ({ page }) => {

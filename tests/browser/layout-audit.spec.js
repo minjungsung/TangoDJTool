@@ -79,5 +79,21 @@ test('audit visible controls across work areas and dialogs', async ({ page }) =>
       await page.locator('[data-close=actions-dialog]').click();
     }
   }
+  await page.setViewportSize({width:1440,height:900});
+  await nav(page,'collections');
+  page.once('dialog', dialog => dialog.accept('Candidate recordings'));
+  await page.locator('#new-collection').click(); await page.locator('#collection-browse').click();
+  for (const id of ['a','b']) await page.locator(`[data-action=collection][data-id=${id}]`).click();
+  await page.locator('#finish-adding').click();
+  await page.locator('[data-candidate-play=a]').click();
+  for (const language of ['en','ko','es']) {
+    await page.setViewportSize({width:1440,height:900});
+    await page.locator('#open-settings').click(); await page.locator('#language').selectOption(language);
+    await page.locator('[data-close=settings-dialog]').click();
+    for (const width of [320,390,650,699,700,768,1024,1200,1440,1920]) {
+      await page.setViewportSize({width,height:900});
+      await check(`${language}/${width}/candidate playback`);
+    }
+  }
   expect(issues).toEqual([]);
 });

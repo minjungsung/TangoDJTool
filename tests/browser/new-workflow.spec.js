@@ -410,7 +410,7 @@ test('the playback screen can return from tanda listening to the full prepared s
 });
 
 for (const width of [1440, 390]) {
-  test(`${width}px listens from a chosen recording within a tanda without searching the library`, async ({ page }) => {
+  test(`${width}px plays only a chosen recording while staying in Tandas`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 }); await bootstrap(page); await nav(page, 'set');
     const collapse = page.locator('[data-group-action=collapse][data-id=t]');
     if (await collapse.getAttribute('aria-expanded') === 'false') await collapse.click();
@@ -421,9 +421,10 @@ for (const width of [1440, 390]) {
     }
     await play.click();
     await expect(page.locator('#playing-title')).toHaveText('B');
-    await expect(page.locator('#recording-number')).toHaveText('Recording 2 / 3');
-    await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A']);
-    await page.locator('#next').click(); await expect(page.locator('#playing-title')).toHaveText('A');
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'set');
+    await expect(page.locator('#mini-deck')).toBeVisible();
+    await expect(page.locator('#recording-number')).toHaveText('Recording 1 / 1');
+    await expect(page.locator('.queue-item strong')).toHaveText(['B']);
     await expect(page.locator('#next')).toBeDisabled();
   });
 }
@@ -650,3 +651,34 @@ test('deleting the restored recording cannot apply its saved position to the nex
   await expect(page.locator('#play-pause')).toBeEnabled();
   expect(await page.evaluate(() => testYT.position)).toBe(0);
 });
+
+for (const width of [1440, 390]) {
+  test(`${width}px candidate playback stays in Sets, preserves selection and stops after one recording`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await bootstrap(page); await nav(page, 'collections');
+    page.once('dialog', dialog => dialog.accept('Candidates'));
+    await page.locator('#new-collection').click(); await page.locator('#collection-browse').click();
+    for (const id of ['a', 'b']) await page.locator(`[data-action=collection][data-id=${id}]`).click();
+    await page.locator('#finish-adding').click();
+    await page.locator('[data-candidate=a]').check();
+    await page.locator('[data-candidate-play=b]').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'collections');
+    await expect(page.locator('#mini-deck')).toBeVisible();
+    await expect(page.locator('#mini-open strong')).toHaveText('B');
+    await expect(page.locator('.queue-item strong')).toHaveText(['B']);
+    await expect(page.locator('[data-candidate=a]')).toBeChecked();
+    await page.locator('#mini-play').click();
+    expect(await page.evaluate(() => window.testYT.state)).toBe(2);
+    await page.locator('#mini-play').click();
+    expect(await page.evaluate(() => window.testYT.state)).toBe(1);
+    await page.evaluate(() => { window.testYT.state = 0; window.testYT.options.events.onStateChange({ data: 0 }); });
+    await expect(page.locator('#mini-open strong')).toHaveText('B');
+    expect(await page.evaluate(() => window.testYT.state)).toBe(0);
+    await page.locator('[data-candidate-play=a]').click();
+    await expect(page.locator('#mini-open strong')).toHaveText('A');
+    await nav(page, 'library'); await page.locator('[data-action=play][data-id=x]').click();
+    await expect(page.locator('body')).toHaveAttribute('data-view', 'library');
+    await expect(page.locator('#mini-open strong')).toHaveText('X');
+    await expect(page.locator('.queue-item strong')).toHaveText(['X']);
+  });
+}
