@@ -250,6 +250,11 @@ for (const language of ['en','ko','es']) {
       await expect(row.locator('[data-action=play-next]')).toBeHidden();
       await navigate('set');
       const tools = page.locator('[data-group=t] .group-tools');
+      // Button boxes must also contain their labels, especially next to Play.
+      const overflowingLabels = await tools.locator('button').evaluateAll(buttons => buttons
+        .filter(button => button.scrollWidth > button.clientWidth)
+        .map(button => button.textContent));
+      expect(overflowingLabels).toEqual([]);
       const boxes = await tools.locator('button').evaluateAll(buttons => buttons.map(button => {
         const {x,y,width,height}=button.getBoundingClientRect(); return {x,y,width,height};
       }));
