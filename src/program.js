@@ -13,6 +13,17 @@ export function normalizeProgram(state) {
   return state;
 }
 
+export function insertGroupAfterSelection(state, group, selectedId) {
+  normalizeProgram(state);
+  let index = state.groups.findIndex(item => item.id === selectedId);
+  if (group.parentId) index = state.groups.findIndex(item => item.id === group.parentId);
+  else if (state.groups[index]?.kind === 'tanda') {
+    const cortinaIndex = state.groups.findIndex(item => item.parentId === selectedId);
+    if (cortinaIndex > index) index = cortinaIndex;
+  }
+  state.groups.splice(index < 0 ? state.groups.length : index + 1, 0, group);
+}
+
 export function insertNext(state, queue, currentIndex, track, targetId) {
   normalizeProgram(state);
   const active = queue[currentIndex];

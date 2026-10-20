@@ -18,7 +18,12 @@ async function bootstrap(page) {
   });
   await page.reload();
 }
-async function nav(page, view) { await page.locator(`.sidebar a[href="#${view}"]`).click(); }
+async function nav(page, view) {
+  await page.locator('button[data-view]').first().waitFor({ state: 'attached' });
+  const button = page.locator(`button[data-view="${view}"]`);
+  if (await button.isVisible()) await button.click();
+  else await page.locator(`.sidebar a[href="#${view}"]`).click();
+}
 
 test('sets create tandas; presets and collapsed cards survive reload and export', async ({ page }) => {
   await bootstrap(page); await nav(page, 'collections');
@@ -31,14 +36,15 @@ test('sets create tandas; presets and collapsed cards survive reload and export'
   await nav(page, 'collections'); await page.locator('[data-collection]').click();
   for (const input of await page.locator('[data-candidate]').all()) await input.check();
   await page.locator('#collection-tanda').click();
-  await expect(page.locator('#groups .group').last()).toContainText('Candidates');
+  const candidate = page.locator('#groups .group').filter({ has: page.locator('.group-select strong', { hasText: 'Candidates' }) });
+  await expect(candidate).toHaveCount(1);
   page.once('dialog', dialog => dialog.accept('Reusable')); await page.locator('#save-preset').click();
-  const group = page.locator('#groups .group').last(); await group.locator('[data-group-action="collapse"]').click();
+  const group = candidate; await group.locator('[data-group-action="collapse"]').click();
   await expect(group.locator('ol')).toBeHidden();
   await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
   await page.reload(); await nav(page, 'set');
   await expect(page.locator('#presets')).toContainText('Reusable');
-  await expect(page.locator('#groups .group').last().locator('ol')).toBeHidden();
+  await expect(candidate.locator('ol')).toBeHidden();
   await page.locator('[data-preset]').click();
   await expect(page.locator('#groups .group')).toHaveCount(5);
   const download = page.waitForEvent('download'); await page.locator('#export-set').click();
@@ -254,5 +260,59 @@ for (const language of ['en','ko','es']) {
       const checkbox = await page.locator('[data-cortina-hold]').boundingBox(); expect(checkbox.height).toBe(18);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     }
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`${width}px adds groups after selection and preserves attached cortinas`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await bootstrap(page); await nav(page, 'set');
+    const ids = () => page.locator('#groups .group').evaluateAll(groups => groups.map(group => group.dataset.group));
+    await page.locator('[data-group-action="select"][data-id="t"]').click();
+    await page.locator('#add-tanda').click();
+    const inserted = await page.locator('#groups .selected').getAttribute('data-group');
+    expect(await ids()).toEqual(['t', 'cortina', inserted, 't2']);
+    await page.locator('#add-cortina').click();
+    const attached = await page.locator('#groups .selected').getAttribute('data-group');
+    expect(await ids()).toEqual(['t', 'cortina', inserted, attached, 't2']);
+    await page.locator('#add-cortina').click();
+    const standalone = await page.locator('#groups .selected').getAttribute('data-group');
+    expect(await ids()).toEqual(['t', 'cortina', inserted, attached, standalone, 't2']);
+    await page.locator('[data-group-action="select"][data-id="t"]').click();
+    await page.locator('#add-cortina').click();
+    await expect(page.locator('#groups .selected')).toHaveAttribute('data-group', 'cortina');
+    await expect(page.locator('#groups .group')).toHaveCount(6);
+    await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+    await page.reload(); await nav(page, 'set');
+    expect(await ids()).toEqual(['t', 'cortina', inserted, attached, standalone, 't2']);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  });
+
+  test(`${width}px plays only the chosen tanda in order and uses current edits`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await bootstrap(page); await nav(page, 'set');
+    await page.locator('#start-set').click();
+    await nav(page, 'set');
+    await page.locator('[data-group-action="play-tanda"][data-id="t2"]').click();
+    await expect(page.locator('#playing-title')).toHaveText('B');
+    await expect(page.locator('.queue-item strong')).toHaveText(['B']);
+    await nav(page, 'set');
+    await page.locator('[data-group-action="play-tanda"][data-id="t"]').click();
+    await expect(page.locator('#playing-title')).toHaveText('A');
+    await expect(page.locator('.queue-item strong')).toHaveText(['A', 'B', 'A']);
+    await page.locator('#next').click(); await expect(page.locator('#playing-title')).toHaveText('B');
+    await page.locator('#next').click(); await expect(page.locator('#playing-title')).toHaveText('A');
+    await page.evaluate(() => { window.testYT.state = 0; window.testYT.options.events.onStateChange({ data: 0 }); });
+    await expect(page.locator('#notice')).toContainText('End of play queue');
+    await expect(page.locator('#playing-title')).toHaveText('A');
+    await nav(page, 'set');
+    const collapse = page.locator('[data-group-action="collapse"][data-id="t"]');
+    if (await collapse.getAttribute('aria-expanded') === 'false') await collapse.click();
+    await page.locator('[data-group-action="remove"][data-id="t"][data-index="0"]').click();
+    await page.locator('[data-group-action="play-tanda"][data-id="t"]').click();
+    await expect(page.locator('#playing-title')).toHaveText('B');
+    await expect(page.locator('.queue-item strong')).toHaveText(['B', 'A']);
+    await nav(page, 'set'); await page.locator('#add-tanda').click();
+    await expect(page.locator('#groups .selected [data-group-action="play-tanda"]')).toBeDisabled();
   });
 }

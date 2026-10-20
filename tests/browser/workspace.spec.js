@@ -493,7 +493,7 @@ test('older tabs cannot overwrite newer saved workspace edits', async ({ page, c
   await view(other, 'set'); await other.locator('#add-tanda').click(); await expect(other.locator('#save-status')).toHaveText('Save failed — export a backup');
   await expect(other.locator('#notice')).toContainText('another tab');
   await page.reload(); await expect(page.locator('.group')).toHaveCount(13);
-  await expect(page.locator('.group').last()).toContainText('Tanda 7'); await other.close();
+  await expect(page.locator('.group').nth(2).locator('.group-select strong')).toHaveText('Tanda 7'); await other.close();
 });
 
 test('failed workspace saves keep stored audio safe when a stale tab removes a recording', async ({ page, context }) => {

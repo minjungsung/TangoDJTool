@@ -2,7 +2,7 @@ import './style.css';
 import { parseBlob } from 'music-metadata';
 import { uid, youtubeId, flattenSet, removeTrack, validateSet } from './model.js';
 import { saveState, loadState, saveFile, getFile, deleteFile, replaceRecording, storageMessage, saveSource, reconnectRecording } from './storage.js';
-import { normalizeProgram, insertNext } from './program.js';
+import { normalizeProgram, insertGroupAfterSelection, insertNext } from './program.js';
 import { canConnectFiles, canConnectFolder, contentHash, resolveSource, attachIdentical, folderFiles } from './file-sources.js';
 import { Player } from './player.js';
 import { playbackMessage } from './fade.js';
@@ -224,7 +224,7 @@ function renderLibrary() {
 }
 function canMoveGroup(group, direction) { const top = state.groups.filter(g => !g.parentId); const index = top.findIndex(g => g.id === group.id); return !group.parentId && index >= 0 && Boolean(top[index + direction]); }
 function renderGroups() {
-  $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${g.collapsed ? 'collapsed' : ''} ${g.parentId ? 'attached-cortina' : ''} ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${t(g.kind === 'tanda' ? 'Tanda' : 'Cortina')}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="collapse" data-id="${esc(g.id)}" aria-expanded="${!g.collapsed}">${t(g.collapsed ? 'Expand' : 'Collapse')}</button>${g.kind === 'tanda' ? `<button data-group-action="cortina" data-id="${esc(g.id)}">${t('Cortina')}</button><button data-group-action="notes" data-id="${esc(g.id)}" aria-label="Tanda notes">Notes</button>` : ''}<button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${!canMoveGroup(g, -1) ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${!canMoveGroup(g, 1) ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div>${g.notes ? `<p class="tanda-notes" data-preserve>${esc(g.notes)}</p>` : ''}<ol>${g.trackIds.map((id, j) => { const t = state.tracks.find(t => t.id === id); return `<li><span>${esc(t?.title || 'Missing track')}</span><div><button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<div class="cortina-range"><label><span>${t('From')}</span><input type="number" min="0" max="86400" step="1" value="${g.startSeconds || 0}" data-cortina-start="${esc(g.id)}" aria-label="${t('Cortina start position')}"></label><span class="range-arrow">→</span><label><span>${t('To')}</span><input type="number" min="1" max="90000" step="1" value="${(g.startSeconds || 0) + (g.limitSeconds || 20)}" data-cortina-end="${esc(g.id)}" ${g.fullLength ? 'disabled' : ''} aria-label="${t('Cortina end position')}"></label><span class="range-unit">${t('seconds')}</span><button data-group-action="cue-position" data-id="${esc(g.id)}" aria-label="${t('Use deck position')}" title="${t('Use deck position')}" ${!current || !g.trackIds.includes(current.id) ? 'disabled' : ''}>⌖</button><button data-group-action="cue-play" data-id="${esc(g.id)}" aria-label="${t('Play this cortina')}" title="${t('Play this cortina')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button></div><label class="cortina-hold"><input type="checkbox" data-cortina-full="${esc(g.id)}" ${g.fullLength ? 'checked' : ''}>${t('Use the rest of the recording')}</label><label class="cortina-hold"><input type="checkbox" data-cortina-hold="${esc(g.id)}" ${g.holdAfter ? 'checked' : ''}>${t('Wait before the next tanda')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select Add to tanda</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
+  $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${g.collapsed ? 'collapsed' : ''} ${g.parentId ? 'attached-cortina' : ''} ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${t(g.kind === 'tanda' ? 'Tanda' : 'Cortina')}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="collapse" data-id="${esc(g.id)}" aria-expanded="${!g.collapsed}">${t(g.collapsed ? 'Expand' : 'Collapse')}</button>${g.kind === 'tanda' ? `<button data-group-action="play-tanda" data-id="${esc(g.id)}" aria-label="${t('Play this tanda')}" title="${t('Play this tanda')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button><button data-group-action="cortina" data-id="${esc(g.id)}">${t('Cortina')}</button><button data-group-action="notes" data-id="${esc(g.id)}" aria-label="Tanda notes">Notes</button>` : ''}<button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${!canMoveGroup(g, -1) ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${!canMoveGroup(g, 1) ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div>${g.notes ? `<p class="tanda-notes" data-preserve>${esc(g.notes)}</p>` : ''}<ol>${g.trackIds.map((id, j) => { const t = state.tracks.find(t => t.id === id); return `<li><span>${esc(t?.title || 'Missing track')}</span><div><button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<div class="cortina-range"><label><span>${t('From')}</span><input type="number" min="0" max="86400" step="1" value="${g.startSeconds || 0}" data-cortina-start="${esc(g.id)}" aria-label="${t('Cortina start position')}"></label><span class="range-arrow">→</span><label><span>${t('To')}</span><input type="number" min="1" max="90000" step="1" value="${(g.startSeconds || 0) + (g.limitSeconds || 20)}" data-cortina-end="${esc(g.id)}" ${g.fullLength ? 'disabled' : ''} aria-label="${t('Cortina end position')}"></label><span class="range-unit">${t('seconds')}</span><button data-group-action="cue-position" data-id="${esc(g.id)}" aria-label="${t('Use deck position')}" title="${t('Use deck position')}" ${!current || !g.trackIds.includes(current.id) ? 'disabled' : ''}>⌖</button><button data-group-action="cue-play" data-id="${esc(g.id)}" aria-label="${t('Play this cortina')}" title="${t('Play this cortina')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button></div><label class="cortina-hold"><input type="checkbox" data-cortina-full="${esc(g.id)}" ${g.fullLength ? 'checked' : ''}>${t('Use the rest of the recording')}</label><label class="cortina-hold"><input type="checkbox" data-cortina-hold="${esc(g.id)}" ${g.holdAfter ? 'checked' : ''}>${t('Wait before the next tanda')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select Add to tanda</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
   refreshGroupSummaries();
 }
 function refreshGroupSummaries() {
@@ -556,7 +556,15 @@ $('#metadata-form').onsubmit = event => {
   void persist(); render(); markStep('edit'); $('#metadata-dialog').close();
 };
 $('#close-metadata').onclick = () => $('#metadata-dialog').close();
-function addGroup(kind) { normalizeProgram(state); rememberSetEdit(); const group = { id: uid(), kind, name: `${kind === 'tanda' ? 'Tanda' : 'Cortina'} ${state.groups.filter(g => g.kind === kind).length + 1}`, trackIds: [], ...(kind === 'cortina' ? { fullLength: true, holdAfter: true, parentId: state.groups.find(g => g.id === selected && g.kind === 'tanda')?.id || '' } : { collapsed: phoneLayout.matches }) }; if (group.parentId) { const old = state.groups.find(g => g.parentId === group.parentId); if (old) { selected = old.id; renderGroups(); notify('This tanda already has a cortina. Select it to edit.'); return; } state.groups.splice(state.groups.findIndex(g => g.id === group.parentId) + 1, 0, group); } else state.groups.push(group); selected = group.id; void persist(); renderGroups(); }
+function addGroup(kind) {
+  normalizeProgram(state);
+  const parent = kind === 'cortina' ? state.groups.find(g => g.id === selected && g.kind === 'tanda') : null;
+  const existing = parent && state.groups.find(g => g.parentId === parent.id);
+  if (existing) { selected = existing.id; renderGroups(); void persist(); notify('This tanda already has a cortina. Select it to edit.'); return; }
+  const group = { id: uid(), kind, name: `${kind === 'tanda' ? 'Tanda' : 'Cortina'} ${state.groups.filter(g => g.kind === kind).length + 1}`, trackIds: [], ...(kind === 'cortina' ? { fullLength: true, holdAfter: true, parentId: parent?.id || '' } : { collapsed: phoneLayout.matches }) };
+  rememberSetEdit(); insertGroupAfterSelection(state, group, selected); selected = group.id;
+  void persist(); renderGroups();
+}
 $('#add-tanda').onclick = () => addGroup('tanda'); $('#add-cortina').onclick = () => addGroup('cortina');
 $('#groups').onclick = event => {
   const button = event.target.closest('[data-group-action]'); if (!button) return;
@@ -569,6 +577,13 @@ $('#groups').onclick = event => {
   if (action === 'cortina') { selected = group.id; $('#add-cortina').click(); const attached = state.groups.find(g => g.parentId === group.id); if (attached) { group.collapsed = false; attached.collapsed = false; selected = attached.id; renderGroups(); void persist(); } return; }
   if (action === 'collapse') { group.collapsed = !group.collapsed; const cortina = state.groups.find(g => g.parentId === group.id); if (cortina) cortina.collapsed = group.collapsed; void persist(); renderGroups(); return; }
   if (action === 'notes') { const notes = prompt(t('Tanda notes'), group.notes || ''); if (notes !== null) { group.notes = notes; void persist(); renderGroups(); } return; }
+  if (action === 'play-tanda') {
+    const clips = flattenSet([group], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
+    if (!clips.length) return;
+    selected = group.id; queue = clips; queueIndex = -1; loadedSignature = null;
+    renderGroups(); renderQueue(); showView('deck'); void playIndex(0);
+    return;
+  }
   if (action === 'cue-play') {
     showView('deck');
     const clips = flattenSet([group], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
@@ -892,7 +907,7 @@ function renderCollections() {
       const ids = [...$('#collection-detail').querySelectorAll('[data-candidate]:checked')].map(el => el.dataset.candidate);
       if (!ids.length) { notify('Choose recordings first.'); return; }
       rememberSetEdit(); const group = { id: uid(), kind: 'tanda', name: collection.name, trackIds: ids, collapsed: phoneLayout.matches };
-      state.groups.push(group); selected = group.id; normalizeProgram(state); void persist(); render(); showView('set');
+      insertGroupAfterSelection(state, group, selected); selected = group.id; normalizeProgram(state); void persist(); render(); showView('set');
     };
     $('#collection-rename').onclick = () => { const name = prompt(t('Set name'), collection.name); if (name?.trim()) { collection.name = name.trim(); void persist(); renderCollections(); } };
   }
@@ -929,8 +944,8 @@ $('#presets').onclick = event => {
   if (!add) return;
   const preset = state.presets.find(p => p.id === add.dataset.preset);
   const group = { id: uid(), kind: 'tanda', name: preset.name, notes: preset.notes, trackIds: [...preset.trackIds], presetId: preset.id, collapsed: phoneLayout.matches };
-  rememberSetEdit(); state.groups.push(group); selected = group.id;
-  if (preset.cortina) state.groups.push({ ...structuredClone(preset.cortina), id: uid(), parentId: group.id, occurrenceIds: undefined });
+  rememberSetEdit(); insertGroupAfterSelection(state, group, selected); selected = group.id;
+  if (preset.cortina) insertGroupAfterSelection(state, { ...structuredClone(preset.cortina), id: uid(), parentId: group.id, occurrenceIds: undefined }, group.id);
   normalizeProgram(state); void persist(); renderGroups();
 };
 function moveTanda(group, direction) {

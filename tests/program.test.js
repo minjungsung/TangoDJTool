@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeProgram, insertNext } from '../src/program.js';
+import { normalizeProgram, insertGroupAfterSelection, insertNext } from '../src/program.js';
 import { flattenSet, validateSet } from '../src/model.js';
 
 function fixture() {
@@ -8,6 +8,21 @@ function fixture() {
   const queue = flattenSet(state.groups, state.tracks);
   return { state, queue };
 }
+test('group insertion follows selection and keeps a tanda with its attached cortina', () => {
+  const { state } = fixture();
+  state.groups.push({ id: 'last', kind: 'tanda', name: 'Last', trackIds: [] });
+  const add = (id, selectedId, kind = 'tanda', parentId) => insertGroupAfterSelection(state, { id, kind, name: id, trackIds: [], ...(kind === 'cortina' ? { parentId: parentId || '' } : {}) }, selectedId);
+  add('new', 't');
+  assert.deepEqual(state.groups.map(g => g.id), ['t', 'break', 'new', 'last']);
+  add('attached', 'new', 'cortina', 'new');
+  add('standalone', 'attached', 'cortina');
+  add('after-cortina', 'standalone');
+  assert.deepEqual(state.groups.map(g => g.id), ['t', 'break', 'new', 'attached', 'standalone', 'after-cortina', 'last']);
+  add('fallback', 'missing');
+  assert.equal(state.groups.at(-1).id, 'fallback');
+  assert.equal(state.groups.find(g => g.id === 'attached').parentId, 'new');
+  assert.equal(state.groups.find(g => g.id === 'standalone').parentId, '');
+});
 test('ordered next additions preserve repeated occurrences and attached cortina', () => {
   const { state, queue } = fixture(), current = queue[0];
   const first = insertNext(state, queue, 0, state.tracks[3], 't');
