@@ -1,0 +1,253 @@
+{
+  "date": "2026-10-20",
+  "scope": "Continued browser workflow exploration after the first review, focusing on edits during playback, repeated placements, reservations, persistence, and offline restart.",
+  "methods": [
+    "Chromium and WebKit browser interaction",
+    "Phone viewport playback and editing",
+    "Generated WAV recordings through real browser audio transport",
+    "Controlled YouTube API fixture for reproducible queue ordering"
+  ],
+  "limitations": [
+    "Subjective listening, physical devices, and live YouTube availability were not assessed.",
+    "Reload restores the queue and selected recording; playback restarts that recording when explicitly resumed."
+  ],
+  "fixes": [
+    {
+      "trigger": "Delete the active placement of A from [A, B, A], then refresh.",
+      "result": "The deleted placement cannot match the later A. Playback and the existing queue remain intact, with an explanation."
+    },
+    {
+      "trigger": "Edit, reserve a recording, refresh, or reload during tanda-only listening.",
+      "result": "The queue retains its selected tanda scope and does not expand into the entire program."
+    },
+    {
+      "trigger": "Refresh the upcoming queue with pending reservations.",
+      "result": "Reservations retain their cancellation controls and placement identity."
+    },
+    {
+      "trigger": "Cancel or reorder a reservation while unrelated edits are unreflected.",
+      "result": "The stale-queue warning remains visible until those edits are reflected."
+    },
+    {
+      "trigger": "Cancel a reservation after deleting its placement or parent tanda.",
+      "result": "The reservation is removable without deleting a different recording or requiring its former parent."
+    },
+    {
+      "trigger": "Swap duplicate placements of the same recording.",
+      "result": "Queue freshness includes occurrence identity and detects the change."
+    },
+    {
+      "trigger": "Undo a group edit after deleting recordings from the library.",
+      "result": "Surviving recordings retain their original placement identities."
+    },
+    {
+      "trigger": "Rename the current tanda and refresh.",
+      "result": "Playback and queue labels update without restarting the recording."
+    }
+  ],
+  "test_maintenance": {
+    "install_suite": "Wait for serviceWorker.ready and actual activation before reload; navigate to Tandas before adding a group; verify all manifest icon resources offline."
+  },
+  "validation": {
+    "unit_tests": {
+      "passed": 19
+    },
+    "default_browser_suite": {
+      "passed": 83
+    },
+    "built_webkit_workflow_checks": {
+      "passed": 8,
+      "note": "Seven checks passed together; the Undo check passed on targeted rerun after replacing a source-only import with IndexedDB access."
+    },
+    "production_build": "passed",
+    "offline_install_suite": {
+      "passed": 2
+    },
+    "built_local_transport": {
+      "status": "passed",
+      "duration": 21704.195,
+      "tests": [
+        {
+          "project": "desktop-chromium",
+          "title": "local transport: pause/resume, previous/next, seek, volume/mute, keyboard, final endpoint and Auto next",
+          "file": "tests/browser/feature-review.spec.js",
+          "line": 117,
+          "outcome": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration": 4720,
+              "errors": []
+            }
+          ]
+        },
+        {
+          "project": "phone-chromium",
+          "title": "local transport: pause/resume, previous/next, seek, volume/mute, keyboard, final endpoint and Auto next",
+          "file": "tests/browser/feature-review.spec.js",
+          "line": 117,
+          "outcome": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration": 4912,
+              "errors": []
+            }
+          ]
+        },
+        {
+          "project": "tablet-webkit",
+          "title": "local transport: pause/resume, previous/next, seek, volume/mute, keyboard, final endpoint and Auto next",
+          "file": "tests/browser/feature-review.spec.js",
+          "line": 117,
+          "outcome": "expected",
+          "results": [
+            {
+              "status": "passed",
+              "duration": 9321,
+              "errors": []
+            }
+          ]
+        }
+      ]
+    },
+    "solo_local_audio_endpoint": {
+      "started": "2026-10-20T01:02:25.552Z",
+      "fixture": "Generated 90-second WAV recordings; browser audio playback",
+      "events": [
+        {
+          "check": "Solo tanda stops at final local-audio endpoint and restarts explicitly",
+          "queue": [
+            "A",
+            "B",
+            "A"
+          ]
+        }
+      ],
+      "errors": [],
+      "completed": true,
+      "finished": "2026-10-20T01:02:30.833Z"
+    },
+    "continuous_local_audio": {
+      "started": "2026-10-20T01:00:07.533Z",
+      "fixture": "Generated 90-second WAV recordings; browser audio playback",
+      "events": [
+        {
+          "elapsedSeconds": 20,
+          "cycle": 0,
+          "title": "A",
+          "position": "0:21 / 1:30",
+          "queue": [
+            "A",
+            "B",
+            "A"
+          ]
+        },
+        {
+          "elapsedSeconds": 41,
+          "cycle": 1,
+          "title": "A",
+          "position": "0:41 / 1:30",
+          "queue": [
+            "A",
+            "B",
+            "A"
+          ]
+        },
+        {
+          "elapsedSeconds": 61,
+          "cycle": 2,
+          "title": "A",
+          "position": "1:01 / 1:30",
+          "queue": [
+            "A",
+            "B",
+            "A"
+          ]
+        },
+        {
+          "elapsedSeconds": 82,
+          "cycle": 3,
+          "title": "A",
+          "position": "1:21 / 1:30",
+          "queue": [
+            "A",
+            "B",
+            "A"
+          ]
+        },
+        {
+          "elapsedSeconds": 102,
+          "cycle": 4,
+          "title": "B",
+          "position": "0:11 / 1:30",
+          "queue": [
+            "A",
+            "B",
+            "A"
+          ]
+        },
+        {
+          "elapsedSeconds": 123,
+          "cycle": 5,
+          "title": "B",
+          "position": "0:19 / 1:30",
+          "queue": [
+            "A",
+            "B",
+            "A"
+          ]
+        },
+        {
+          "elapsedSeconds": 143,
+          "cycle": 6,
+          "title": "B",
+          "position": "0:39 / 1:30",
+          "queue": [
+            "A",
+            "B",
+            "A"
+          ]
+        },
+        {
+          "elapsedSeconds": 163,
+          "cycle": 7,
+          "title": "B",
+          "position": "1:00 / 1:30",
+          "queue": [
+            "A",
+            "B",
+            "A"
+          ]
+        },
+        {
+          "elapsedSeconds": 184,
+          "cycle": 8,
+          "title": "B",
+          "position": "1:20 / 1:30",
+          "queue": [
+            "A",
+            "B",
+            "A"
+          ]
+        }
+      ],
+      "errors": [],
+      "completed": true,
+      "finished": "2026-10-20T01:03:14.577Z"
+    }
+  },
+  "check_harness_corrections": [
+    "An earlier continuous-audio attempt incorrectly required playback time to survive reload; that expectation was removed because reload restores the recording rather than its timestamp.",
+    "A later continuous-audio attempt stopped after 14 successful edit checkpoints because an unconditional pause click restarted an ended recording. The replacement checks transport state before pausing; final-endpoint behavior also passed separately in three browser/device projects.",
+    "Initial offline checks used an async wait predicate that treated its unresolved Promise as truthy. The corrected activation helper passed both offline tests.",
+    "The repeated-title endpoint check now waits for loading to finish and verifies Recording 3 / 3 before seeking; the title A alone cannot distinguish the first and final placement."
+  ],
+  "source_sha256": {
+    "src/main.js": "ba539f3387decb4d277b11f23d557da2baccbc73b039a81b521b10e2a0e8cd0c",
+    "src/workspace.js": "d35b01db2944be67fa56f58996d4761fab98ec385ca17762916ede7b3570b988",
+    "tests/browser/new-workflow.spec.js": "d30f554737dd5f834042d1b7ffdd5a0e79b40df54934e956bea3c3d74d92cba3",
+    "tests/browser/install.spec.js": "851aa60d29fec3f6958c2f6f2e1ef354cbef7bdad049e7ba08909f5e5f620f79",
+    "tests/workspace.test.js": "6b801a97e9af7cf90088bca14ae34eabaadcedac35eef140a87035035db72c0d"
+  }
+}

@@ -4,8 +4,8 @@ export function groupDuration(group, tracks) {
 }
 
 export function queueSignature(groups, tracks) {
-  return JSON.stringify(groups.flatMap(group => group.trackIds.filter(id => tracks.some(track => track.id === id))
-    .map(id => [id, group.id, group.name, group.limitSeconds || null, group.startSeconds || 0, Boolean(group.holdAfter)])));
+  return JSON.stringify(groups.flatMap(group => group.trackIds.map((id, index) => ({ id, index })).filter(({ id }) => tracks.some(track => track.id === id))
+    .map(({ id, index }) => [id, group.id, group.name, group.limitSeconds || null, group.startSeconds || 0, Boolean(group.holdAfter), group.occurrenceIds?.[index] || null])));
 }
 
 export function locateInQueue(queue, trackId, currentIndex) {

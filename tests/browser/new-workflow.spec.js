@@ -434,3 +434,125 @@ test('removing the parent of a selected cortina selects a nearby group for the n
   await expect(page.locator('.group').first()).toHaveAttribute('data-group', 't2');
   await expect(page.locator('.group').last()).toHaveClass(/attached-cortina/);
 });
+
+
+test('queue refresh cannot confuse a removed recording occurrence with a later repeat', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
+  await expect(page.locator('#playing-title')).toHaveText('A');
+  await page.evaluate(() => { testYT.position = 42; testYT.pauseVideo(); });
+  await nav(page, 'set');
+  await page.locator('[data-group-action=remove][data-id=t][data-index="0"]').click();
+  await page.locator('#refresh-queue').click();
+  await expect(page.locator('#notice')).toContainText('current recording is no longer');
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A','C','B']);
+  expect(await page.evaluate(() => [testYT.position, testYT.state])).toEqual([42,2]);
+});
+
+test('tanda-only queue edits and play-next stay inside the tanda after refresh and reload', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set');
+  await page.locator('[data-group-action=play-tanda][data-id=t]').click();
+  await expect(page.locator('#playing-title')).toHaveText('A');
+  await page.evaluate(() => { testYT.position = 42; testYT.pauseVideo(); });
+  await nav(page, 'library'); await page.locator('[data-action=play-next][data-id=x]').click();
+  await nav(page, 'set');
+  await page.locator('[data-group-action=track-down][data-id=t][data-index="1"]').click();
+  await expect(page.locator('#queue-stale')).toBeVisible();
+  await page.locator('#refresh-queue').click();
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','B','X','A']);
+  expect(await page.evaluate(() => [testYT.position, testYT.state])).toEqual([42,2]);
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  await page.reload(); await nav(page, 'deck'); await page.locator('#play-pause').click();
+  await expect(page.locator('#playing-title')).toHaveText('A');
+  await nav(page, 'set');
+  await page.locator('[data-group-action=track-down][data-id=t][data-index="1"]').click();
+  await page.locator('#refresh-queue').click();
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','X','B','A']);
+  await nav(page, 'deck'); await expect(page.locator('#deck-start-set')).toBeVisible();
+});
+
+
+test('canceling a reservation keeps unrelated unreflected edits visible', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
+  await expect(page.locator('#playing-title')).toHaveText('A');
+  await nav(page, 'library'); await page.locator('[data-action=play-next][data-id=x]').click();
+  await nav(page, 'set'); await page.locator('[data-group-action=track-down][data-id=t][data-index="2"]').click();
+  await expect(page.locator('#queue-stale')).toBeVisible();
+  await nav(page, 'deck'); await page.locator('[data-pending-remove]').click();
+  await nav(page, 'set'); await expect(page.locator('#queue-stale')).toBeVisible();
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A','C','B']);
+  await expect(page.locator('[data-group=t] li>span')).toHaveText(['A','A','B']);
+});
+
+test('refresh keeps reservation cancellation available without removing the wrong recording', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
+  await expect(page.locator('#playing-title')).toHaveText('A');
+  await nav(page, 'library'); await page.locator('[data-action=play-next][data-id=x]').click();
+  await nav(page, 'set'); await page.locator('[data-group-action=track-down][data-id=t][data-index="1"]').click();
+  await page.locator('#refresh-queue').click();
+  await nav(page, 'deck'); await expect(page.locator('[data-pending-remove]')).toBeVisible();
+  await page.locator('[data-pending-remove]').click();
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A','C','B']);
+  await nav(page, 'set'); await expect(page.locator('#queue-stale')).toBeHidden();
+});
+
+test('canceling a reservation already removed from the tanda leaves its other recordings intact', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
+  await expect(page.locator('#playing-title')).toHaveText('A');
+  await nav(page, 'library'); await page.locator('[data-action=play-next][data-id=x]').click();
+  await nav(page, 'set'); await page.locator('[data-group-action=remove][data-id=t][data-index="1"]').click();
+  await nav(page, 'deck'); await page.locator('[data-pending-remove]').click();
+  await nav(page, 'set'); await expect(page.locator('[data-group=t] li>span')).toHaveText(['A','B','A']);
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A','C','B']);
+});
+
+
+test('a reservation can still be canceled after its tanda is removed', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
+  await expect(page.locator('#playing-title')).toHaveText('A');
+  await nav(page, 'library'); await page.locator('[data-action=play-next][data-id=x]').click();
+  await nav(page, 'set'); page.once('dialog', dialog => dialog.accept());
+  await page.locator('[data-group-action=delete][data-id=t]').click();
+  await nav(page, 'deck'); await page.locator('[data-pending-remove]').click();
+  await expect(page.locator('[data-pending-remove]')).toHaveCount(0);
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A','C','B']);
+});
+
+
+test('Undo after library deletion retains the placement identities of surviving recordings', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set');
+  const read = () => page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('tango-dj-studio', 2);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result, reading = db.transaction('state').objectStore('state').get('current');
+      reading.onsuccess = () => { db.close(); resolve(reading.result.groups.find(group => group.id === 't')); };
+      reading.onerror = () => { db.close(); reject(reading.error); };
+    };
+  }));
+  await page.locator('[data-group-action=select][data-id=t]').click();
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  const original = await read();
+  await page.locator('[data-group-action=track-down][data-id=t][data-index="0"]').click();
+  await nav(page, 'library'); page.once('dialog', dialog => dialog.accept());
+  await recordingAction(page, 'delete', 'a');
+  await nav(page, 'set'); await page.locator('#undo-set').click();
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  const restored = await read();
+  expect(restored.trackIds).toEqual(['b']);
+  expect(restored.occurrenceIds).toEqual([original.occurrenceIds[1]]);
+});
+
+
+test('renaming the current tanda updates Playback labels without restarting its recording', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set');
+  await page.locator('[data-group-action=play-tanda][data-id=t]').click();
+  await expect(page.locator('#playing-title')).toHaveText('A');
+  await page.evaluate(() => { testYT.position = 33; testYT.pauseVideo(); });
+  await nav(page, 'set'); page.once('dialog', dialog => dialog.accept('Audition tanda'));
+  await page.locator('[data-group-action=rename][data-id=t]').click();
+  await page.locator('#refresh-queue').click();
+  await nav(page, 'deck');
+  await expect(page.locator('#playing-group')).toHaveText('Audition tanda');
+  await expect(page.locator('.queue-item small')).toHaveText(['Audition tanda','Audition tanda','Audition tanda']);
+  expect(await page.evaluate(() => [testYT.position, testYT.state])).toEqual([33,2]);
+});

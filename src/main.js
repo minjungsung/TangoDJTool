@@ -14,7 +14,7 @@ import { t, startI18n, setLanguage, getLanguage } from './i18n.js';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const time = seconds => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '—';
 let state = { tracks: [], groups: [] }, selected = null, queue = [], queueIndex = -1, current = null, busy = false;
-let playRequest = 0, timedEnd = false, loadedSignature = null, resumeIndex = 0;
+let playRequest = 0, timedEnd = false, loadedSignature = null, resumeIndex = 0, queueGroupId = null;
 let undoGroups = null, transitioning = false, stopped = false, lastRenderedIndex = -1;
 const files = new Map(), sourceStatuses = new Map();
 let activeCollection = null, collectingInto = null, reconnectMode = false, addingNext = false;
@@ -24,7 +24,7 @@ try { settings = JSON.parse(localStorage.getItem('studio-settings') || '{}'); } 
 let persistence = Promise.resolve(), temporaryWorkspace = false;
 function workspaceSnapshot(tracks = state.tracks) {
   normalizeProgram(state);
-  return structuredClone({ ...state, tracks, queue: queue.map(item => ({ trackId: item.track.id, occurrenceId: item.occurrenceId, addedAfter: item.addedAfter, pendingAddition: item.pendingAddition, groupId: item.groupId, groupName: item.groupName, kind: item.kind, limitSeconds: item.limitSeconds, startSeconds: item.startSeconds, holdAfter: item.holdAfter })), queueIndex: queueIndex >= 0 ? queueIndex : resumeIndex, selected, loadedSignature });
+  return structuredClone({ ...state, tracks, queue: queue.map(item => ({ trackId: item.track.id, occurrenceId: item.occurrenceId, addedAfter: item.addedAfter, pendingAddition: item.pendingAddition, groupId: item.groupId, groupName: item.groupName, kind: item.kind, limitSeconds: item.limitSeconds, startSeconds: item.startSeconds, holdAfter: item.holdAfter })), queueIndex: queueIndex >= 0 ? queueIndex : resumeIndex, selected, loadedSignature, queueGroupId });
 }
 function persist() {
   const snapshot = workspaceSnapshot();
@@ -236,6 +236,8 @@ function renderGroups() {
   $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${g.collapsed ? 'collapsed' : ''} ${g.parentId ? 'attached-cortina' : ''} ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${t(g.kind === 'tanda' ? 'Tanda' : 'Cortina')}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="collapse" data-id="${esc(g.id)}" aria-expanded="${!g.collapsed}">${t(g.collapsed ? 'Expand' : 'Collapse')}</button>${g.kind === 'tanda' ? `<button data-group-action="play-tanda" data-id="${esc(g.id)}" aria-label="${t('Play this tanda')}" title="${t('Play this tanda')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button><button data-group-action="cortina" data-id="${esc(g.id)}">${t('Cortina')}</button><button data-group-action="notes" data-id="${esc(g.id)}" aria-label="Tanda notes">Notes</button>` : ''}<button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${!canMoveGroup(g, -1) ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${!canMoveGroup(g, 1) ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div>${g.notes ? `<p class="tanda-notes" data-preserve>${esc(g.notes)}</p>` : ''}<ol>${g.trackIds.map((id, j) => { const track = state.tracks.find(t => t.id === id); return `<li><span>${esc(track?.title || 'Missing track')}</span><div>${g.kind === 'tanda' ? `<button data-group-action="play-recording" data-id="${esc(g.id)}" data-index="${j}" aria-label="${esc(`${t('Play from this recording')}: ${track?.title || 'Missing track'}`)}" title="${t('Play from this recording')}">▶</button>` : ''}<button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<div class="cortina-range"><label><span>${t('From')}</span><input type="number" min="0" max="86400" step="1" value="${g.startSeconds || 0}" data-cortina-start="${esc(g.id)}" aria-label="${t('Cortina start position')}"></label><span class="range-arrow">→</span><label><span>${t('To')}</span><input type="number" min="1" max="90000" step="1" value="${(g.startSeconds || 0) + (g.limitSeconds || 20)}" data-cortina-end="${esc(g.id)}" ${g.fullLength ? 'disabled' : ''} aria-label="${t('Cortina end position')}"></label><span class="range-unit">${t('seconds')}</span><button data-group-action="cue-position" data-id="${esc(g.id)}" aria-label="${t('Use deck position')}" title="${t('Use deck position')}" ${!current || !g.trackIds.includes(current.id) ? 'disabled' : ''}>⌖</button><button data-group-action="cue-play" data-id="${esc(g.id)}" aria-label="${t('Play this cortina')}" title="${t('Play this cortina')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button></div><label class="cortina-hold"><input type="checkbox" data-cortina-full="${esc(g.id)}" ${g.fullLength ? 'checked' : ''}>${t('Use the rest of the recording')}</label><label class="cortina-hold"><input type="checkbox" data-cortina-hold="${esc(g.id)}" ${g.holdAfter ? 'checked' : ''}>${t('Wait before the next tanda')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select Add to tanda</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
   refreshGroupSummaries();
 }
+function playbackGroups() { return queueGroupId ? state.groups.filter(group => group.id === queueGroupId) : state.groups; }
+function playbackSignature() { return queueSignature(playbackGroups(), state.tracks); }
 function refreshGroupSummaries() {
   const articles = new Map([...document.querySelectorAll('#groups .group')].map(el => [el.dataset.group, el]));
   for (const group of state.groups) {
@@ -252,12 +254,12 @@ function refreshGroupSummaries() {
   $('#empty-set').hidden = state.groups.length > 0;
   $('#set-duration').textContent = time(state.groups.reduce((s, group) => s + groupDuration(group, state.tracks), 0));
   $('#start-set').disabled = !flattenSet(state.groups, state.tracks).length;
-  $('#deck-start-set').hidden = $('#start-set').disabled || Boolean(current && loadedSignature);
+  $('#deck-start-set').hidden = $('#start-set').disabled || Boolean(current && loadedSignature && !queueGroupId);
   const chosen = state.groups.find(g => g.id === selected);
   $('#choose-recordings').hidden = !chosen;
   syncDestination();
   $('#selected-group').textContent = chosen ? `${t('Adding to')}: ${chosen.name}` : t('Select a tanda to add recordings');
-  $('#queue-stale').hidden = !loadedSignature || loadedSignature === queueSignature(state.groups, state.tracks);
+  $('#queue-stale').hidden = !loadedSignature || loadedSignature === playbackSignature();
   $('#refresh-queue').hidden = $('#queue-stale').hidden || !current || queueIndex < 0; $('#refresh-queue').disabled = transitioning;
 }
 let deckVisible = false;
@@ -398,7 +400,10 @@ function updateTransport() {
 function rememberSetEdit() { undoGroups = { groups: structuredClone(state.groups), selected }; $('#undo-bar').hidden = false; }
 $('#undo-set').onclick = () => {
   if (!undoGroups) return;
-  state.groups = undoGroups.groups.map(group => ({ ...group, trackIds: group.trackIds.filter(id => state.tracks.some(track => track.id === id)) })); selected = undoGroups.selected; undoGroups = null;
+  state.groups = undoGroups.groups.map(group => {
+    const remaining = group.trackIds.map((id, index) => ({ id, occurrenceId: group.occurrenceIds[index] })).filter(item => state.tracks.some(track => track.id === item.id));
+    return { ...group, trackIds: remaining.map(item => item.id), occurrenceIds: remaining.map(item => item.occurrenceId) };
+  }); selected = undoGroups.selected; undoGroups = null;
   $('#undo-bar').hidden = true; void persist(); renderGroups();
 };
 async function playIndex(index) {
@@ -488,7 +493,7 @@ $('#tracks').onclick = async event => {
         const sourcePlayback = track.style === 'Cortina';
         const existingIndex = sourcePlayback ? queue.findIndex(item => item.track.id === track.id && !item.limitSeconds && !item.startSeconds) : locateInQueue(queue, track.id, queueIndex);
         if (existingIndex >= 0) await playIndex(existingIndex);
-        else { queue.push({ track: structuredClone(track) }); loadedSignature = null; renderQueue(); await playIndex(queue.length - 1); }
+        else { queue.push({ track: structuredClone(track) }); queueGroupId = null; loadedSignature = null; renderQueue(); await playIndex(queue.length - 1); }
         showView('deck'); break;
       }
       case 'play-next': await choosePlayNext(track); break;
@@ -596,7 +601,7 @@ $('#groups').onclick = event => {
   if (action === 'play-tanda' || action === 'play-recording') {
     const clips = flattenSet([group], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
     if (!clips.length) return;
-    selected = group.id; queue = clips; queueIndex = -1; loadedSignature = null;
+    selected = group.id; queue = clips; queueIndex = -1; queueGroupId = group.id; loadedSignature = playbackSignature();
     renderGroups(); renderQueue(); showView('deck'); void playIndex(action === 'play-recording' ? j : 0);
     return;
   }
@@ -609,7 +614,7 @@ $('#groups').onclick = event => {
       return queued?.groupId === clip.groupId && queued.track.id === clip.track.id && queued.occurrenceId === clip.occurrenceId && (queued.startSeconds || 0) === (clip.startSeconds || 0) && queued.limitSeconds === clip.limitSeconds && Boolean(queued.holdAfter) === Boolean(clip.holdAfter);
     }) && queue[index + clips.length]?.groupId !== group.id);
     if (index >= 0) void playIndex(index);
-    else { const start = queue.length; queue.push(...clips); loadedSignature = null; renderQueue(); void playIndex(start); }
+    else { const start = queue.length; queue.push(...clips); queueGroupId = null; loadedSignature = null; renderQueue(); void playIndex(start); }
     return;
   }
   if (action === 'cue-position' && (!current || !group.trackIds.includes(current.id))) return;
@@ -671,22 +676,31 @@ $('#groups').onchange = event => {
 $('#groups').ondragover = event => { if (event.target.closest('[data-group]')) event.preventDefault(); };
 $('#groups').ondrop = event => { const group = event.target.closest('[data-group]'); if (group) { event.preventDefault(); addToGroup(event.dataTransfer.getData('text/plain'), group.dataset.group); } };
 $('#refresh-queue').onclick = async () => {
-  const prepared = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
+  const prepared = flattenSet(playbackGroups(), state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
   const active = queue[queueIndex]; if (!active || transitioning) return;
   const occurrence = queue.slice(0, queueIndex + 1).filter(item => item.groupId === active.groupId && item.track.id === active.track.id).length;
   const matches = prepared.map((item, index) => ({ item, index })).filter(({ item }) => item.groupId === active.groupId && item.track.id === active.track.id);
   const exact = prepared.findIndex(item => item.occurrenceId && item.occurrenceId === active.occurrenceId);
-  const match = exact >= 0 ? { index: exact } : matches[occurrence - 1];
+  const match = active.occurrenceId ? (exact >= 0 ? { index: exact } : null) : matches[occurrence - 1];
   if (!match) { notify('The current recording is no longer in the edited set. Finish it before loading another set.', true); return; }
-  queue = [...queue.slice(0, queueIndex + 1), ...prepared.slice(match.index + 1)];
-  loadedSignature = queueSignature(state.groups, state.tracks); render(); await persist(); notify('Upcoming queue updated. Current recording keeps playing.');
+  const pending = new Map(queue.filter(item => item.pendingAddition).map(item => [item.occurrenceId, item]));
+  queue = [...queue.slice(0, queueIndex + 1), ...prepared.slice(match.index + 1).map(item => {
+    const addition = pending.get(item.occurrenceId);
+    return addition ? { ...item, addedAfter: addition.addedAfter, pendingAddition: true } : item;
+  })];
+  for (const item of queue) {
+    const group = state.groups.find(group => group.id === item.groupId);
+    if (group) item.groupName = group.name;
+  }
+  $('#playing-group').textContent = queue[queueIndex]?.groupName || 'LIBRARY TRACK';
+  loadedSignature = playbackSignature(); render(); await persist(); notify('Upcoming queue updated. Current recording keeps playing.');
 };
 $('#start-set').onclick = async () => { normalizeProgram(state);
   if (transitioning) return;
   const unavailable = [];
   for (const track of state.tracks.filter(t => t.source === 'local' && state.groups.some(group => group.trackIds.includes(t.id)))) if (!await readyFile(track)) unavailable.push(track.title);
   renderLibrary();
-  if (unavailable.length) { notify(`${t('Files need attention before playback')}: ${unavailable.join(', ')}`, true); showView('library'); return; } showView('deck'); loadedSignature = queueSignature(state.groups, state.tracks); queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
+  if (unavailable.length) { notify(`${t('Files need attention before playback')}: ${unavailable.join(', ')}`, true); showView('library'); return; } showView('deck'); queueGroupId = null; loadedSignature = playbackSignature(); queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
 $('#deck-start-set').onclick = () => $('#start-set').click();
 $('#queue').onclick = event => { const item = event.target.closest('[data-queue-index]'); if (item) void playIndex(Number(item.dataset.queueIndex)); };
 $('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1)); else if (timedEnd || stopped) await playIndex(queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); } catch (error) { notify(playbackMessage(error), true); } };
@@ -718,7 +732,7 @@ $('#set-input').onchange = async event => {
     const imported = validateSet(JSON.parse(await file.text()));
     if (!confirm(t('Replace your current library and set with this file? Export your current set first if you want to keep it.'))) return;
     ++playRequest; player.stop(); player.track = null; queue = []; queueIndex = -1; current = null;
-    resumeIndex = 0; loadedSignature = null; undoGroups = null; timedEnd = false; stopped = false; transitioning = false;
+    resumeIndex = 0; loadedSignature = null; queueGroupId = null; undoGroups = null; timedEnd = false; stopped = false; transitioning = false;
     $('#undo-bar').hidden = true; $('#queue-resume').hidden = true; $('#preview-status').hidden = true; $('#youtube-error').hidden = true;
     $('#position').textContent = '0:00 / 0:00'; $('#seek').value = 0;
     $('#playing-title').textContent = 'No recording loaded'; $('#playing-artist').textContent = 'Play a track or load your prepared set.'; $('#playing-group').textContent = 'READY WHEN YOU ARE'; $('#youtube-wrap').hidden = true;
@@ -788,7 +802,7 @@ async function loadRealSamples() {
 }
 $('#load-real-samples').onclick = async () => { if (await loadRealSamples()) $('#examples-dialog').close(); };
 $('#real-sample-play').onclick = async () => {
-  if (!await loadRealSamples()) return; closePanels(); loadedSignature = null;
+  if (!await loadRealSamples()) return; closePanels(); queueGroupId = null; loadedSignature = null;
   queue = flattenSet(state.groups.filter(g => g.samplePack === REAL_SAMPLE_PACK), state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
   queueIndex = -1; renderQueue(); showView('deck'); await playIndex(0);
 };
@@ -1015,13 +1029,13 @@ async function addNext(track, targetId) {
   try {
     if (track.source === 'local' && !await readyFile(track, true)) throw new Error('Locate the file or grant access before adding it.');
     if (token !== playRequest || active !== queue[queueIndex] || transitioning) throw new Error('Playback advanced. Choose the target tanda again.');
-    if (loadedSignature && loadedSignature !== queueSignature(state.groups, state.tracks)) throw new Error('Update the upcoming queue before adding a recording.');
+    if (loadedSignature && loadedSignature !== playbackSignature()) throw new Error('Update the upcoming queue before adding a recording.');
     const previousGroups = structuredClone(state.groups), previousQueue = [...queue], previousSignature = loadedSignature;
     if (!queue.slice(queueIndex + 1).some(item => item.groupId === targetId) && active.groupId !== targetId) {
       const group = state.groups.find(g => g.id === targetId); const cortina = state.groups.find(g => g.parentId === targetId);
       queue.push(...flattenSet([group, ...(cortina ? [cortina] : [])], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })));
     }
-    insertNext(state, queue, queueIndex, track, targetId); loadedSignature = queueSignature(state.groups, state.tracks);
+    insertNext(state, queue, queueIndex, track, targetId); loadedSignature = playbackSignature();
     if (!await persist()) { state.groups = previousGroups; queue = previousQueue; loadedSignature = previousSignature; renderGroups(); renderQueue(); throw new Error('Could not save the added recording. The queue is unchanged.'); } renderGroups(); renderQueue(); notify('Recording added to this tanda. Current recording keeps playing.');
   } finally { addingNext = false; updateTransport(); }
 }
@@ -1033,22 +1047,26 @@ $('#pending-additions').onclick = event => {
   const button = event.target.closest('button'); if (!button) return;
   const index = Number(button.dataset.pendingRemove ?? button.dataset.pendingUp ?? button.dataset.pendingDown), item = queue[index];
   if (!item?.pendingAddition || index <= queueIndex) return;
-  const group = state.groups.find(g => g.id === item.groupId); if (!group) return;
-  const position = group.occurrenceIds.indexOf(item.occurrenceId);
-  if (button.dataset.pendingRemove !== undefined) { queue.splice(index, 1); group.trackIds.splice(position, 1); group.occurrenceIds.splice(position, 1); }
+  const group = state.groups.find(g => g.id === item.groupId);
+  const wasSynchronized = loadedSignature === playbackSignature();
+  const position = group?.occurrenceIds.indexOf(item.occurrenceId) ?? -1;
+  if (button.dataset.pendingRemove !== undefined) { queue.splice(index, 1); if (position >= 0) { group.trackIds.splice(position, 1); group.occurrenceIds.splice(position, 1); } }
   else {
+    if (!group) return;
     const nextIndex = index + (button.dataset.pendingUp !== undefined ? -1 : 1), other = queue[nextIndex];
     if (nextIndex <= queueIndex || !other?.pendingAddition || other.groupId !== item.groupId) return;
     const otherPosition = group.occurrenceIds.indexOf(other.occurrenceId);
+    if (position < 0 || otherPosition < 0) return;
     [queue[index], queue[nextIndex]] = [other, item];
     [group.trackIds[position], group.trackIds[otherPosition]] = [group.trackIds[otherPosition], group.trackIds[position]];
     [group.occurrenceIds[position], group.occurrenceIds[otherPosition]] = [group.occurrenceIds[otherPosition], group.occurrenceIds[position]];
   }
-  loadedSignature = queueSignature(state.groups, state.tracks); void persist(); renderGroups(); renderQueue();
+  if (wasSynchronized) loadedSignature = playbackSignature();
+  void persist(); renderGroups(); renderQueue();
 };
 
 try {
-  const saved = await loadState(); firstVisit = !saved; if (saved) { revision = saved.revision || 0; state = validateSet({ version: 1, ...saved }); selected = saved.selected; loadedSignature = typeof saved.loadedSignature === 'string' ? saved.loadedSignature : null; resumeIndex = Number.isInteger(saved.queueIndex) && saved.queueIndex >= 0 ? saved.queueIndex : 0; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; }
+  const saved = await loadState(); firstVisit = !saved; if (saved) { revision = saved.revision || 0; state = validateSet({ version: 1, ...saved }); selected = saved.selected; queueGroupId = typeof saved.queueGroupId === 'string' ? saved.queueGroupId : null; loadedSignature = typeof saved.loadedSignature === 'string' ? saved.loadedSignature : null; resumeIndex = Number.isInteger(saved.queueIndex) && saved.queueIndex >= 0 ? saved.queueIndex : 0; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; }
   const migrated = removeOldExamples(state); state = migrated.state; normalizeProgram(state);
   for (const group of state.groups) if (group.samplePack === REAL_SAMPLE_PACK && group.kind === 'cortina') {
     const defaults = realGroups().find(item => item.id === group.id);
