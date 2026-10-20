@@ -556,3 +556,92 @@ test('renaming the current tanda updates Playback labels without restarting its 
   await expect(page.locator('.queue-item small')).toHaveText(['Audition tanda','Audition tanda','Audition tanda']);
   expect(await page.evaluate(() => [testYT.position, testYT.state])).toEqual([33,2]);
 });
+
+for (const width of [1440, 390]) {
+  test(`${width}px reload restores the exact repeated placement and paused seek position without autoplay`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 }); await bootstrap(page); await nav(page, 'set');
+    await page.locator('[data-group-action=play-tanda][data-id=t]').click();
+    await expect(page.locator('#play-pause')).toBeEnabled();
+    await nav(page, 'deck'); await page.locator('.queue-item').last().click();
+    await expect(page.locator('#recording-number')).toHaveText('Recording 3 / 3');
+    await expect(page.locator('#play-pause')).toBeEnabled();
+    await page.locator('#play-pause').click(); await page.locator('#seek').fill('25');
+    await expect(page.locator('#position')).toHaveText('0:45 / 3:00');
+    await expect(page.locator('#remaining-time')).toHaveText('Remaining: 2:15');
+    await page.reload(); await nav(page, 'deck');
+    await expect(page.locator('#playing-title')).toHaveText('A');
+    await expect(page.locator('#position')).toHaveText('0:45 / 3:00');
+    await expect(page.locator('#play-pause')).toHaveText('▶');
+    await expect(page.locator('#seek')).toBeDisabled();
+    expect(await page.evaluate(() => Boolean(window.testYT))).toBe(false);
+    await page.locator('#play-pause').click();
+    await expect(page.locator('#recording-number')).toHaveText('Recording 3 / 3');
+    await expect(page.locator('#play-pause')).toBeEnabled();
+    expect(await page.evaluate(() => testYT.position)).toBe(45);
+    await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A']);
+    await page.locator('#stop').click(); await page.reload(); await nav(page, 'deck');
+    await expect(page.locator('#position')).toHaveText('0:00 / 3:00');
+    await page.locator('#play-pause').click(); await expect(page.locator('#play-pause')).toBeEnabled();
+    expect(await page.evaluate(() => testYT.position)).toBe(0);
+  });
+}
+
+test('restored cortina position stays relative to its cue and honors its original endpoint', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set');
+  await page.locator('[data-cortina-full=cortina]').uncheck();
+  await page.locator('[data-cortina-start=cortina]').fill('30'); await page.locator('[data-cortina-start=cortina]').blur();
+  await page.locator('[data-cortina-end=cortina]').fill('50'); await page.locator('[data-cortina-end=cortina]').blur();
+  await page.locator('[data-group-action=cue-play][data-id=cortina]').click();
+  await expect(page.locator('#play-pause')).toBeEnabled();
+  await page.locator('#play-pause').click(); await page.locator('#seek').fill('50');
+  await expect(page.locator('#position')).toHaveText('0:10 / 0:20');
+  await page.reload(); await nav(page, 'deck');
+  await expect(page.locator('#position')).toHaveText('0:10 / 0:20');
+  await page.locator('#play-pause').click(); await expect(page.locator('#play-pause')).toBeEnabled();
+  expect(await page.evaluate(() => testYT.position)).toBe(40);
+  await page.evaluate(() => { testYT.position = 50; });
+  await expect(page.locator('#play-pause')).toHaveText('▶');
+  await page.reload(); await nav(page, 'deck');
+  await expect(page.locator('#position')).toHaveText('0:00 / 0:20');
+  await page.locator('#play-pause').click(); await expect(page.locator('#play-pause')).toBeEnabled();
+  expect(await page.evaluate(() => testYT.position)).toBe(30);
+  await page.locator('#stop').click();
+  await expect(page.locator('#remaining-time')).toHaveText('Remaining: 0:20');
+});
+
+test('a stale checkpoint cannot move playback in a newer workspace revision', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
+  await expect(page.locator('#play-pause')).toBeEnabled(); await page.locator('#play-pause').click();
+  await page.locator('#seek').fill('25');
+  const checkpoint = await page.evaluate(() => localStorage.getItem('studio-playback-position'));
+  await nav(page, 'set'); page.once('dialog', dialog => dialog.accept('Renamed'));
+  await page.locator('[data-group-action=rename][data-id=t]').click();
+  await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  await page.addInitScript(checkpoint => { const stale = JSON.parse(checkpoint); stale.position = 90; localStorage.setItem('studio-playback-position', JSON.stringify(stale)); }, checkpoint);
+  await page.reload(); await nav(page, 'deck');
+  await expect(page.locator('#position')).toHaveText('0:45 / 3:00');
+});
+
+
+test('seeking after Stop resumes from the chosen position and Retry keeps it', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
+  await expect(page.locator('#play-pause')).toBeEnabled(); await page.locator('#stop').click();
+  await page.locator('#seek').fill('25'); await page.locator('#play-pause').click();
+  expect(await page.evaluate(() => testYT.position)).toBe(45);
+  await page.evaluate(() => { testYT.position = 57; testYT.options.events.onError({ data: 100 }); });
+  await nav(page, 'deck'); await page.locator('#youtube-retry').click();
+  await expect(page.locator('#play-pause')).toBeEnabled();
+  expect(await page.evaluate(() => testYT.position)).toBe(57);
+});
+
+
+test('deleting the restored recording cannot apply its saved position to the next recording', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set'); await page.locator('#start-set').click();
+  await expect(page.locator('#play-pause')).toBeEnabled(); await page.locator('#play-pause').click();
+  await page.locator('#seek').fill('25'); await page.reload(); await nav(page, 'library');
+  page.once('dialog', dialog => dialog.accept()); await recordingAction(page, 'delete', 'a');
+  await nav(page, 'deck'); await page.locator('#play-pause').click();
+  await expect(page.locator('#playing-title')).toHaveText('B');
+  await expect(page.locator('#play-pause')).toBeEnabled();
+  expect(await page.evaluate(() => testYT.position)).toBe(0);
+});

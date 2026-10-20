@@ -115,7 +115,7 @@ export class Player {
     if (this.track?.source === 'youtube') this.youtube?.setVolume?.(this.volume * level * 100);
     else if (this.gain) this.gain.gain.setTargetAtTime(this.targetGain() * level, this.ctx.currentTime, 0.015);
   }
-  async play(track, file, fade, normalize, startSeconds = 0, limitSeconds = null) {
+  async play(track, file, fade, normalize, startSeconds = 0, limitSeconds = null, resumeSeconds = startSeconds) {
     if (track.source === 'local' && !file) throw new Error('Relink the local file before playing this track.');
     this.updateEnvelope();
     const token = ++this.token;
@@ -145,10 +145,10 @@ export class Player {
     if (track.source === 'youtube') {
       const yt = await this.loadYouTube(track.videoId); if (token !== this.token) return false;
       this.applyLevel(fade > 0 ? 0 : 1);
-      yt.loadVideoById(startSeconds ? { videoId: track.videoId, startSeconds } : track.videoId);
+      yt.loadVideoById(resumeSeconds ? { videoId: track.videoId, startSeconds: resumeSeconds } : track.videoId);
     } else {
       this.audio.src = this.fileUrl(track.id, file);
-      this.audio.currentTime = startSeconds;
+      this.audio.currentTime = resumeSeconds;
       this.gain.gain.cancelScheduledValues(this.ctx.currentTime);
       this.gain.gain.setValueAtTime(fade > 0 ? 0 : this.targetGain(), this.ctx.currentTime);
       this.level = fade > 0 ? 0 : 1;

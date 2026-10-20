@@ -14,7 +14,7 @@ import { t, startI18n, setLanguage, getLanguage } from './i18n.js';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const time = seconds => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '—';
 let state = { tracks: [], groups: [] }, selected = null, queue = [], queueIndex = -1, current = null, busy = false;
-let playRequest = 0, timedEnd = false, loadedSignature = null, resumeIndex = 0, queueGroupId = null;
+let playRequest = 0, timedEnd = false, loadedSignature = null, resumeIndex = 0, resumePosition = 0, queueGroupId = null;
 let undoGroups = null, transitioning = false, stopped = false, lastRenderedIndex = -1;
 const files = new Map(), sourceStatuses = new Map();
 let activeCollection = null, collectingInto = null, reconnectMode = false, addingNext = false;
@@ -24,17 +24,42 @@ try { settings = JSON.parse(localStorage.getItem('studio-settings') || '{}'); } 
 let persistence = Promise.resolve(), temporaryWorkspace = false;
 function workspaceSnapshot(tracks = state.tracks) {
   normalizeProgram(state);
-  return structuredClone({ ...state, tracks, queue: queue.map(item => ({ trackId: item.track.id, occurrenceId: item.occurrenceId, addedAfter: item.addedAfter, pendingAddition: item.pendingAddition, groupId: item.groupId, groupName: item.groupName, kind: item.kind, limitSeconds: item.limitSeconds, startSeconds: item.startSeconds, holdAfter: item.holdAfter })), queueIndex: queueIndex >= 0 ? queueIndex : resumeIndex, selected, loadedSignature, queueGroupId });
+  return structuredClone({ ...state, tracks, queue: queue.map(item => ({ trackId: item.track.id, occurrenceId: item.occurrenceId, addedAfter: item.addedAfter, pendingAddition: item.pendingAddition, groupId: item.groupId, groupName: item.groupName, kind: item.kind, limitSeconds: item.limitSeconds, startSeconds: item.startSeconds, holdAfter: item.holdAfter })), queueIndex: queueIndex >= 0 ? queueIndex : resumeIndex, selected, loadedSignature, queueGroupId, resumePosition: playbackPosition() });
 }
 function persist() {
   const snapshot = workspaceSnapshot();
   if (temporaryWorkspace) return Promise.resolve(false);
   $('#save-status').textContent = t('Saving…');
-  persistence = persistence.then(() => saveState(snapshot, revision)).then(savedRevision => { revision = savedRevision; $('#storage-recovery').hidden = true; $('#save-status').textContent = t('Saved in this browser'); return true; }).catch(error => { $('#save-status').textContent = t('Save failed — export a backup'); notify(`Could not save your library: ${storageMessage(error)}`, true);
+  persistence = persistence.then(() => saveState(snapshot, revision)).then(savedRevision => { revision = savedRevision; $('#storage-recovery').hidden = true; $('#save-status').textContent = t('Saved in this browser'); checkpointPlayback(true); return true; }).catch(error => { $('#save-status').textContent = t('Save failed — export a backup'); notify(`Could not save your library: ${storageMessage(error)}`, true);
     if (!error?.message?.includes('another tab. Export')) showStorageRecovery(error);
     return false; });
   return persistence;
 }
+function playbackPosition() {
+  return queueIndex >= 0 && !transitioning && !stopped && player.track ? Math.max(0, player.position() || 0) : resumePosition;
+}
+let lastCheckpoint = 0;
+function checkpointPlayback(force = false) {
+  if (temporaryWorkspace || transitioning || !player.track || (!force && Date.now() - lastCheckpoint < 1000)) return;
+  const index = queueIndex >= 0 ? queueIndex : resumeIndex, item = queue[index];
+  if (!item) return;
+  resumePosition = playbackPosition();
+  try {
+    localStorage.setItem('studio-playback-position', JSON.stringify({ revision, index, trackId: item.track.id, occurrenceId: item.occurrenceId, position: resumePosition, ended: timedEnd }));
+    lastCheckpoint = Date.now();
+  } catch {}
+}
+function renderTimeline(item, sourcePosition, sourceDuration = item?.track.duration) {
+  const start = item?.startSeconds || 0, available = Math.max(0, sourceDuration - start);
+  const duration = item?.limitSeconds ? Math.min(item.limitSeconds, available > 0 ? available : item.limitSeconds) : available;
+  const position = Math.max(0, sourcePosition - start);
+  $('#position').textContent = `${time(item?.limitSeconds ? Math.min(position, item.limitSeconds) : position)} / ${time(duration)}`;
+  $('#remaining-time').textContent = duration > 0 ? `${t('Remaining')}: ${time(Math.max(0, duration - position))}` : '';
+  $('#mini-remaining').textContent = $('#remaining-time').textContent;
+  $('#seek').value = duration > 0 ? Math.min(100, position / duration * 100) : 0;
+}
+window.addEventListener('pagehide', () => checkpointPlayback(true));
+document.addEventListener('visibilitychange', () => { if (document.hidden) checkpointPlayback(true); });
 function notify(message, error = false) {
   const el = document.querySelector('#notice'); $('#notice-message').textContent = t(message); el.hidden = false; el.classList.toggle('error', error);
   clearTimeout(notify.timer); if (!error) notify.timer = setTimeout(() => { el.hidden = true; }, 5500);
@@ -165,18 +190,12 @@ const player = new Player((position, duration) => {
     timedEnd = true; player.stop(); updateTransport();
     notify('The start must be before the recording ends. Choose an earlier cue.', true); return;
   }
+  renderTimeline(queue[queueIndex], position, duration);
+  checkpointPlayback();
   position = Math.max(0, position - startSeconds);
-  duration = Math.max(0, duration - startSeconds);
-  const clipLimit = queue[queueIndex]?.limitSeconds;
-  const playableDuration = clipLimit ? Math.min(clipLimit, duration > 0 ? duration : clipLimit) : duration;
-  $('#position').textContent = `${time(clipLimit ? Math.min(position, clipLimit) : position)} / ${time(playableDuration)}`;
-  const timelineDuration = playableDuration;
-  $('#remaining-time').textContent = Number.isFinite(timelineDuration) && timelineDuration > 0 ? `${t('Remaining')}: ${time(Math.max(0, timelineDuration - position))}` : '';
-  $('#mini-remaining').textContent = $('#remaining-time').textContent;
-  $('#seek').value = Number.isFinite(timelineDuration) && timelineDuration > 0 ? Math.min(100, position / timelineDuration * 100) : 0;
   const limit = queue[queueIndex]?.limitSeconds;
-  if (!transitioning && limit && position >= limit && !timedEnd) { timedEnd = true; player.stop(); if ($('#auto-next').checked && !queue[queueIndex]?.holdAfter) void next(); else notify('Cortina finished. Press Next to continue.'); }
-}, () => { timedEnd = true; updateTransport(); if ($('#auto-next').checked && !queue[queueIndex]?.holdAfter) void next(); else if (queue[queueIndex]?.kind === 'cortina') notify('Cortina finished. Press Next to continue.'); }, error => {
+  if (!transitioning && limit && position >= limit && !timedEnd) { timedEnd = true; player.stop(); updateTransport(); checkpointPlayback(true); if ($('#auto-next').checked && !queue[queueIndex]?.holdAfter) void next(); else notify('Cortina finished. Press Next to continue.'); }
+}, () => { timedEnd = true; checkpointPlayback(true); updateTransport(); if ($('#auto-next').checked && !queue[queueIndex]?.holdAfter) void next(); else if (queue[queueIndex]?.kind === 'cortina') notify('Cortina finished. Press Next to continue.'); }, error => {
   if (error?.type !== 'youtube') {
     if (current?.source === 'local') { $('#playback-recovery').hidden = false; $('#playback-recovery-message').textContent = t(error); $('#playback-relink').hidden = false; }
     notify(error, true); return;
@@ -189,10 +208,10 @@ const player = new Player((position, duration) => {
 player.onStall = waiting => { $('#playback-stall').hidden = !waiting; };
 player.onNeedsGesture = needed => { $('#playback-permission').hidden = !needed; };
 $('#resume-video').onclick = () => { const yt = player.youtube; if (!yt || !player.track) return; const position = yt.getCurrentTime() || 0; yt.loadVideoById({ videoId: player.track.videoId, startSeconds: position }); player.lastProgress = Date.now(); player.stallNotified = false; $('#playback-stall').hidden = true; };
-$('#playback-retry').onclick = () => { if (queueIndex >= 0) void playIndex(queueIndex); };
+$('#playback-retry').onclick = () => { if (queueIndex >= 0) void playIndex(queueIndex, playbackPosition()); };
 $('#playback-relink').onclick = () => { reconnectMode = false; relinkId = current?.id; $('#relink-input').click(); };
 $('#playback-skip').onclick = next;
-$('#youtube-retry').onclick = () => { if (queueIndex >= 0) void playIndex(queueIndex); };
+$('#youtube-retry').onclick = () => { if (queueIndex >= 0) void playIndex(queueIndex, playbackPosition()); };
 $('#youtube-skip').onclick = next;
 $('#youtube-local').onclick = () => { reconnectMode = false; relinkId = player.track?.id; $('#relink-input').click(); };
 $('#youtube-replace').onclick = () => { const track = state.tracks.find(t => t.id === player.track?.id); if (track) editTrack(track); };
@@ -207,7 +226,7 @@ if (['0','1','2','4'].includes(settings.fade)) $('#fade').value = settings.fade;
 if (typeof settings.normalize === 'boolean') $('#normalize').checked = settings.normalize;
 if (typeof settings.autoNext === 'boolean') $('#auto-next').checked = settings.autoNext;
 player.setVolume(Number($('#volume').value) / 100, $('#normalize').checked);
-player.onPlaybackState = updateTransport;
+player.onPlaybackState = () => { updateTransport(); checkpointPlayback(true); };
 async function storageDetails() {
   try { const estimate = await navigator.storage?.estimate(); const persistent = await navigator.storage?.persisted(); $('#storage-details').textContent = `${t('Browser storage')}: ${Math.round((estimate?.usage || 0) / 1024 / 1024)} MB · ${getLanguage() === 'ko' ? (persistent ? '유지 허용됨' : '브라우저 기본 정책') : getLanguage() === 'es' ? (persistent ? 'persistente' : 'política del navegador') : (persistent ? 'persistent' : 'browser default')}`; } catch {}
 }
@@ -387,6 +406,7 @@ function updateTransport() {
   for (const button of document.querySelectorAll('#tracks [data-action=play-next]')) { button.hidden = !current; button.disabled = transitioning || addingNext; }
   const playing = !stopped && (player.track?.source === 'youtube' ? player.youtube?.getPlayerState?.() === 1 : !player.audio.paused);
   $('#play-pause').textContent = transitioning ? '…' : playing ? 'Ⅱ' : '▶';
+  $('#seek').disabled = transitioning || !player.track;
   $('#previous').disabled = transitioning || queueIndex <= 0;
   $('#next').disabled = transitioning || !queue.length || queueIndex >= queue.length - 1;
   $('#stop').disabled = !current && !player.track;
@@ -406,31 +426,34 @@ $('#undo-set').onclick = () => {
   }); selected = undoGroups.selected; undoGroups = null;
   $('#undo-bar').hidden = true; void persist(); renderGroups();
 };
-async function playIndex(index) {
+async function playIndex(index, fromPosition = null) {
   if (index < 0 || index >= queue.length) return;
   const item = queue[index];
   if (Number.isFinite(item.track.duration) && item.track.duration > 0 && (item.startSeconds || 0) >= item.track.duration) {
     notify('The start must be before the recording ends. Choose an earlier cue.', true); return;
   }
+  const start = item.startSeconds || 0;
+  const end = Math.min(Number.isFinite(item.track.duration) && item.track.duration > 0 ? item.track.duration : Infinity, item.limitSeconds ? start + item.limitSeconds : Infinity);
+  const position = Number.isFinite(fromPosition) && fromPosition >= start && fromPosition < end ? fromPosition : start;
   const request = ++playRequest; transitioning = true; updateTransport();
   $('#playback-loading').hidden = false; $('#playback-recovery').hidden = true;
   try {
     $('#youtube-error').hidden = true;
     const sourceFile = item.track.source === 'local' ? await readyFile(item.track, true) : null;
     if (request !== playRequest) return;
-    if (!await player.play(item.track, sourceFile, Number($('#fade').value), $('#normalize').checked, item.startSeconds || 0, item.limitSeconds)) return;
+    if (!await player.play(item.track, sourceFile, Number($('#fade').value), $('#normalize').checked, item.startSeconds || 0, item.limitSeconds, position)) return;
     if (request !== playRequest) return;
-    queueIndex = index; resumeIndex = index; current = item.track; timedEnd = false; stopped = false; $('#queue-resume').hidden = true; void persist();
+    queueIndex = index; resumeIndex = index; resumePosition = position; current = item.track; timedEnd = false; stopped = false; $('#queue-resume').hidden = true; void persist();
     $('#playing-title').textContent = current.title; $('#playing-artist').textContent = [current.artist, current.singer, current.year].filter(Boolean).join(' · ') || (current.source === 'youtube' ? 'YouTube video' : 'Local recording');
     $('#playing-group').textContent = item.groupName || 'LIBRARY TRACK'; $('#preview-status').hidden = true;
-    $('#position').textContent = `0:00 / ${time(item.limitSeconds || (Number.isFinite(current.duration) ? Math.max(0, current.duration - (item.startSeconds || 0)) : NaN))}`; $('#seek').value = 0;
+    renderTimeline(item, position);
     renderQueue(); refreshGroupSummaries(); markStep('play'); notify(`Playing ${current.title}`);
   } catch (error) {
     if (request === playRequest) {
       player.stop(); current = structuredClone(item.track); player.track = structuredClone(item.track);
-      queueIndex = index; resumeIndex = index; stopped = true; timedEnd = false;
+      queueIndex = index; resumeIndex = index; resumePosition = position; stopped = true; timedEnd = false; player.seek(position);
       $('#playing-title').textContent = current.title; $('#playing-artist').textContent = [current.artist, current.singer, current.year].filter(Boolean).join(' · ');
-      $('#playing-group').textContent = item.groupName || 'LIBRARY TRACK'; $('#position').textContent = '0:00 / —'; $('#seek').value = 0;
+      $('#playing-group').textContent = item.groupName || 'LIBRARY TRACK'; renderTimeline(item, position);
       renderQueue(); void persist();
       $('#playback-recovery').hidden = false; $('#playback-recovery-message').textContent = t(playbackMessage(error));
       $('#playback-relink').hidden = item.track.source !== 'local';
@@ -509,7 +532,7 @@ $('#tracks').onclick = async event => {
         if (!confirm(t(`Remove “${track.title}” from the library and every group? Your original file will be kept.`))) return;
         if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
         if (player.previewId === track.id) { player.preview.pause(); player.previewId = null; $('#preview-status').hidden = true; }
-        const playingItem = queue[queueIndex];
+        const playingItem = queue[queueIndex], restoredItem = queue[resumeIndex];
         const removingCurrent = current?.id === track.id || player.track?.id === track.id;
         const priorIndex = queueIndex >= 0 ? queueIndex : resumeIndex;
         queue = queue.filter(item => item.track.id !== track.id);
@@ -517,10 +540,11 @@ $('#tracks').onclick = async event => {
         if (removingCurrent) {
           ++playRequest; player.stop(); player.track = null; current = null; transitioning = false;
           queueIndex = -1; resumeIndex = Math.min(Math.max(0, priorIndex), Math.max(0, queue.length - 1));
+          resumePosition = queue[resumeIndex]?.startSeconds || 0;
           $('#playing-title').textContent = 'No recording loaded'; $('#playing-artist').textContent = 'Play a track or load your prepared set.';
           $('#playing-group').textContent = 'READY WHEN YOU ARE'; $('#position').textContent = '0:00 / 0:00'; $('#seek').value = 0;
           $('#youtube-wrap').hidden = true; $('#preview-status').hidden = true; $('#queue-resume').hidden = !queue.length;
-        } else { queueIndex = queue.indexOf(playingItem); resumeIndex = queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, Math.max(0, queue.length - 1)); }
+        } else { queueIndex = queue.indexOf(playingItem); const restoredIndex = queue.indexOf(restoredItem); resumeIndex = queueIndex >= 0 ? queueIndex : restoredIndex >= 0 ? restoredIndex : Math.min(resumeIndex, Math.max(0, queue.length - 1)); if (queueIndex < 0 && restoredIndex < 0) resumePosition = queue[resumeIndex]?.startSeconds || 0; }
         state = removeTrack(state, track.id); const saved = await persist();
         if (saved) { await deleteFile(track.id); files.delete(track.id); player.revoke(track.id); }
         render(); break;
@@ -558,7 +582,7 @@ $('#relink-input').onchange = async event => {
 function sourceChanged(track) {
   if (current?.id !== track.id && player.track?.id !== track.id) return;
   ++playRequest; player.stop(); player.track = structuredClone(track); current = queue[queueIndex]?.track || structuredClone(track);
-  stopped = true; transitioning = false; timedEnd = false;
+  stopped = true; transitioning = false; timedEnd = false; resumePosition = queue[queueIndex]?.startSeconds || 0; player.seek(resumePosition); checkpointPlayback(true);
   $('#position').textContent = `0:00 / ${time(queue[queueIndex]?.limitSeconds || track.duration)}`; $('#seek').value = 0;
   $('#youtube-wrap').hidden = track.source !== 'youtube'; $('#youtube-error').hidden = true;
   updateTransport(); notify('Recording source changed. Press Play to use the updated recording.');
@@ -703,16 +727,15 @@ $('#start-set').onclick = async () => { normalizeProgram(state);
   if (unavailable.length) { notify(`${t('Files need attention before playback')}: ${unavailable.join(', ')}`, true); showView('library'); return; } showView('deck'); queueGroupId = null; loadedSignature = playbackSignature(); queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
 $('#deck-start-set').onclick = () => $('#start-set').click();
 $('#queue').onclick = event => { const item = event.target.closest('[data-queue-index]'); if (item) void playIndex(Number(item.dataset.queueIndex)); };
-$('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1)); else if (timedEnd || stopped) await playIndex(queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); } catch (error) { notify(playbackMessage(error), true); } };
+$('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1), resumePosition); else if (timedEnd || stopped) await playIndex(queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); checkpointPlayback(true); } catch (error) { notify(playbackMessage(error), true); } };
 $('#next-tanda').onclick = async () => { if (transitioning) return; const nextIndex = queue.findIndex((item, index) => index > queueIndex && item.kind === 'tanda'); if (nextIndex >= 0) await playIndex(nextIndex); else { transitioning = true; updateTransport(); await player.fadeOut(Number($('#fade').value)); $('#stop').click(); } };
 $('#next').onclick = next; $('#previous').onclick = () => playIndex(queueIndex - 1);
 $('#stop').onclick = () => {
   ++playRequest; player.stop(); $('#playback-loading').hidden = true; $('#playback-stall').hidden = true; player.seek(queue[queueIndex]?.startSeconds || 0); stopped = true; transitioning = false;
-  $('#position').textContent = `0:00 / ${time(queue[queueIndex]?.limitSeconds || current?.duration)}`;
-  $('#remaining-time').textContent = `${t('Remaining')}: ${time(queue[queueIndex]?.limitSeconds || current?.duration)}`; $('#mini-remaining').textContent = $('#remaining-time').textContent;
+  resumePosition = queue[queueIndex]?.startSeconds || 0; renderTimeline(queue[queueIndex], resumePosition); checkpointPlayback(true);
   $('#seek').value = 0; $('#preview-status').hidden = true; updateTransport(); notify('Playback stopped.');
 };
-$('#seek').oninput = () => { const available = (current?.source === 'youtube' ? player.youtube?.getDuration() : player.audio.duration) - (queue[queueIndex]?.startSeconds || 0); const duration = Math.min(queue[queueIndex]?.limitSeconds || Infinity, available); if (Number.isFinite(duration)) player.seek((queue[queueIndex]?.startSeconds || 0) + Number($('#seek').value) / 100 * duration); };
+$('#seek').oninput = () => { const available = (current?.source === 'youtube' ? player.youtube?.getDuration() : player.audio.duration) - (queue[queueIndex]?.startSeconds || 0); const duration = Math.min(queue[queueIndex]?.limitSeconds || Infinity, available); if (Number.isFinite(duration) && player.track) { const position = (queue[queueIndex]?.startSeconds || 0) + Number($('#seek').value) / 100 * duration; player.seek(position); resumePosition = position; stopped = false; timedEnd = false; renderTimeline(queue[queueIndex], position, available + (queue[queueIndex]?.startSeconds || 0)); checkpointPlayback(true); } };
 $('#fade').oninput = () => player.setFade(Number($('#fade').value));
 for (const id of ['volume', 'normalize']) $(`#${id}`).oninput = () => player.setVolume(Number($('#volume').value) / 100, $('#normalize').checked);
 $('#stop-preview').onclick = () => { player.preview.pause(); $('#preview-status').hidden = true; };
@@ -732,7 +755,7 @@ $('#set-input').onchange = async event => {
     const imported = validateSet(JSON.parse(await file.text()));
     if (!confirm(t('Replace your current library and set with this file? Export your current set first if you want to keep it.'))) return;
     ++playRequest; player.stop(); player.track = null; queue = []; queueIndex = -1; current = null;
-    resumeIndex = 0; loadedSignature = null; queueGroupId = null; undoGroups = null; timedEnd = false; stopped = false; transitioning = false;
+    resumeIndex = 0; resumePosition = 0; loadedSignature = null; queueGroupId = null; undoGroups = null; timedEnd = false; stopped = false; transitioning = false;
     $('#undo-bar').hidden = true; $('#queue-resume').hidden = true; $('#preview-status').hidden = true; $('#youtube-error').hidden = true;
     $('#position').textContent = '0:00 / 0:00'; $('#seek').value = 0;
     $('#playing-title').textContent = 'No recording loaded'; $('#playing-artist').textContent = 'Play a track or load your prepared set.'; $('#playing-group').textContent = 'READY WHEN YOU ARE'; $('#youtube-wrap').hidden = true;
@@ -1066,7 +1089,7 @@ $('#pending-additions').onclick = event => {
 };
 
 try {
-  const saved = await loadState(); firstVisit = !saved; if (saved) { revision = saved.revision || 0; state = validateSet({ version: 1, ...saved }); selected = saved.selected; queueGroupId = typeof saved.queueGroupId === 'string' ? saved.queueGroupId : null; loadedSignature = typeof saved.loadedSignature === 'string' ? saved.loadedSignature : null; resumeIndex = Number.isInteger(saved.queueIndex) && saved.queueIndex >= 0 ? saved.queueIndex : 0; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; }
+  const saved = await loadState(); firstVisit = !saved; if (saved) { revision = saved.revision || 0; state = validateSet({ version: 1, ...saved }); selected = saved.selected; queueGroupId = typeof saved.queueGroupId === 'string' ? saved.queueGroupId : null; loadedSignature = typeof saved.loadedSignature === 'string' ? saved.loadedSignature : null; resumeIndex = Number.isInteger(saved.queueIndex) && saved.queueIndex >= 0 ? saved.queueIndex : 0; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; resumePosition = Number.isFinite(saved.resumePosition) ? Math.max(0, saved.resumePosition) : 0; }
   const migrated = removeOldExamples(state); state = migrated.state; normalizeProgram(state);
   for (const group of state.groups) if (group.samplePack === REAL_SAMPLE_PACK && group.kind === 'cortina') {
     const defaults = realGroups().find(item => item.id === group.id);
@@ -1076,7 +1099,22 @@ try {
   queue = savedQueue.filter(item => state.tracks.some(t => t.id === item.trackId)).map(item => ({ ...item, kind: item.kind || state.groups.find(group => group.id === item.groupId)?.kind, track: structuredClone(state.tracks.find(t => t.id === item.trackId)) }));
   const occurrenceCounts = new Map();
   for (const item of queue) { const key = `${item.groupId}:${item.track.id}`; const index = occurrenceCounts.get(key) || 0; occurrenceCounts.set(key, index + 1); if (!item.occurrenceId) { const group = state.groups.find(g => g.id === item.groupId); const positions = group?.trackIds.map((id, index) => ({ id, index })).filter(entry => entry.id === item.track.id); item.occurrenceId = group?.occurrenceIds[positions?.[index]?.index]; } }
-  if (saved) { queueIndex = -1; $('#queue-resume').hidden = !queue.length; }
+  if (saved) {
+    const original = savedQueue[resumeIndex];
+    resumeIndex = Math.max(0, queue.findIndex(item => original && item.track.id === original.trackId && item.occurrenceId === original.occurrenceId));
+    let checkpoint;
+    try { checkpoint = JSON.parse(localStorage.getItem('studio-playback-position') || 'null'); } catch {}
+    const item = queue[resumeIndex];
+    if (checkpoint?.revision === revision && checkpoint.index === resumeIndex && checkpoint.trackId === item?.track.id && checkpoint.occurrenceId === item?.occurrenceId && Number.isFinite(checkpoint.position)) resumePosition = checkpoint.ended ? (item.startSeconds || 0) : Math.max(0, checkpoint.position);
+    if (!original || original.trackId !== item?.track.id) resumePosition = item?.startSeconds || 0;
+    const start = item?.startSeconds || 0, end = Math.min(item?.track.duration > 0 ? item.track.duration : Infinity, item?.limitSeconds ? start + item.limitSeconds : Infinity);
+    if (resumePosition < start || resumePosition >= end) resumePosition = start;
+    queueIndex = -1; $('#queue-resume').hidden = !queue.length;
+    if (item) {
+      $('#playing-title').textContent = item.track.title; $('#playing-artist').textContent = item.track.artist || '';
+      $('#playing-group').textContent = item.groupName || 'LIBRARY TRACK'; renderTimeline(item, resumePosition);
+    }
+  }
   for (const track of state.tracks.filter(t => t.source === 'local')) { await readyFile(track); if (!track.contentHash && files.has(track.id)) track.contentHash = await contentHash(files.get(track.id)); }
   selected = state.groups.some(g => g.id === selected) ? selected : state.groups[0]?.id || null;
 } catch (error) { showStorageRecovery(error); notify(`Could not restore your library: ${storageMessage(error)}`, true); }

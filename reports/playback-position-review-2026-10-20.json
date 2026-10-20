@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-20",
+  "scope": "Playback-position restoration and adjacent transport usability fixes.",
+  "changes": [
+    "Reload displays the saved recording and position, then resumes only on explicit Play.",
+    "Checkpoints store absolute source position and validate workspace revision, recording ID, queue index, and occurrence ID. They are written once per second and on pause, seek, pagehide, and page visibility changes.",
+    "Resuming preserves the original cortina cue, playback limit, and fade endpoint rather than extending the segment.",
+    "Paused seeking immediately updates elapsed time, remaining time, and the seek indicator.",
+    "Stop resets saved position and shows the playable segment duration. Seeking after Stop overrides the rewind position.",
+    "Retry preserves playback position. Finished recordings and held cortinas restart from their original beginning or cue.",
+    "Cortina endpoint immediately updates the play button to the stopped state.",
+    "Deleting a restored recording resets position for its replacement; deleting earlier recordings preserves the surviving restored placement.",
+    "Seek is disabled before audio is loaded or during transitions."
+  ],
+  "validation": {
+    "unit_tests": {
+      "passed": 19
+    },
+    "default_browser_suite": {
+      "passed": 86,
+      "initial_failed": 1,
+      "note": "The existing preference-persistence check expected an empty deck title after reload. Updated it to expect the restored recording and no autoplay; the targeted rerun passed."
+    },
+    "default_targeted_rerun": {
+      "passed": 2
+    },
+    "built_resume_checks": {
+      "passed": 12,
+      "engines": [
+        "Chromium",
+        "WebKit"
+      ],
+      "includes": "Desktop and phone repeated-placement restoration, cortina endpoint, stale revision, Stop/Retry, and real local WAV resumption."
+    },
+    "final_built_checks_after_deletion_guard": {
+      "passed": 6,
+      "engines": [
+        "Chromium",
+        "WebKit"
+      ]
+    },
+    "offline_install_suite": {
+      "passed": 2
+    },
+    "production_build": "passed",
+    "whitespace_check": "passed"
+  },
+  "limitations": [
+    "Live YouTube availability, subjective audio listening, and physical devices were not assessed.",
+    "A sudden browser or process termination can lose approximately the last second of progress. If localStorage is unavailable, saved workspace snapshots provide a position fallback."
+  ],
+  "source_sha256": {
+    "src/main.js": "73228d45e39001825a178c51ae9c2e8de73058fae7eb3371e51a49d306b9ee16",
+    "src/player.js": "38ca3a187f62e234423bc2a9e204fa6f10dd16865be32ea6610edfcb23f91262",
+    "tests/browser/new-workflow.spec.js": "f84f203aac901200fd965d2afc81d41159450a25230cb53d0968c277024bf069",
+    "tests/browser/workspace.spec.js": "5203e62df4f6dc88fd1a03d231663a4808be79982121d94b1361ceffeda30867"
+  }
+}

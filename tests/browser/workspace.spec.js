@@ -259,7 +259,8 @@ test('language, playback preferences, edited tandas and queue survive reload per
   await expect(page.locator('#guide-dialog')).not.toBeVisible();
   await expect(page.locator('.group')).toHaveCount(10);
   await expect(page.locator('#queue-count')).toHaveText('1');
-  await expect(page.locator('#playing-title')).toHaveText('재생 중인 곡 없음');
+  await expect(page.locator('#playing-title')).toHaveText('personal');
+  await expect(page.locator('#play-pause')).toHaveText('▶');
   await page.locator('#open-settings').click();
   await page.locator('#language').selectOption('es');
   await page.locator('[data-close="settings-dialog"]').click();
@@ -697,4 +698,24 @@ test('discovering a source shorter than its saved cue stops it and explains the 
   await expect(page.locator('#notice')).toContainText('before the recording ends');
   expect(await page.evaluate(() => window.testYouTube.state)).toBe(2);
   await expect(page.locator('.queue-item.playing')).toHaveAttribute('data-queue-index', '0');
+});
+
+test('local audio resumes its saved position after reload and paused seeking updates immediately', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'resume.wav', mimeType: 'audio/wav', buffer: wav() });
+  await expect(page.locator('#library-count')).toHaveText('1');
+  await view(page, 'library'); await recordingAction(page, 'play');
+  await expect(page.locator('#play-pause')).toBeEnabled();
+  await view(page, 'deck'); await page.locator('#play-pause').click();
+  await page.locator('#seek').fill('50');
+  await expect(page.locator('#position')).toHaveText('0:04 / 0:08');
+  await page.reload(); await view(page, 'deck');
+  await expect(page.locator('#position')).toHaveText('0:04 / 0:08');
+  await expect(page.locator('#play-pause')).toHaveText('▶');
+  await page.locator('#play-pause').click(); await expect(page.locator('#play-pause')).toBeEnabled();
+  await expect(page.locator('#position')).toHaveText(/^0:0[4-5] \/ 0:08$/);
+  await page.locator('#play-pause').click();
+  await page.locator('#seek').fill('25');
+  await expect(page.locator('#position')).toHaveText('0:02 / 0:08');
+  await expect(page.locator('#remaining-time')).toHaveText('Remaining: 0:06');
 });
