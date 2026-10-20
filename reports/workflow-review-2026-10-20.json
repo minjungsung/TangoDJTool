@@ -1,0 +1,380 @@
+{
+  "date": "2026-10-20",
+  "scope": "Approximately 20 minutes of browser workflow exploration, fixes, and regression checks.",
+  "methods": [
+    "Desktop and phone browser interactions through Playwright",
+    "Chromium and WebKit browser engines",
+    "Generated WAV audio for real local playback",
+    "Controlled YouTube iframe API fixtures for reproducible playback ordering"
+  ],
+  "limitations": [
+    "Browser audio transport and output signals were checked; subjective music listening was not assessed.",
+    "Live YouTube availability and physical-device listening were not part of this session."
+  ],
+  "fixes": [
+    {
+      "trigger": "Choose recordings for a tanda near the end of a long program and return.",
+      "result": "Back to tanda returns to the selected card, expands its recordings, and work areas preserve scroll positions."
+    },
+    {
+      "trigger": "Use another recording as a cortina.",
+      "result": "The recording replaces the previous selection; Undo restores it and the cortina play button uses the updated source."
+    },
+    {
+      "trigger": "Select candidates and remove an unwanted candidate or rename the collection.",
+      "result": "Remaining candidate checkboxes stay selected."
+    },
+    {
+      "trigger": "Search and filters produce no matches.",
+      "result": "Clear filters restores recordings without changing the destination."
+    },
+    {
+      "trigger": "Listen from a particular recording inside a tanda.",
+      "result": "Each recording has a play button; playback continues through that tanda and stops at its end. Phone controls are at least 44 by 44 CSS pixels."
+    },
+    {
+      "trigger": "Return from tanda-only listening to the entire program.",
+      "result": "Play prepared set is available in Playback."
+    },
+    {
+      "trigger": "Delete a tanda whose attached cortina is selected.",
+      "result": "A nearby surviving group becomes selected for further additions."
+    }
+  ],
+  "validation": {
+    "unit_tests": {
+      "passed": 18
+    },
+    "default_browser_suite": {
+      "passed": 75
+    },
+    "device_suite": {
+      "passed": 17,
+      "skipped": 1,
+      "skip_reason": "Existing WebKit MediaElementSource analyser limitation."
+    },
+    "built_app_feature_checks": {
+      "passed": 18,
+      "status": "passed"
+    },
+    "built_app_webkit_workflow_checks": {
+      "passed": 9
+    },
+    "production_build": "passed",
+    "continuous_local_audio": {
+      "started": "2026-10-20T00:29:09.693Z",
+      "fixture": "Generated WAV clips; real browser audio playback",
+      "events": [
+        {
+          "elapsedSeconds": 20,
+          "cycle": 0,
+          "title": "B",
+          "position": "0:03 / 0:18",
+          "queue": "4",
+          "index": "1",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 40,
+          "cycle": 1,
+          "title": "C",
+          "position": "0:05 / 0:18",
+          "queue": "4",
+          "index": "2",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 60,
+          "cycle": 2,
+          "title": "Break",
+          "position": "0:04 / 0:04",
+          "queue": "4",
+          "index": "3",
+          "play": "▶",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 81,
+          "cycle": 3,
+          "title": "B",
+          "position": "0:09 / 0:18",
+          "queue": "4",
+          "index": "1",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 101,
+          "cycle": 4,
+          "title": "C",
+          "position": "0:11 / 0:18",
+          "queue": "4",
+          "index": "2",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 121,
+          "cycle": 5,
+          "title": "Break",
+          "position": "0:01 / 0:04",
+          "queue": "4",
+          "index": "3",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 141,
+          "cycle": 6,
+          "title": "B",
+          "position": "0:01 / 0:18",
+          "queue": "4",
+          "index": "1",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 161,
+          "cycle": 7,
+          "title": "C",
+          "position": "0:03 / 0:18",
+          "queue": "4",
+          "index": "2",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 181,
+          "cycle": 8,
+          "title": "Break",
+          "position": "0:04 / 0:04",
+          "queue": "4",
+          "index": "3",
+          "play": "▶",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 202,
+          "cycle": 9,
+          "title": "B",
+          "position": "0:09 / 0:18",
+          "queue": "4",
+          "index": "1",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 222,
+          "cycle": 10,
+          "title": "C",
+          "position": "0:11 / 0:18",
+          "queue": "4",
+          "index": "2",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 242,
+          "cycle": 11,
+          "title": "Break",
+          "position": "0:01 / 0:04",
+          "queue": "4",
+          "index": "3",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 262,
+          "cycle": 12,
+          "title": "B",
+          "position": "0:01 / 0:18",
+          "queue": "4",
+          "index": "1",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 282,
+          "cycle": 13,
+          "title": "C",
+          "position": "0:04 / 0:18",
+          "queue": "4",
+          "index": "2",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 302,
+          "cycle": 14,
+          "title": "Break",
+          "position": "0:04 / 0:04",
+          "queue": "4",
+          "index": "3",
+          "play": "▶",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 322,
+          "cycle": 15,
+          "title": "B",
+          "position": "0:09 / 0:18",
+          "queue": "4",
+          "index": "1",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 343,
+          "cycle": 16,
+          "title": "C",
+          "position": "0:11 / 0:18",
+          "queue": "4",
+          "index": "2",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 363,
+          "cycle": 17,
+          "title": "Break",
+          "position": "0:01 / 0:04",
+          "queue": "4",
+          "index": "3",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 383,
+          "cycle": 18,
+          "title": "B",
+          "position": "0:01 / 0:18",
+          "queue": "4",
+          "index": "1",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 403,
+          "cycle": 19,
+          "title": "C",
+          "position": "0:03 / 0:18",
+          "queue": "4",
+          "index": "2",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 423,
+          "cycle": 20,
+          "title": "Break",
+          "position": "0:04 / 0:04",
+          "queue": "4",
+          "index": "3",
+          "play": "▶",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 443,
+          "cycle": 21,
+          "title": "B",
+          "position": "0:09 / 0:18",
+          "queue": "4",
+          "index": "1",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 463,
+          "cycle": 22,
+          "title": "C",
+          "position": "0:11 / 0:18",
+          "queue": "4",
+          "index": "2",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 484,
+          "cycle": 23,
+          "title": "Break",
+          "position": "0:01 / 0:04",
+          "queue": "4",
+          "index": "3",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 504,
+          "cycle": 24,
+          "title": "B",
+          "position": "0:01 / 0:18",
+          "queue": "4",
+          "index": "1",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 524,
+          "cycle": 25,
+          "title": "C",
+          "position": "0:03 / 0:18",
+          "queue": "4",
+          "index": "2",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 544,
+          "cycle": 26,
+          "title": "Break",
+          "position": "0:04 / 0:04",
+          "queue": "4",
+          "index": "3",
+          "play": "▶",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 564,
+          "cycle": 27,
+          "title": "B",
+          "position": "0:01 / 0:18",
+          "queue": "4",
+          "index": "1",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 584,
+          "cycle": 28,
+          "title": "C",
+          "position": "0:04 / 0:18",
+          "queue": "4",
+          "index": "2",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        },
+        {
+          "elapsedSeconds": 604,
+          "cycle": 29,
+          "title": "Break",
+          "position": "0:01 / 0:04",
+          "queue": "4",
+          "index": "3",
+          "play": "Ⅱ",
+          "saved": "Saved in this browser"
+        }
+      ],
+      "errors": [],
+      "completed": true,
+      "finished": "2026-10-20T00:39:16.919Z"
+    }
+  },
+  "source_sha256": {
+    "src/main.js": "d154188665131efd9a8df7ae7cbb835ae8d4bf37623f126bc667e3045f60858c",
+    "src/style.css": "58ca4580fef180804509dd9e3c72dfd25213d5de2c00415380da106d39d569f8",
+    "src/i18n.js": "cdc11d88753c757c651491aada6cec66ff8c17abdfaa78ec7aca1e323ce35f35",
+    "tests/browser/new-workflow.spec.js": "e70a0b6fed55a96e20b0d283eef442882b5394ef0934be9168c69e006622dac7"
+  }
+}

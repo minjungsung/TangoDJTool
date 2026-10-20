@@ -220,3 +220,9 @@ body[data-view] main{scroll-margin-top:20px}
 .dedication-close{position:absolute;top:12px;right:12px;background:transparent;border:0;min-width:44px;min-height:44px;font-size:24px}
 .dedication-star{display:block;color:var(--accent);font-size:48px;line-height:1;margin-bottom:24px}
 #dedication-title{margin:0;font-size:24px;line-height:1.5;overflow-wrap:anywhere}
+
+@media(max-width:699px){
+ .group li:has([data-group-action=play-recording]){grid-template-columns:12px minmax(0,1fr)}
+ .group li:has([data-group-action=play-recording])>div{grid-column:2;display:flex;gap:4px}
+ .group li:has([data-group-action=play-recording]) button{min-width:44px;min-height:44px}
+}

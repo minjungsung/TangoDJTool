@@ -60,7 +60,7 @@ function notify(message, error = false) {
         <div class="file-tools"><button id="connect-files">Connect originals</button><button id="check-files">Check files</button><button id="reconnect-folder">Reconnect from folder</button></div><p class="hint storage-explanation">Local files keeps an app copy. Connect originals reads files in place on supported browsers.</p><form id="youtube-form" class="youtube-form"><span class="youtube-mark">▶</span><input name="url" type="url" aria-label="YouTube video URL" placeholder="Paste a YouTube video link" required><button type="submit">Add video</button></form>
         <div class="library-destination"><label for="add-target">Add recordings to</label><select id="add-target" aria-label="Recording destination"></select><button id="finish-adding" hidden>Back to set</button><p id="library-target" class="hint"></p></div><p id="import-progress" class="hint" role="status" hidden></p><div class="filters"><input id="search" type="search" aria-label="Search library" placeholder="Search title, orchestra, singer…"><select id="collection-filter" aria-label="Filter set"><option value="">All sets</option></select><select id="style-filter" aria-label="Filter dance style"><option value="">All styles</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select><select id="source-filter" aria-label="Filter source"><option value="">All sources</option><option value="local">Local</option><option value="youtube">YouTube</option></select></div>
         <div class="table-scroll"><table><thead><tr><th>RECORDING</th><th>STYLE / YEAR</th><th>BPM</th><th>LENGTH</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="tracks"></tbody></table></div>
-        <div id="empty-library" class="empty"><span>♫</span><h3>A home for your collection</h3><p>Bring in your recordings, organize the details,<br>and find the right music for each moment.</p></div>
+        <div id="empty-library" class="empty"><span>♫</span><h3>A home for your collection</h3><p>Bring in your recordings, organize the details,<br>and find the right music for each moment.</p><button id="clear-filters" hidden>Clear filters</button></div>
         <div class="panel-foot"><span id="library-summary">0 recordings · 0:00 known duration</span><button id="analyze-all" class="text-button">Analyze local tracks</button></div>
       </section>
       <section id="set" class="panel set-panel">
@@ -110,21 +110,28 @@ $('#maker-credit').onclick = () => {
 $('#example-actions').append($('#load-real-samples'), $('#real-sample-play'));
 const phoneLayout = matchMedia('(max-width: 699px)');
 let activeView = 'library';
+const viewPositions = new Map();
+let choosingForGroup = false;
 function showView(view, scroll = true) {
+  if (scroll) viewPositions.set(activeView, window.scrollY);
   activeView = view; document.body.dataset.view = view;
   for (const button of document.querySelectorAll('button[data-view]')) {
     if (button.dataset.view === view) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   }
-  if (scroll) window.scrollTo({ top: 0, behavior: 'instant' });
+  if (scroll) window.scrollTo({ top: viewPositions.get(view) || 0, behavior: 'instant' });
   for (const link of document.querySelectorAll('.sidebar .nav')) { link.classList.toggle('active', link.hash === `#${view}`); if (link.hash === `#${view}`) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current'); }
   updateMiniDeck();
+}
+function revealSelectedGroup() {
+  const article = [...document.querySelectorAll('#groups .group')].find(el => el.dataset.group === selected);
+  article?.scrollIntoView({ block: 'center', behavior: 'instant' });
 }
 for (const button of document.querySelectorAll('button[data-view]')) button.onclick = () => showView(button.dataset.view);
 for (const link of document.querySelectorAll('.sidebar .nav')) link.onclick = event => { event.preventDefault(); showView(link.hash.slice(1)); };
 $('#open-menu').onclick = () => {
   const expanded = document.body.classList.toggle('menu-expanded'); $('#open-menu').setAttribute('aria-expanded', String(expanded));
 };
-$('#choose-recordings').onclick = () => { collectingInto = null; syncDestination(); renderLibrary(); showView('library'); $('#search').focus({ preventScroll: true }); };
+$('#choose-recordings').onclick = () => { collectingInto = null; choosingForGroup = true; syncDestination(); renderLibrary(); showView('library'); $('#search').focus({ preventScroll: true }); };
 function syncDeviceLayout() { $('.playback-options').open = !phoneLayout.matches; showView(activeView, false); }
 phoneLayout.addEventListener('change', syncDeviceLayout);
 document.body.dataset.view = activeView;
@@ -219,12 +226,14 @@ function renderLibrary() {
   $('#tracks').innerHTML = visible.map(track => `<tr draggable="true" data-track="${esc(track.id)}"><td><div class="track-title">${esc(track.title)}</div><div class="track-detail"><span class="source-tag ${track.source}">${track.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(track.artist || 'Unknown orchestra')}${track.singer ? ` · ${esc(track.singer)}` : ''}${track.source === 'local' ? ` · <span class="source-status ${!files.has(track.id) ? 'missing' : ''}">${esc(track.source === 'local' ? tStatus(track.id) : '')}</span>` : ''}</div></td><td>${esc(track.style || '—')}<small>${esc(track.year || '')}</small></td><td>${track.bpm ? esc(track.bpm) : '—'}</td><td>${time(track.duration)}</td><td class="track-actions"><button data-action="play" data-id="${esc(track.id)}" aria-label="Play ${esc(track.title)}" title="Play">▶ Play</button>${track.source === 'local' ? `<button class="secondary-action" data-action="preview" data-id="${esc(track.id)}" aria-label="Preview ${esc(track.title)}" title="Preview on current output">♬ Preview</button><button class="secondary-action" data-action="analyze" data-id="${esc(track.id)}" aria-label="Analyze ${esc(track.title)}" title="Analyze BPM and level">⌁ Analyze</button>` : ''}<button class="next-action" data-action="play-next" data-id="${esc(track.id)}" ${current ? '' : 'hidden'}>${t('Play next')}</button><button class="collect-action" data-action="collection" data-id="${esc(track.id)}">${t('Collect in set')}</button>${track.source === 'local' ? `<button class="secondary-action" data-action="locate" data-id="${esc(track.id)}">Locate file</button><button class="secondary-action" data-action="copy" data-id="${esc(track.id)}">Keep an app copy</button><button class="secondary-action" data-action="relink" data-id="${esc(track.id)}">Replace recording</button>` : ''}<button class="secondary-action" data-action="edit" data-id="${esc(track.id)}" aria-label="Edit ${esc(track.title)}" title="Edit metadata">✎ Edit</button><button data-action="add" data-id="${esc(track.id)}" aria-label="Add ${esc(track.title)} to selected group" title="Add to selected group">${t(state.groups.find(group => group.id === selected)?.kind === 'cortina' ? 'Use as cortina' : 'Add to tanda')}</button><button class="secondary-action" data-action="delete" data-id="${esc(track.id)}" aria-label="Delete ${esc(track.title)}" title="Remove from library">×</button><button class="more-action" data-action="more" data-id="${esc(track.id)}" aria-label="More actions for ${esc(track.title)}">More</button></td></tr>`).join('');
   $('#empty-library').hidden = visible.length > 0;
   $('#empty-library h3').textContent = state.tracks.length ? 'No matching recordings' : 'A home for your collection';
+  $('#empty-library p').textContent = t(state.tracks.length ? 'Try another search or clear the filters to see your recordings.' : 'Bring in your recordings, organize the details, and find the right music for each moment.');
+  $('#clear-filters').hidden = !state.tracks.length;
   $('#library-count').textContent = state.tracks.length; $('#nav-count').textContent = state.tracks.length;
   $('#library-summary').textContent = `${state.tracks.length} recordings · ${time(state.tracks.reduce((s, t) => s + (t.duration || 0), 0))} known duration`;
 }
 function canMoveGroup(group, direction) { const top = state.groups.filter(g => !g.parentId); const index = top.findIndex(g => g.id === group.id); return !group.parentId && index >= 0 && Boolean(top[index + direction]); }
 function renderGroups() {
-  $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${g.collapsed ? 'collapsed' : ''} ${g.parentId ? 'attached-cortina' : ''} ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${t(g.kind === 'tanda' ? 'Tanda' : 'Cortina')}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="collapse" data-id="${esc(g.id)}" aria-expanded="${!g.collapsed}">${t(g.collapsed ? 'Expand' : 'Collapse')}</button>${g.kind === 'tanda' ? `<button data-group-action="play-tanda" data-id="${esc(g.id)}" aria-label="${t('Play this tanda')}" title="${t('Play this tanda')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button><button data-group-action="cortina" data-id="${esc(g.id)}">${t('Cortina')}</button><button data-group-action="notes" data-id="${esc(g.id)}" aria-label="Tanda notes">Notes</button>` : ''}<button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${!canMoveGroup(g, -1) ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${!canMoveGroup(g, 1) ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div>${g.notes ? `<p class="tanda-notes" data-preserve>${esc(g.notes)}</p>` : ''}<ol>${g.trackIds.map((id, j) => { const t = state.tracks.find(t => t.id === id); return `<li><span>${esc(t?.title || 'Missing track')}</span><div><button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<div class="cortina-range"><label><span>${t('From')}</span><input type="number" min="0" max="86400" step="1" value="${g.startSeconds || 0}" data-cortina-start="${esc(g.id)}" aria-label="${t('Cortina start position')}"></label><span class="range-arrow">→</span><label><span>${t('To')}</span><input type="number" min="1" max="90000" step="1" value="${(g.startSeconds || 0) + (g.limitSeconds || 20)}" data-cortina-end="${esc(g.id)}" ${g.fullLength ? 'disabled' : ''} aria-label="${t('Cortina end position')}"></label><span class="range-unit">${t('seconds')}</span><button data-group-action="cue-position" data-id="${esc(g.id)}" aria-label="${t('Use deck position')}" title="${t('Use deck position')}" ${!current || !g.trackIds.includes(current.id) ? 'disabled' : ''}>⌖</button><button data-group-action="cue-play" data-id="${esc(g.id)}" aria-label="${t('Play this cortina')}" title="${t('Play this cortina')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button></div><label class="cortina-hold"><input type="checkbox" data-cortina-full="${esc(g.id)}" ${g.fullLength ? 'checked' : ''}>${t('Use the rest of the recording')}</label><label class="cortina-hold"><input type="checkbox" data-cortina-hold="${esc(g.id)}" ${g.holdAfter ? 'checked' : ''}>${t('Wait before the next tanda')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select Add to tanda</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
+  $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${g.collapsed ? 'collapsed' : ''} ${g.parentId ? 'attached-cortina' : ''} ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${t(g.kind === 'tanda' ? 'Tanda' : 'Cortina')}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="collapse" data-id="${esc(g.id)}" aria-expanded="${!g.collapsed}">${t(g.collapsed ? 'Expand' : 'Collapse')}</button>${g.kind === 'tanda' ? `<button data-group-action="play-tanda" data-id="${esc(g.id)}" aria-label="${t('Play this tanda')}" title="${t('Play this tanda')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button><button data-group-action="cortina" data-id="${esc(g.id)}">${t('Cortina')}</button><button data-group-action="notes" data-id="${esc(g.id)}" aria-label="Tanda notes">Notes</button>` : ''}<button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${!canMoveGroup(g, -1) ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${!canMoveGroup(g, 1) ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div>${g.notes ? `<p class="tanda-notes" data-preserve>${esc(g.notes)}</p>` : ''}<ol>${g.trackIds.map((id, j) => { const track = state.tracks.find(t => t.id === id); return `<li><span>${esc(track?.title || 'Missing track')}</span><div>${g.kind === 'tanda' ? `<button data-group-action="play-recording" data-id="${esc(g.id)}" data-index="${j}" aria-label="${esc(`${t('Play from this recording')}: ${track?.title || 'Missing track'}`)}" title="${t('Play from this recording')}">▶</button>` : ''}<button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<div class="cortina-range"><label><span>${t('From')}</span><input type="number" min="0" max="86400" step="1" value="${g.startSeconds || 0}" data-cortina-start="${esc(g.id)}" aria-label="${t('Cortina start position')}"></label><span class="range-arrow">→</span><label><span>${t('To')}</span><input type="number" min="1" max="90000" step="1" value="${(g.startSeconds || 0) + (g.limitSeconds || 20)}" data-cortina-end="${esc(g.id)}" ${g.fullLength ? 'disabled' : ''} aria-label="${t('Cortina end position')}"></label><span class="range-unit">${t('seconds')}</span><button data-group-action="cue-position" data-id="${esc(g.id)}" aria-label="${t('Use deck position')}" title="${t('Use deck position')}" ${!current || !g.trackIds.includes(current.id) ? 'disabled' : ''}>⌖</button><button data-group-action="cue-play" data-id="${esc(g.id)}" aria-label="${t('Play this cortina')}" title="${t('Play this cortina')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button></div><label class="cortina-hold"><input type="checkbox" data-cortina-full="${esc(g.id)}" ${g.fullLength ? 'checked' : ''}>${t('Use the rest of the recording')}</label><label class="cortina-hold"><input type="checkbox" data-cortina-hold="${esc(g.id)}" ${g.holdAfter ? 'checked' : ''}>${t('Wait before the next tanda')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select Add to tanda</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
   refreshGroupSummaries();
 }
 function refreshGroupSummaries() {
@@ -243,7 +252,7 @@ function refreshGroupSummaries() {
   $('#empty-set').hidden = state.groups.length > 0;
   $('#set-duration').textContent = time(state.groups.reduce((s, group) => s + groupDuration(group, state.tracks), 0));
   $('#start-set').disabled = !flattenSet(state.groups, state.tracks).length;
-  $('#deck-start-set').hidden = $('#start-set').disabled || Boolean(current);
+  $('#deck-start-set').hidden = $('#start-set').disabled || Boolean(current && loadedSignature);
   const chosen = state.groups.find(g => g.id === selected);
   $('#choose-recordings').hidden = !chosen;
   syncDestination();
@@ -430,7 +439,10 @@ function addToGroup(id, groupId = selected) {
   const group = state.groups.find(g => g.id === groupId);
   if (!group) { showView('set'); notify('Create or select a tanda or cortina first.'); return; }
   if (!state.tracks.some(t => t.id === id)) return;
-  normalizeProgram(state); rememberSetEdit(); group.trackIds.push(id); group.occurrenceIds.push(uid()); selected = group.id; void persist(); renderGroups(); markStep('build'); notify(`${t('Added to')} ${t(group.kind === 'cortina' ? 'Cortina' : 'Tanda')}: ${group.name}`);
+  normalizeProgram(state); rememberSetEdit();
+  if (group.kind === 'cortina') { group.trackIds = [id]; group.occurrenceIds = [uid()]; }
+  else { group.trackIds.push(id); group.occurrenceIds.push(uid()); }
+  selected = group.id; void persist(); renderGroups(); markStep('build'); notify(`${t('Added to')} ${t(group.kind === 'cortina' ? 'Cortina' : 'Tanda')}: ${group.name}`);
 }
 function editTrack(track) {
   const form = $('#metadata-form');
@@ -449,6 +461,10 @@ $('#drop-zone').ondragleave = () => $('#drop-zone').classList.remove('dragging')
 $('#drop-zone').ondrop = event => { event.preventDefault(); $('#drop-zone').classList.remove('dragging'); void importFiles(event.dataTransfer.files); };
 $('#youtube-form').onsubmit = event => { event.preventDefault(); void addYouTube(new FormData(event.target).get('url')); };
 for (const id of ['search', 'style-filter', 'source-filter', 'collection-filter']) $(`#${id}`).oninput = renderLibrary;
+$('#clear-filters').onclick = () => {
+  for (const id of ['search', 'style-filter', 'source-filter', 'collection-filter']) $(`#${id}`).value = '';
+  renderLibrary(); $('#search').focus({ preventScroll: true });
+};
 $('#tracks').ondragstart = event => { const row = event.target.closest('[data-track]'); if (row) event.dataTransfer.setData('text/plain', row.dataset.track); };
 let relinkId = null;
 $('#recording-actions').onclick = event => {
@@ -563,7 +579,7 @@ function addGroup(kind) {
   if (existing) { selected = existing.id; renderGroups(); void persist(); notify('This tanda already has a cortina. Select it to edit.'); return; }
   const group = { id: uid(), kind, name: `${kind === 'tanda' ? 'Tanda' : 'Cortina'} ${state.groups.filter(g => g.kind === kind).length + 1}`, trackIds: [], ...(kind === 'cortina' ? { fullLength: true, holdAfter: true, parentId: parent?.id || '' } : { collapsed: phoneLayout.matches }) };
   rememberSetEdit(); insertGroupAfterSelection(state, group, selected); selected = group.id;
-  void persist(); renderGroups();
+  void persist(); renderGroups(); revealSelectedGroup();
 }
 $('#add-tanda').onclick = () => addGroup('tanda'); $('#add-cortina').onclick = () => addGroup('cortina');
 $('#groups').onclick = event => {
@@ -574,21 +590,24 @@ $('#groups').onclick = event => {
   let newName;
   if (action === 'rename') { newName = prompt(t('Group name'), group.name); if (!newName?.trim() || newName.trim() === group.name) return; }
   if (action === 'delete' && !confirm(t(`Remove “${group.name}” from your set? Recordings stay in the library.`))) return;
-  if (action === 'cortina') { selected = group.id; $('#add-cortina').click(); const attached = state.groups.find(g => g.parentId === group.id); if (attached) { group.collapsed = false; attached.collapsed = false; selected = attached.id; renderGroups(); void persist(); } return; }
+  if (action === 'cortina') { selected = group.id; $('#add-cortina').click(); const attached = state.groups.find(g => g.parentId === group.id); if (attached) { group.collapsed = false; attached.collapsed = false; selected = attached.id; renderGroups(); void persist(); } revealSelectedGroup(); return; }
   if (action === 'collapse') { group.collapsed = !group.collapsed; const cortina = state.groups.find(g => g.parentId === group.id); if (cortina) cortina.collapsed = group.collapsed; void persist(); renderGroups(); return; }
   if (action === 'notes') { const notes = prompt(t('Tanda notes'), group.notes || ''); if (notes !== null) { group.notes = notes; void persist(); renderGroups(); } return; }
-  if (action === 'play-tanda') {
+  if (action === 'play-tanda' || action === 'play-recording') {
     const clips = flattenSet([group], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
     if (!clips.length) return;
     selected = group.id; queue = clips; queueIndex = -1; loadedSignature = null;
-    renderGroups(); renderQueue(); showView('deck'); void playIndex(0);
+    renderGroups(); renderQueue(); showView('deck'); void playIndex(action === 'play-recording' ? j : 0);
     return;
   }
   if (action === 'cue-play') {
     showView('deck');
     const clips = flattenSet([group], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
     if (!clips.length) return;
-    const index = queue.findIndex(item => item.groupId === group.id && (item.startSeconds || 0) === (group.startSeconds || 0) && item.limitSeconds === group.limitSeconds && Boolean(item.holdAfter) === Boolean(group.holdAfter));
+    const index = queue.findIndex((item, index) => item.groupId === group.id && clips.every((clip, offset) => {
+      const queued = queue[index + offset];
+      return queued?.groupId === clip.groupId && queued.track.id === clip.track.id && queued.occurrenceId === clip.occurrenceId && (queued.startSeconds || 0) === (clip.startSeconds || 0) && queued.limitSeconds === clip.limitSeconds && Boolean(queued.holdAfter) === Boolean(clip.holdAfter);
+    }) && queue[index + clips.length]?.groupId !== group.id);
     if (index >= 0) void playIndex(index);
     else { const start = queue.length; queue.push(...clips); loadedSignature = null; renderQueue(); void playIndex(start); }
     return;
@@ -607,7 +626,12 @@ $('#groups').onclick = event => {
       break;
     }
     case 'rename': group.name = newName.trim(); break;
-    case 'delete': state.groups = state.groups.filter(g => g.id !== group.id && g.parentId !== group.id); if (selected === group.id) selected = state.groups[0]?.id || null; break;
+    case 'delete': {
+      const selectedRemoved = selected === group.id || state.groups.some(g => g.id === selected && g.parentId === group.id);
+      state.groups = state.groups.filter(g => g.id !== group.id && g.parentId !== group.id);
+      if (selectedRemoved) selected = state.groups[Math.min(i, state.groups.length - 1)]?.id || null;
+      break;
+    }
     case 'up': moveTanda(group, -1); break;
     case 'down': moveTanda(group, 1); break;
     case 'remove': group.trackIds.splice(j, 1); group.occurrenceIds.splice(j, 1); break;
@@ -699,7 +723,7 @@ $('#set-input').onchange = async event => {
     $('#position').textContent = '0:00 / 0:00'; $('#seek').value = 0;
     $('#playing-title').textContent = 'No recording loaded'; $('#playing-artist').textContent = 'Play a track or load your prepared set.'; $('#playing-group').textContent = 'READY WHEN YOU ARE'; $('#youtube-wrap').hidden = true;
     const oldIds = state.tracks.filter(t => t.source === 'local').map(t => t.id);
-    state = imported; activeCollection = null; collectingInto = null; sourceStatuses.clear(); normalizeProgram(state); selected = state.groups.some(g => g.id === selected) ? selected : state.groups[0]?.id || null;
+    state = imported; activeCollection = null; collectingInto = null; choosingForGroup = false; candidateSelections.clear(); viewPositions.clear(); sourceStatuses.clear(); normalizeProgram(state); selected = state.groups.some(g => g.id === selected) ? selected : state.groups[0]?.id || null;
     if (!await persist()) { render(); return; }
     for (const id of oldIds) if (!state.tracks.some(t => t.id === id && t.source === 'local')) { await deleteFile(id); player.revoke(id); }
     files.clear();
@@ -873,11 +897,20 @@ function syncDestination() {
   $('#add-target').innerHTML = `<option value="">${t('Choose a tanda')}</option>` + state.groups.map(group => `<option value="${esc(group.id)}" data-preserve>${t(group.kind === 'cortina' ? 'Cortina' : 'Tanda')}: ${esc(group.name)}</option>`).join('');
   $('#add-target').value = chosen?.id || '';
   $('#library-target').textContent = collection ? `${t('Collecting candidates in')}: ${collection.name}` : t('Collect in set saves candidates. Add to tanda changes the selected tanda.');
-  $('#finish-adding').hidden = !collection;
+  $('#finish-adding').hidden = !collection && !(choosingForGroup && chosen);
+  $('#finish-adding').textContent = t(collection ? 'Back to set' : 'Back to tanda');
   for (const button of document.querySelectorAll('#tracks [data-action=add]')) button.textContent = t(chosen?.kind === 'cortina' ? 'Use as cortina' : 'Add to tanda');
 }
 $('#add-target').onchange = () => { selected = $('#add-target').value || null; void persist(); renderGroups(); renderLibrary(); };
-$('#finish-adding').onclick = () => { activeCollection = collectingInto; collectingInto = null; renderCollections(); renderLibrary(); showView('collections'); };
+$('#finish-adding').onclick = () => {
+  if (collectingInto) { activeCollection = collectingInto; collectingInto = null; renderCollections(); renderLibrary(); showView('collections'); }
+  else {
+    choosingForGroup = false;
+    const group = state.groups.find(g => g.id === selected);
+    if (group) { group.collapsed = false; void persist(); }
+    renderGroups(); showView('set'); revealSelectedGroup();
+  }
+};
 function collectRecording(track, collectionId) {
   const collection = state.collections.find(c => c.id === collectionId); if (!collection) return;
   const exists = collection.trackIds.includes(track.id);
@@ -893,21 +926,26 @@ function chooseTandaDestination(track) {
   $('#confirm-next').onclick = () => { addToGroup(track.id, $('#next-target').value); $('#target-dialog').close(); };
   $('#target-dialog').showModal();
 }
+const candidateSelections = new Map();
 function renderCollections() {
   state.collections ||= [];
+  const detail = $('#collection-detail');
+  if (detail.dataset.selectionCollection) candidateSelections.set(detail.dataset.selectionCollection, new Set([...detail.querySelectorAll('[data-candidate]:checked')].map(input => input.dataset.candidate)));
   const previousFilter = $('#collection-filter').value;
   $('#collection-filter').innerHTML = `<option value="">${t('All sets')}</option>` + state.collections.map(c => `<option value="${esc(c.id)}" data-preserve>${esc(c.name)}</option>`).join('');
   $('#collection-filter').value = state.collections.some(c => c.id === previousFilter) ? previousFilter : '';
   const collection = state.collections.find(c => c.id === activeCollection);
+  detail.dataset.selectionCollection = collection?.id || '';
   $('#collection-list').innerHTML = state.collections.map(c => `<div class="collection-row"><button data-collection="${esc(c.id)}" ${c.id === activeCollection ? 'aria-current="true"' : ''}><strong data-preserve>${esc(c.name)}</strong><span class="collection-count">${c.trackIds.length} ${t('recordings')}</span></button><button data-collection-delete="${esc(c.id)}">${t('Delete')}</button></div>`).join('') || `<p class="hint">${t('Create a set to collect candidate recordings.')}</p>`;
   $('#collection-detail').innerHTML = collection ? `<div class="builder-actions"><button id="collection-browse">${t('Add recordings')}</button><button id="collection-tanda">${t('Create tanda from selected recordings')}</button><button id="collection-rename">${t('Rename')}</button></div>${collection.trackIds.map((id, index) => { const track = state.tracks.find(t => t.id === id); return `<div class="collection-recording"><label><input type="checkbox" data-candidate="${esc(id)}"><span data-preserve>${esc(track?.title)}</span></label><button data-candidate-remove="${index}">${t('Remove')}</button></div>`; }).join('')}` : '';
   if (collection) {
-    $('#collection-browse').onclick = () => { collectingInto = collection.id; activeCollection = null; $('#collection-filter').value = ''; renderLibrary(); showView('library'); };
+    for (const input of detail.querySelectorAll('[data-candidate]')) input.checked = candidateSelections.get(collection.id)?.has(input.dataset.candidate) || false;
+    $('#collection-browse').onclick = () => { collectingInto = collection.id; choosingForGroup = false; activeCollection = null; $('#collection-filter').value = ''; renderLibrary(); showView('library'); };
     $('#collection-tanda').onclick = () => {
       const ids = [...$('#collection-detail').querySelectorAll('[data-candidate]:checked')].map(el => el.dataset.candidate);
       if (!ids.length) { notify('Choose recordings first.'); return; }
       rememberSetEdit(); const group = { id: uid(), kind: 'tanda', name: collection.name, trackIds: ids, collapsed: phoneLayout.matches };
-      insertGroupAfterSelection(state, group, selected); selected = group.id; normalizeProgram(state); void persist(); render(); showView('set');
+      insertGroupAfterSelection(state, group, selected); selected = group.id; normalizeProgram(state); void persist(); render(); showView('set'); revealSelectedGroup();
     };
     $('#collection-rename').onclick = () => { const name = prompt(t('Set name'), collection.name); if (name?.trim()) { collection.name = name.trim(); void persist(); renderCollections(); } };
   }

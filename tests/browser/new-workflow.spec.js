@@ -316,3 +316,121 @@ for (const width of [1440, 390]) {
     await expect(page.locator('#groups .selected [data-group-action="play-tanda"]')).toBeDisabled();
   });
 }
+
+for (const width of [1440, 390]) {
+  test(`${width}px returns to the selected tanda and restores work-area scroll positions`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await bootstrap(page); await nav(page, 'set');
+    for (let i = 0; i < 12; i++) await page.locator('#add-tanda').click();
+    await page.locator('#choose-recordings').click();
+    await expect(page.locator('#finish-adding')).toHaveText('Back to tanda');
+    await page.locator('[data-action=add][data-id=x]').click();
+    await page.locator('#finish-adding').click();
+    await expect(page.locator('#set')).toBeVisible();
+    const selected = page.locator('#groups .selected');
+    await expect(selected).toBeInViewport();
+    await expect(selected.locator('li')).toHaveCount(1);
+    await expect(selected.locator('ol')).toBeVisible();
+    const position = await page.evaluate(() => window.scrollY);
+    await nav(page, 'library'); await nav(page, 'set');
+    expect(await page.evaluate(() => window.scrollY)).toBe(position);
+  });
+}
+
+test('choosing another cortina replaces its recording, supports undo, and plays the new source', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set');
+  await page.locator('[data-group-action=cue-play][data-id=cortina]').click();
+  await expect(page.locator('#playing-title')).toHaveText('C');
+  await nav(page, 'set'); await page.locator('[data-group-action=select][data-id=cortina]').click();
+  await page.locator('#choose-recordings').click();
+  await page.locator('[data-action=add][data-id=x]').click();
+  await page.locator('#finish-adding').click();
+  await expect(page.locator('[data-group=cortina] li')).toHaveCount(1);
+  await expect(page.locator('[data-group=cortina] li')).toContainText('X');
+  await page.locator('#undo-set').click();
+  await expect(page.locator('[data-group=cortina] li')).toContainText('C');
+  await page.locator('#choose-recordings').click();
+  await page.locator('[data-action=add][data-id=x]').click();
+  await page.locator('#finish-adding').click();
+  await page.locator('[data-group-action=cue-play][data-id=cortina]').click();
+  await expect(page.locator('#playing-title')).toHaveText('X');
+  await nav(page, 'set'); await page.locator('[data-group-action=cue-play][data-id=cortina]').click();
+  await expect(page.locator('#playing-title')).toHaveText('X');
+  await expect(page.locator('.queue-item strong')).toHaveText(['C', 'X']);
+});
+
+test('candidate choices survive removing other recordings, renaming, and changing work areas', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'collections');
+  page.once('dialog', dialog => dialog.accept('Candidates')); await page.locator('#new-collection').click();
+  await page.locator('#collection-browse').click();
+  for (const id of ['a', 'b', 'x']) await page.locator(`[data-action=collection][data-id=${id}]`).click();
+  await page.locator('#finish-adding').click();
+  await page.locator('[data-candidate=a]').check(); await page.locator('[data-candidate=b]').check();
+  await page.locator('[data-candidate-remove="2"]').click();
+  await expect(page.locator('[data-candidate]:checked')).toHaveCount(2);
+  page.once('dialog', dialog => dialog.accept('Chosen pair')); await page.locator('#collection-rename').click();
+  await expect(page.locator('[data-candidate]:checked')).toHaveCount(2);
+  await nav(page, 'library'); await nav(page, 'collections');
+  await expect(page.locator('[data-candidate]:checked')).toHaveCount(2);
+  await page.locator('#collection-tanda').click();
+  await expect(page.locator('#groups .selected li>span')).toHaveText(['A', 'B']);
+});
+
+
+test('an empty search can clear every filter without changing the recording destination', async ({ page }) => {
+  await bootstrap(page);
+  await page.locator('#add-target').selectOption('t2');
+  await page.locator('#search').fill('No matching orchestra');
+  await page.locator('#style-filter').selectOption('Vals');
+  await page.locator('#source-filter').selectOption('local');
+  await expect(page.locator('#empty-library')).toBeVisible();
+  await expect(page.locator('#empty-library p')).toContainText('clear the filters');
+  await page.locator('#clear-filters').click();
+  await expect(page.locator('#tracks tr')).toHaveCount(4);
+  await expect(page.locator('#add-target')).toHaveValue('t2');
+  await expect(page.locator('#search')).toBeFocused();
+  await expect(page.locator('#style-filter')).toHaveValue('');
+  await expect(page.locator('#source-filter')).toHaveValue('');
+});
+
+test('the playback screen can return from tanda listening to the full prepared set', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set');
+  await page.locator('[data-group-action=play-tanda][data-id=t2]').click();
+  await expect(page.locator('#playing-title')).toHaveText('B');
+  await expect(page.locator('.queue-item')).toHaveCount(1);
+  await expect(page.locator('#deck-start-set')).toBeVisible();
+  await page.locator('#deck-start-set').click();
+  await expect(page.locator('#playing-title')).toHaveText('A');
+  await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A','C','B']);
+});
+
+for (const width of [1440, 390]) {
+  test(`${width}px listens from a chosen recording within a tanda without searching the library`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 }); await bootstrap(page); await nav(page, 'set');
+    const collapse = page.locator('[data-group-action=collapse][data-id=t]');
+    if (await collapse.getAttribute('aria-expanded') === 'false') await collapse.click();
+    const play = page.locator('[data-group-action=play-recording][data-id=t][data-index="1"]');
+    if (width < 700) {
+      const bounds = await play.boundingBox();
+      expect(bounds.width).toBeGreaterThanOrEqual(44); expect(bounds.height).toBeGreaterThanOrEqual(44);
+    }
+    await play.click();
+    await expect(page.locator('#playing-title')).toHaveText('B');
+    await expect(page.locator('#recording-number')).toHaveText('Recording 2 / 3');
+    await expect(page.locator('.queue-item strong')).toHaveText(['A','B','A']);
+    await page.locator('#next').click(); await expect(page.locator('#playing-title')).toHaveText('A');
+    await expect(page.locator('#next')).toBeDisabled();
+  });
+}
+
+test('removing the parent of a selected cortina selects a nearby group for the next insertion', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'set');
+  await page.locator('[data-group-action=select][data-id=cortina]').click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('[data-group-action=delete][data-id=t]').click();
+  await expect(page.locator('.selected')).toHaveAttribute('data-group', 't2');
+  await page.locator('#add-cortina').click();
+  await expect(page.locator('.group')).toHaveCount(2);
+  await expect(page.locator('.group').first()).toHaveAttribute('data-group', 't2');
+  await expect(page.locator('.group').last()).toHaveClass(/attached-cortina/);
+});

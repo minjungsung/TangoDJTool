@@ -21,6 +21,10 @@ Use **1 · Music → 2 · Sets → 3 · Tandas → 4 · Playback**. Music is the
 
 During a tanda, **Play next** inserts a recording after the current song while keeping its playback position. Multiple additions keep their selection order; pending additions can be reordered or canceled. During a cortina, choose the next tanda as the target. **Next tanda** manually ends the cortina using the selected fade. New cortinas use the rest of the recording and wait for manual advance by default; existing saved advance settings remain intact.
 
+New tandas and standalone cortinas appear after the selected group. A tanda and its attached cortina stay together. **Choose recordings for this group** opens Music; **Back to tanda** returns to the selected card and expands its recordings. Work areas remember their scroll positions. **Use as cortina** replaces that cortina's recording; Undo restores the previous choice. Candidate checkboxes remain selected when other candidates are removed or the collection is renamed.
+
+Use a tanda's **▶** button to hear just that tanda, or a recording's **▶** to start from that position within the tanda. Playback stops at the tanda's end. **Play prepared set** on the Playback screen starts the complete program again. **Clear filters** restores the library when a search has no results.
+
 **Local files** copies audio into browser storage. **Connect originals**, where the browser supports file handles, reads originals without storing a full audio copy. **Check files** shows permission and availability; **Locate file** and **Reconnect from folder** verify identical content even after renaming. Different audio requires reviewed replacement and fresh analysis. Connecting an identical original can reuse an existing recording ID; **Keep an app copy** offers independent storage at the displayed space cost. Filesystem permission may require renewal, and handles are not portable backups.
 
 Phones and tablets use labeled navigation and recording action menus. Playback continues while moving between work areas; compact controls remain available. DJ performance histories and event records are outside this feature scope.
