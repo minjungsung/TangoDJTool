@@ -16,6 +16,6 @@ jobs:
     permissions:
       contents: write
       checks: read
-    uses: minjungsung/.github/.github/workflows/release.yml@bc75215fd512d65213a14b4165901e966d6841f2
+    uses: minjungsung/.github/.github/workflows/release.yml@c81312af394463ad9ab38197cc9dc8c847b8ccda
     with:
       version: ${{ github.event.inputs.version || github.ref_name }}
