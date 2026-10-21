@@ -1,0 +1,21 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semantic version to release (for example v1.0.0)'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  release:
+    permissions:
+      contents: write
+      checks: read
+    uses: minjungsung/.github/.github/workflows/release.yml@dd7c92388e505f6dd3e65e0dd5d0c7f66d5e19f7
+    with:
+      version: ${{ github.event.inputs.version || github.ref_name }}
