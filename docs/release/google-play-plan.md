@@ -8,6 +8,10 @@ The installable web manifest and service worker cache the application shell afte
 
 The existing Play Console app was confirmed with Android application ID `app.tangodj.studio` on November 9, 2026. Compile and target SDK are Android 16 / API 36. The launcher opens `https://tangodjtool.vercel.app/` in any orientation. Full-screen trusted launch requires Digital Asset Links at that origin for the Play app-signing certificate. Until that verification passes, the browser may show a Custom Tab toolbar.
 
+## Current release state
+
+Version `1 (0.1.0)` was accepted by the official Play Console and published to an active internal-testing track on November 9, 2026. The authorized account completed tester opt-in. A genuine Play installation then exposed a launcher crash caused by a missing activity declaration, which must be corrected before native validation. This release is not reviewed or published to production; see the [observed release evidence and remaining work](readiness.md#published-internal-test).
+
 ## Work sequence
 
 1. Prepare the web manifest, icons, offline app shell, privacy page, Android launcher, reproducible Gradle wrapper, and store listing drafts.
