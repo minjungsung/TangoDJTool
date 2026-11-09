@@ -54,7 +54,7 @@ Confidence is a measure of the estimator's pulse evidence, not a probability tha
 
 **Measure audio** explicitly decodes the complete local mono/stereo recording. It reports integrated gated K-weighted loudness in LUFS, a 4× reconstructed peak estimate in dBTP and the measured source duration. Measurements below the loudness gate remain unknown. YouTube audio cannot be measured through its official embed.
 
-In Settings, enable **Measured loudness processing** only when desired. Choose a target from −30 to −12 LUFS and 0.5–12 dB of headroom. Peak limiting uses a 5 ms lookahead and a release envelope; the reconstructed result is checked again against the peak ceiling. Gain changes are bounded to ±12 dB, so the requested target is not always achieved. Disabling the limiter constrains gain by the measured peak ceiling. Originals remain unchanged.
+In Settings, enable **Measured loudness processing** only when desired. Choose a target from −30 to −12 LUFS and 0.5–12 dB of headroom. Peak limiting uses a 5 ms lookahead and a release envelope; the reconstructed result is checked again against the peak ceiling. Requested loudness gain is bounded to ±12 dB; peak protection can add attenuation, so the requested target is not always achieved. Disabling the limiter constrains gain by the measured peak ceiling. Originals remain unchanged.
 
 Pause before applying or bypassing processing. The deck retains its source position and requires an explicit resume. **Original segment** and **Processed segment** allow a reviewed comparison of source intervals through the cue output. Closing the review cancels audition. Digital measurements and exported comparison audio are reproducible evidence; actual listening through the intended room system remains a separate validation task.
 
@@ -78,7 +78,7 @@ Candidate final tandas end at complete tanda boundaries. A suggestion is given o
 
 Successful master playback starts are recorded; preview is excluded. Starting a new named session archives the earlier session. It does not log the already-playing recording again. **Played recordings** lets you select/view/search histories, annotate sessions and individual starts, and export selected sessions or entries as CSV.
 
-Use annotations for partial listening or mistaken starts. A logged start is never presented as proof that a recording completed. Session deletion moves it to **Deleted histories**, where Restore recovers it. Export deleted histories before using **Delete permanently**; permanent deletion requires separate confirmation and cannot be undone. Recovery and storage failures preserve committed bytes. Archives are bounded to 100 sessions and 100 deleted histories, at most 1,000 starts per session, and a total serialized size of 2,000,000 characters; reaching a limit reports a recoverable error instead of silently discarding archives.
+Use annotations for partial listening or mistaken starts. A logged start is never presented as proof that a recording completed. Session deletion moves it to **Deleted histories**, where Restore recovers it. Export deleted histories before using **Permanently delete**; permanent deletion requires separate confirmation and cannot be undone. Recovery and storage failures preserve committed bytes. Archives are bounded to 100 sessions and 100 deleted histories, at most 1,000 starts per session, and a total serialized size of 2,000,000 characters; reaching a limit reports a recoverable error instead of silently discarding archives.
 
 ## Make and restore a portable audio backup
 

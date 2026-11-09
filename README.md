@@ -143,7 +143,7 @@ Numeric loopback visits transfer the saved workspace, audio blobs, and preferenc
 - Playing a library recording or an individual recording in a tanda creates a one-recording listening queue. Playing a tanda or candidate set creates a queue for that selection. Live mode blocks these replacements.
 - The play button shows play or pause state, and previous/next controls are disabled while switching recordings or at queue boundaries.
 - Reload restores the last selected queue recording and saved source position without autoplay. Press Play to resume; a stopped or completed recording restarts at its cue-in position.
-- The set builder shows the destination group for additions. Group and recording order edits have a one-step undo while the page is open.
+- The set builder shows the destination group for additions. Preparation edits retain up to 60 labeled Undo/Redo steps while the page is open, including composition, metadata and saved sets.
 - Editing the set after loading a queue shows a reminder to update the upcoming queue. The current queue stays stable during performance.
 - New cortinas default to the rest of the recording and a manual wait before the next tanda. Uncheck **Use the rest of the recording** to choose a bounded interval; the initial limit is 20 seconds. Edit the start and end in one compact row; displayed duration follows the playable segment.
 - YouTube duration is recorded when the player supplies it. Missing durations remain excluded from known runtime totals.
