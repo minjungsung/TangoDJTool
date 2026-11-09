@@ -15,7 +15,7 @@ The clean local checkout was safely fast-forwarded from `6301f8c` to remote `mai
 - App icons are 512 × 512, 192 × 192, and maskable 512 × 512. The feature graphic is 1024 × 500.
 - Four current phone screenshots replace the obsolete three-menu UI. They show Music, Playback, Sets, and Tandas at 1215 × 2160 pixels. See the [capture manifest](assets/capture-manifest.json) for source and image hashes. These are production web UI captures in an isolated Chromium phone viewport, rather than native-installation or audio-playback evidence.
 - Store text now describes the current four work areas. App name, short description, and full description fit Google's respective 30, 80, and 4,000 character limits.
-- `npm run android:preflight` checks local identity, bundle signature integrity, provider-certificate input, Digital Asset Links, image dimensions, screenshot source/image hashes, listing length, and the cached web shell. The post-deployment run with `--check-site` passed 17 of 18 checks; only the unsigned release-bundle signature remains a failure.
+- `npm run android:preflight` checks local identity, bundle signature integrity, provider-certificate input, Digital Asset Links, image dimensions, screenshot source/image hashes, listing length, and the cached web shell. The signed-candidate run with `--check-site` passed all 18 checks using the actual JDK 17 tools and genuine distribution fingerprint. Play upload-certificate acceptance and device behavior remain separate requirements.
 - The Digital Asset Links generator preserves unrelated statements and existing certificate fingerprints. A temporary-directory verification confirmed preservation, idempotence, and refusal to replace invalid JSON.
 
 ## Build artifacts
@@ -23,9 +23,9 @@ The clean local checkout was safely fast-forwarded from `6301f8c` to remote `mai
 | Artifact | Repository-relative location | SHA-256 | State |
 | --- | --- | --- | --- |
 | Debug APK | `android/app/build/outputs/apk/debug/app-debug.apk` | `0bf93016490a0f40dc5a012fe831bba486da701091e302e0e76b9b81a714f128` | Debug build; not a store release |
-| Release AAB | `android/app/build/outputs/bundle/release/app-release.aab` | `2ac62aa7a7b3755d66918dc9274c1eaa1d356b4838695c482e07f42d75e48901` | Unsigned; not uploadable to Play |
+| Release AAB | `android/app/build/outputs/bundle/release/app-release.aab` | `bf64b55e88f0b9cb8480bc971b9f097354ba26aaf960a2ac751946f1a3361418` | Signed candidate; Play upload acceptance not yet established |
 
-Rebuilding with the legitimate upload key changes the bundle and its hash. Keep private signing material outside version control and never place passwords in documentation or command output.
+The earlier unsigned AAB had SHA-256 `2ac62aa7a7b3755d66918dc9274c1eaa1d356b4838695c482e07f42d75e48901`. Rebuilding with signing changed the bundle and its hash. Keep private signing material outside version control and never place passwords in documentation or command output.
 
 ## Authenticated Play Console state
 
@@ -49,11 +49,25 @@ The existing Vercel project was deployed to its production alias on November 9, 
 
 The application root, privacy page, and web manifest also returned HTTP 200 without redirects. Local and hosted production builds passed. This verifies the deployed association file; full-screen trusted launch must still be checked on an actual Play-distributed build.
 
+## Candidate upload signing
+
+The authenticated existing internal-testing draft was empty, and its official “Add from library” dialog displayed “No app bundles.” Following authorization to prepare an initial upload candidate, an isolated RSA-3072 key was generated with a cryptographically random password and generic Tango DJ Studio certificate identity. Existing key material was not overwritten. The private storage directory has mode `0700`; the keystore, private configuration, and candidate AAB have mode `0600` and are excluded from version control.
+
+Candidate upload-certificate SHA-256:
+
+```text
+F7:CD:A3:29:D5:7C:D9:C8:F5:75:74:12:C9:4B:55:EE:18:A8:FA:2E:95:5C:47:CA:C9:51:9B:A9:48:42:C4:93
+```
+
+The existing environment-based release configuration built the candidate with `bundleRelease`, retaining version `0.1.0` and version code `1`. JAR signature verification passed, the embedded signing certificate matched the candidate certificate, and the AAB ZIP integrity check passed. The preflight at 08:51:26 UTC on November 9, 2026 passed 18 of 18 checks, including the live distribution-certificate association.
+
+This candidate certificate is distinct from the Play distribution certificate. The authenticated Play upload must establish whether Google accepts it as the upload key. No upload-key replacement or reset has been performed, and local signature verification does not establish store acceptance, release approval, device validation, or publication.
+
 ## Remaining release work
 
-1. Confirm the registered upload-certificate state in the actual app before creating or replacing any upload key. The scoped local signing configuration check found no Tango upload-key variables or keystore in the explicit repository signing locations.
-2. Connect the legitimate upload keystore with `TANGO_UPLOAD_KEYSTORE`, `TANGO_UPLOAD_STORE_PASSWORD`, `TANGO_UPLOAD_KEY_ALIAS`, and `TANGO_UPLOAD_KEY_PASSWORD`; rebuild and verify the signed AAB. Password values must stay private.
-3. Run `npm run android:preflight -- --check-site` with the genuine distribution fingerprint after rebuilding the signed bundle. Verify trusted launch, file import/export, playback, rotation, storage recovery, and offline restart on the actual distributed Android build.
-4. Complete the remaining console declarations, support details, listing assets, and applicable testing-track setup. Upload the signed bundle to the available track and follow the actual production-access workflow.
+1. Upload the signed candidate to the actual existing internal-testing draft and confirm Google's upload-key acceptance. If Google reports another registered upload certificate, recover the matching legitimate key rather than replacing or resetting it.
+2. Retain the accepted upload key securely and provide the existing `TANGO_UPLOAD_*` environment variables for future builds. Password values must stay private.
+3. Verify trusted launch, file import/export, playback, rotation, storage recovery, and offline restart on the actual Play-distributed Android build.
+4. Complete the remaining console declarations, support details, listing assets, and applicable testing-track setup, then follow the actual production-access workflow.
 
 See the [Google Play release plan](google-play-plan.md) and [listing text](store-listing.md). A passing build or preflight does not establish account eligibility, successful store upload, review approval, or publication.
