@@ -108,14 +108,14 @@ test('individual/bulk analysis, gain adjustment, preview/stop preview, and previ
   await upload(page,wav('Quiet',2000),wav('Loud',18000));await action(page,'analyze',0);await expect(page.locator('#notice')).toContainText('1 tracks analyzed');
   await action(page,'edit');await expect(page.locator('#analysis-details')).toContainText('RMS');await page.locator('#close-metadata').click();
   await page.locator('#analyze-all').click();await expect(page.locator('#notice')).toContainText('2 tracks analyzed');
-  await action(page,'play',0);await view(page,'deck');await page.locator('.playback-options').evaluate(el=>el.open=true);await page.locator('#normalize').check();await expect.poll(()=>page.evaluate(()=>window.reviewGain.gain.value)).toBeGreaterThan(1);
+  await action(page,'play',0);await view(page,'deck');await expect(page.locator('#playing-title')).toHaveText('Quiet');await expect(page.locator('#play-pause')).toHaveText('Ⅱ');await page.locator('.playback-options').evaluate(el=>el.open=true);await page.locator('#normalize').check();await expect.poll(()=>page.evaluate(()=>window.reviewGain.gain.value)).toBeGreaterThan(1);
   await page.locator('#normalize').uncheck();await expect.poll(()=>page.evaluate(()=>window.reviewGain.gain.value)).toBeLessThan(.9);
-  await action(page,'preview',1);await view(page,'deck');await expect(page.locator('#preview-status')).toBeVisible();await page.locator('#stop-preview').click();await expect(page.locator('#preview-status')).toBeHidden();
+  await action(page,'preview',1);await view(page,'deck');await expect(page.locator('#preview-status')).toBeHidden();await expect(page.locator('#notice')).toContainText('shares the live output');await page.locator('#play-pause').click();await action(page,'preview',1);await view(page,'deck');await expect(page.locator('#preview-status')).toBeVisible();await page.locator('#stop-preview').click();await expect(page.locator('#preview-status')).toBeHidden();
   await view(page,'library');await page.locator('#search').fill('No matching track');await menu(page,'open-guide');await page.locator('#guide-preview').click();await view(page,'deck');await expect(page.locator('#preview-status')).toBeVisible();
 });
 
 test('local transport: pause/resume, previous/next, seek, volume/mute, keyboard, final endpoint and Auto next', async ({page}) => {
-  await upload(page,wav('A'),wav('B'));await view(page,'set');await page.locator('#add-tanda').click();await action(page,'add',0);await action(page,'add',1);await view(page,'set');await page.locator('#start-set').click();
+  await upload(page,wav('A'),wav('B'));await view(page,'set');await page.locator('#add-tanda').click();await action(page,'add',0);await action(page,'add',1);await view(page,'set');await page.locator('#start-set').click();await view(page,'deck');
   await expect(page.locator('#playing-title')).toHaveText('A');await expect(page.locator('#position')).toContainText('0:01');await page.locator('#play-pause').click();await expect(page.locator('#play-pause')).toHaveText('▶');
   const position=await page.locator('#position').textContent();await page.waitForTimeout(300);await expect(page.locator('#position')).toHaveText(position);await page.locator('#play-pause').click();
   await page.locator('#next').click();await expect(page.locator('#playing-title')).toHaveText('B');await page.locator('#previous').click();await expect(page.locator('#playing-title')).toHaveText('A');
@@ -146,7 +146,7 @@ test('empty guide actions, sample link, reset walkthrough, practice link and per
 });
 
 test('YouTube recovery: retry, open URL, replace invalid/valid link, use local recording and skip', async ({page}) => {
-  await provider(page);await page.reload();await samples(page);await view(page,'set');await page.locator('#start-set').click();await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
+  await provider(page);await page.reload();await samples(page);await view(page,'set');await page.locator('#start-set').click();await view(page,'deck');await expect(page.locator('#playing-title')).toHaveText('Yo soy el tango');
   await page.evaluate(()=>reviewProvider.options.events.onError({data:150}));await expect(page.locator('#youtube-error')).toBeVisible();await expect(page.locator('#youtube-open')).toHaveAttribute('href',/youtube.com\/watch/);
   await page.locator('#youtube-retry').click();await expect(page.locator('#youtube-error')).toBeHidden();
   await page.evaluate(()=>reviewProvider.options.events.onError({data:100}));await page.locator('#youtube-replace').click();await page.locator('[name=videoUrl]').fill('https://example.com');await page.getByRole('button',{name:'Save details'}).click();await expect(page.locator('#metadata-dialog')).toBeVisible();await page.locator('[name=videoUrl]').fill('https://youtu.be/abcdefghijk');await page.getByRole('button',{name:'Save details'}).click();await page.locator('#play-pause').click();await expect.poll(()=>page.evaluate(()=>reviewProvider.videoId)).toBe('abcdefghijk');
@@ -194,8 +194,8 @@ test('full program playback, queue selection, stale queue update, Undo and resto
 test('local decode failure and preview failure report errors, playback relink and skip recover', async ({page}) => {
   await upload(page,{name:'broken.mp3',mimeType:'audio/mpeg',buffer:Buffer.from('invalid codec')},wav('Valid'));await action(page,'analyze',0);await expect(page.locator('#notice')).toContainText('failed');
   await action(page,'preview',0);await expect(page.locator('#notice')).toHaveClass(/error/);
-  await action(page,'play',0);await expect(page.locator('#playback-recovery')).toBeVisible();const chooser=page.waitForEvent('filechooser');await page.locator('#playback-relink').click();page.once('dialog',d=>d.accept());await (await chooser).setFiles(wav('Fixed'));await expect(page.locator('#notice')).toContainText('File relinked');await page.locator('#play-pause').click();await expect(page.locator('#youtube-wrap')).toBeHidden();
-  await action(page,'play',1);await page.locator('#stop').click();await action(page,'play',0);await expect(page.locator('#playing-title')).toHaveText('broken');
+  await action(page,'play',0);await view(page,'deck');await expect(page.locator('#playback-recovery')).toBeVisible();const chooser=page.waitForEvent('filechooser');await page.locator('#playback-relink').click();page.once('dialog',d=>d.accept());await (await chooser).setFiles(wav('Fixed'));await expect(page.locator('#notice')).toContainText('File relinked');await page.locator('#play-pause').click();await expect(page.locator('#play-pause')).toHaveText('Ⅱ');await expect(page.locator('#youtube-wrap')).toBeHidden();
+  await action(page,'play',1);await view(page,'deck');await page.locator('#stop').click();await action(page,'play',0);await view(page,'deck');await expect(page.locator('#playing-title')).toHaveText('broken');
 });
 
 test('temporary database failure: example-only queue, backup export, local import guard and saving recovery', async ({page}) => {
@@ -233,7 +233,7 @@ test('analysis during playback refreshes normalized gain without restarting the 
 });
 
 test('local playback waiting longer than fifteen seconds exposes retry and relink', async ({page}) => {
-  await upload(page,wav());await action(page,'play');
+  await upload(page,wav());await action(page,'play');await view(page,'deck');await expect(page.locator('#play-pause')).toHaveText('Ⅱ');
   // Trigger the browser media event path without replacing Player's implementation.
   await page.evaluate(()=>{const original=HTMLMediaElement.prototype.play;HTMLMediaElement.prototype.play=function(...args){window.waitingAudio=this;return original.apply(this,args);};});
   await page.locator('#stop').click();await page.locator('#play-pause').click();await page.waitForFunction(()=>window.waitingAudio?.currentTime>.5);

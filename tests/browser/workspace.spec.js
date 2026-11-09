@@ -680,10 +680,13 @@ test('a saved cue beyond source length cannot interrupt the current recording', 
     version: 1, tracks: [{ id: 'tango', source: 'youtube', videoId: 'c9UaO1KQwpI', title: 'Current tango', duration: 180 }, { id: 'cortina', source: 'youtube', videoId: 'abcdefghijk', title: 'Late cortina', duration: 180 }],
     groups: [{ id: 'tanda', name: 'Tanda', kind: 'tanda', trackIds: ['tango'] }, { id: 'break', name: 'Cortina', kind: 'cortina', trackIds: ['cortina'], startSeconds: 200, limitSeconds: 20 }],
   })) });
-  await view(page, 'set'); await page.locator('#start-set').click(); await expect(page.locator('#playing-title')).toHaveText('Current tango');
+  await view(page, 'set'); await page.locator('[data-group-action=play-tanda][data-id=tanda]').click(); await expect(page.locator('#playing-title')).toHaveText('Current tango');
   await page.evaluate(() => { window.testYouTube.position = 40; });
   const loads = await page.evaluate(() => window.testYouTube.loads);
-  await view(page, 'deck'); await page.locator('[data-queue-index="1"]').click();
+  await page.locator('#start-set').click();
+  await expect(page.locator('#notice')).toContainText('before the recording ends');
+  await page.locator('[data-group-action=cue-play][data-id=break]').click();
+  await expect(page.locator('.queue-item strong')).toHaveText(['Current tango']);
   await expect(page.locator('#notice')).toContainText('before the recording ends');
   await expect(page.locator('#playing-title')).toHaveText('Current tango');
   expect(await page.evaluate(() => window.testYouTube.loads)).toBe(loads);

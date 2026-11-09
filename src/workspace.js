@@ -1,11 +1,14 @@
+import { flattenSet } from './model.js';
+
 export function groupDuration(group, tracks) {
-  const byId = new Map(tracks.map(track => [track.id, track]));
-  return group.trackIds.reduce((total, id) => total + Math.min(group.limitSeconds || Infinity, Math.max(0, (byId.get(id)?.duration ?? ((group.startSeconds || 0) + (group.limitSeconds || 0))) - (group.startSeconds || 0))), 0);
+  return flattenSet([group], tracks).reduce((total, item) => {
+    const available = item.track.duration == null ? (item.limitSeconds ?? 0) : Math.max(0, item.track.duration - item.startSeconds);
+    return total + Math.min(item.limitSeconds ?? Infinity, available);
+  }, 0);
 }
 
 export function queueSignature(groups, tracks) {
-  return JSON.stringify(groups.flatMap(group => group.trackIds.map((id, index) => ({ id, index })).filter(({ id }) => tracks.some(track => track.id === id))
-    .map(({ id, index }) => [id, group.id, group.name, group.limitSeconds || null, group.startSeconds || 0, Boolean(group.holdAfter), group.occurrenceIds?.[index] || null])));
+  return JSON.stringify(flattenSet(groups, tracks).map(item => [item.track.id, item.groupId, item.groupName, item.limitSeconds ?? null, item.startSeconds, Boolean(item.holdAfter), item.occurrenceId ?? null, item.kind ?? null]));
 }
 
 export function locateInQueue(queue, trackId, currentIndex) {
