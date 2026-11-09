@@ -1,0 +1,115 @@
+{
+  "checkedAt": "2026-11-09T10:46:09.549Z",
+  "source": null,
+  "sourceDirty": false,
+  "packageName": "app.tangodj.studio",
+  "versionCode": 2,
+  "versionName": "0.1.1",
+  "targetSdk": 36,
+  "site": "https://tangodjtool.vercel.app/",
+  "bundle": {
+    "path": "android/app/build/outputs/bundle/release/app-release.aab",
+    "bytes": 3588962,
+    "sha256": "b81ae444927a8045ff3fb3059bc429f6192beec5d7a6bf09d964dfebf484666c"
+  },
+  "status": "preflight-passed",
+  "checks": [
+    {
+      "name": "android-identity",
+      "passed": true,
+      "detail": "Application ID, version, target SDK and HTTPS launch origin are configured."
+    },
+    {
+      "name": "release-bundle-signature",
+      "passed": true,
+      "detail": "JAR integrity/signature verification passed; upload-certificate identity must still match Play Console."
+    },
+    {
+      "name": "provider-certificate-input",
+      "passed": true,
+      "detail": "TANGO_APP_SIGNING_SHA256 must contain the full Play app-signing certificate fingerprint supplied by Play Console."
+    },
+    {
+      "name": "local-digital-asset-links",
+      "passed": true,
+      "detail": "The local statement must match the application ID and provider-supplied distribution certificate; an upload certificate is insufficient."
+    },
+    {
+      "name": "asset:public/icons/icon-512.png",
+      "passed": true,
+      "detail": "512 \u00d7 512; image freshness and visual accuracy require review against the current app."
+    },
+    {
+      "name": "asset:public/icons/icon-192.png",
+      "passed": true,
+      "detail": "192 \u00d7 192; image freshness and visual accuracy require review against the current app."
+    },
+    {
+      "name": "asset:public/icons/maskable-512.png",
+      "passed": true,
+      "detail": "512 \u00d7 512; image freshness and visual accuracy require review against the current app."
+    },
+    {
+      "name": "asset:docs/release/assets/feature-graphic.png",
+      "passed": true,
+      "detail": "1024 \u00d7 500; image freshness and visual accuracy require review against the current app."
+    },
+    {
+      "name": "asset:docs/release/assets/phone-1.jpg",
+      "passed": true,
+      "detail": "1080 \u00d7 1920; image freshness and visual accuracy require review against the current app."
+    },
+    {
+      "name": "asset:docs/release/assets/phone-2.jpg",
+      "passed": true,
+      "detail": "1080 \u00d7 1920; image freshness and visual accuracy require review against the current app."
+    },
+    {
+      "name": "asset:docs/release/assets/phone-3.jpg",
+      "passed": true,
+      "detail": "1080 \u00d7 1920; image freshness and visual accuracy require review against the current app."
+    },
+    {
+      "name": "asset:docs/release/assets/phone-4.jpg",
+      "passed": true,
+      "detail": "1080 \u00d7 1920; image freshness and visual accuracy require review against the current app."
+    },
+    {
+      "name": "screenshot-source-provenance",
+      "passed": true,
+      "detail": "Four phone screenshots must match their recorded hashes and the current production app-source digest; visual and native-device review remain separate."
+    },
+    {
+      "name": "listing:App name",
+      "passed": true,
+      "detail": "15/30 characters."
+    },
+    {
+      "name": "listing:Short description",
+      "passed": true,
+      "detail": "69/80 characters."
+    },
+    {
+      "name": "listing:Full description",
+      "passed": true,
+      "detail": "1671/4000 characters."
+    },
+    {
+      "name": "cached-web-shell",
+      "passed": true,
+      "detail": "Run npm run build to prepare the cached web application shell."
+    },
+    {
+      "name": "deployed-digital-asset-links",
+      "passed": true,
+      "detail": "The HTTPS origin must return matching JSON with HTTP 200 and no redirect."
+    }
+  ],
+  "limits": "This preflight does not confirm Play upload-key identity, device behavior, declarations, production access, review approval, or publication.",
+  "executionContext": {
+    "kind": "temporary-git-archive-snapshot",
+    "gitHead": "3556887cf895300517ec9892dd5e4bc07afa9c67",
+    "appSourceSha256": "7af50dc405c5d87efaadb8ccdff6472edce980ba670b4eb9cebb2db258593013",
+    "reason": "Checks ran against the committed source deployed to the production alias. Concurrent uncommitted application changes were preserved and excluded from this release snapshot."
+  }
+}

@@ -1,4 +1,4 @@
-# Google Play listing draft
+# Submitted Google Play listing
 
 ## App name
 
@@ -25,19 +25,19 @@ Add your own recordings, collect candidates in sets, organize them into tandas, 
 
 Your imported audio stays in the site's browser storage on your device. JSON backups include metadata and set structure; keep your original audio files and relink them when transferring to another device.
 
-YouTube needs an internet connection and embedding permission. Some mobile devices ignore YouTube volume changes. Preview shares the main output; separate headphone monitoring is unavailable. Browser codec support and device storage vary. Rehearse your actual audio setup before live use.
+YouTube needs an internet connection and embedding permission. Some mobile devices ignore YouTube volume changes. Separate headphone preview requires browser output selection and suitable audio hardware. On shared output, preview is blocked during playback. YouTube uses the main output. Browser codec support and device storage vary. Rehearse your actual audio setup before live use.
 
 The Android app uses a supported browser to run the Tango DJ Studio website. After a successful online launch, the cached app and saved local recordings can be used offline. Initial installation and YouTube sources require a connection. Background playback is not guaranteed.
 
-## Console information to complete
+## Console declarations
 
-- Category candidate: Music & Audio.
-- Advertising: the application has no advertising SDK; embedded provider content can have provider advertising. Confirm the Console declaration against Google's current guidance.
-- Privacy URL: `https://minjung-world.notion.site/Tango-DJ-Studio-Privacy-Policy-b7474a525fd882d39c2e01b0091b667b`.
-- Terms URL: `https://minjung-world.notion.site/Tango-DJ-Studio-Terms-of-Use-c3174a525fd8831f9cab81b1b229fa08`.
-- Support website: `https://github.com/minjungsung/TangoDJTool/issues`.
-- Support email: obtain from the developer account; do not fabricate one.
+- Category: Music & Audio, confirmed in the official Console.
+- Advertising: the existing declaration correctly says the app contains ads; official embedded YouTube content may display provider advertisements.
+- Privacy URL: `https://tangodjtool.vercel.app/privacy.html`, matching the link in Settings.
+- Terms: use the existing published terms linked from Settings.
+- Support website: `https://tangodjtool.vercel.app/`, published in the official Console.
+- Support email: the user-authorized address is saved in the official Console; personal account details are not included in this artifact.
 - Access: no app login; YouTube sources can be restricted by provider rules or location.
-- Data safety: audit hosting, Google Fonts, and embedded YouTube alongside local-only storage.
-- Rating and target audience: complete the actual questionnaire.
-- Assets: 512 px app icon, 1024 × 500 feature graphic, and current phone/tablet screenshots. Capture actual UI; do not claim unimplemented functionality.
+- Data safety: the completed declaration includes approximate location, app interactions, and device or browser identifiers collected/shared through optional YouTube features, together with HTTPS transport and the absence of app accounts. See the provider audit in the release readiness document.
+- Rating and target audience: existing completed declarations are preserved.
+- Assets: 512 px app icon, 1024 × 500 feature graphic, and four genuine Android Chrome phone captures from reviewed revision `3556887`. The capture manifest records their source, crops, upload names, and actual Console order. These do not establish verification of later web assets or Play-installed version 2 behavior.

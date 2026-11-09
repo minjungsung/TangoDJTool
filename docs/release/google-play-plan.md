@@ -10,7 +10,9 @@ The existing Play Console app was confirmed with Android application ID `app.tan
 
 ## Current release state
 
-Version `1 (0.1.0)` was accepted by the official Play Console and published to an active internal-testing track on November 9, 2026. The authorized account completed tester opt-in. A genuine Play installation then exposed a launcher crash caused by a missing activity declaration, which must be corrected before native validation. This release is not reviewed or published to production; see the [observed release evidence and remaining work](readiness.md#published-internal-test).
+Version `2 (0.1.1)` was accepted by the official Play Console and published to an active internal-testing track on November 9, 2026, replacing the first internal release after a genuine Play installation exposed a missing launcher activity. The authorized account completed internal-test opt-in. The corrected local APK launches and supports basic workspace interactions on an independent emulator; the Play-installed version 2 still needs verification.
+
+The same accepted bundle, four actual phone screenshots from reviewed revision `3556887`, English listing, matching privacy policy, and completed declarations were submitted through the official Alpha closed-testing workflow. At 10:52 UTC on November 9, Publishing overview showed “Changes in review” and “Your changes are now in review”; the earlier quick-check countdown was gone. South Korea is the selected test region, and only the existing one-user authorized test list is selected. No closed rollout approval or production publication is claimed. The observed production gate remains 12 genuine testers opted in continuously for 14 days; the last confirmed count is zero. The account remains Personal, with owner trader consent/certification and genuine organization-document verification still outstanding. See the [closed submission and remaining work](readiness.md#closed-release-submitted-for-review).
 
 ## Work sequence
 

@@ -1,47 +1,129 @@
 {
-  "capturedAt": "2026-11-09T08:32:10.561794+00:00",
+  "capturedAt": "2026-11-09T10:23:17.562211+00:00",
   "source": {
-    "kind": "local-production-web-build",
-    "gitHead": "29d2a19899dc352d54c51a0ea4a8762f780e08ac",
-    "appSourceSha256": "1f6d53a1880ee4257b07894c8c417c6e5e1bd63785849bac792ef5a25324991c",
-    "sourceDigestRule": "SHA-256 of sorted repository-relative path, NUL, file SHA-256, newline for src JavaScript/CSS, index.html, vite.config.js and package-lock.json."
+    "kind": "android-emulator-production-web-site",
+    "gitHead": "3556887cf895300517ec9892dd5e4bc07afa9c67",
+    "appSourceSha256": "7af50dc405c5d87efaadb8ccdff6472edce980ba670b4eb9cebb2db258593013",
+    "sourceDigestRule": "SHA-256 of sorted repository-relative path, NUL, file SHA-256, newline for src JavaScript/CSS, index.html, vite.config.js and package-lock.json.",
+    "url": "https://tangodjtool.vercel.app/",
+    "deploymentId": "dpl_At1fffM47FfdXEmAhcjLREsiDTKH",
+    "publicAssets": [
+      {
+        "path": "/assets/main-Bnlmu7y4.js",
+        "sha256": "8e843f40bbe18f531ea6b05aac178376b4ae3e38662f831396840194c44257f9"
+      },
+      {
+        "path": "/assets/main-DUffPpaM.css",
+        "sha256": "80203a17265eee6785abce087aeb3b4f40dbf5a4401868b3a6a5da060a283f2f"
+      }
+    ],
+    "privacyLinkVerification": "Actual Android Chrome Settings -> Privacy policy navigation opened the matching HTTPS policy dated November 9, 2026 after the service-worker update activated. Local workspace was preserved."
   },
-  "browser": "Chromium 156.0.8078.4",
-  "viewportCssPixels": {
-    "width": 405,
-    "height": 720
+  "device": {
+    "platform": "Android",
+    "version": "16 / API 36",
+    "capture": "Session-bound supported device screenshot command; dedicated Tango emulator."
   },
-  "deviceScaleFactor": 3,
-  "workspace": "Actual default curated example workspace, English UI, playback paused; no audio or provider mock.",
+  "workspace": "Actual curated example workspace, English UI, restored queue paused; no audio/provider mocks.",
   "images": [
     {
       "path": "phone-1.jpg",
       "workArea": "Music",
-      "width": 1215,
-      "height": 2160,
-      "sha256": "f60ba3aea4120c030a38453428e2d5190d3197b03f77cc424274a5a3c7c2228c"
+      "width": 1080,
+      "height": 1920,
+      "sha256": "c515331668b816da8f34cf9fcb2ae5f581f966b72c604361dca4aa6a279c93bc",
+      "original": "native-phone-1.png",
+      "originalWidth": 1080,
+      "originalHeight": 2400,
+      "originalSha256": "12d9931426b34d6a3c77c652c0f9e3d0b13942118d0de56ae480908e03c3514b",
+      "cropPixels": {
+        "left": 0,
+        "top": 450,
+        "right": 1080,
+        "bottom": 2370
+      },
+      "storeUploadName": "tango-phone-1-3556887.jpg"
     },
     {
       "path": "phone-2.jpg",
       "workArea": "Playback",
-      "width": 1215,
-      "height": 2160,
-      "sha256": "cc68c8dd443d627d306c0c7cb33bd012f6cadda056dea2c0ec24320d81d13fb1"
+      "width": 1080,
+      "height": 1920,
+      "sha256": "db06147dbffbbbce8efddffef9bbc23b1b03b03313bf3c855eef7192fa26b6f7",
+      "original": "native-phone-2.png",
+      "originalWidth": 1080,
+      "originalHeight": 2400,
+      "originalSha256": "c58b027181fc3d9eb01ec05fc32a79f07e7b6c0a7badb0f382433c8af98a0cdf",
+      "cropPixels": {
+        "left": 0,
+        "top": 450,
+        "right": 1080,
+        "bottom": 2370
+      },
+      "storeUploadName": "tango-phone-2-3556887.jpg"
     },
     {
       "path": "phone-3.jpg",
       "workArea": "Sets",
-      "width": 1215,
-      "height": 2160,
-      "sha256": "6770bbf0f0f28eeb42ec0d60acd303b0677ba740badb1dcc9c42208647a4fe68"
+      "width": 1080,
+      "height": 1920,
+      "sha256": "40bbf42bfba148934558287c4fd5c1581832674a937dbec18d86f551f0480647",
+      "original": "native-phone-3.png",
+      "originalWidth": 1080,
+      "originalHeight": 2400,
+      "originalSha256": "5c43cb9c9565732c21a95073cada828ad824865549d0d9ff7f831cbc55385a9b",
+      "cropPixels": {
+        "left": 0,
+        "top": 450,
+        "right": 1080,
+        "bottom": 2370
+      },
+      "storeUploadName": "tango-phone-3-3556887.jpg"
     },
     {
       "path": "phone-4.jpg",
       "workArea": "Tandas",
-      "width": 1215,
-      "height": 2160,
-      "sha256": "82c893f06c2617bd7586690146a50d785ed15a7de0bf95b69e244c4154ef0faa"
+      "width": 1080,
+      "height": 1920,
+      "sha256": "840bc71b9c160f6ee07edf5e990d720586cdb30336bd85f3fea2c3b44b7274e2",
+      "original": "native-phone-4.png",
+      "originalWidth": 1080,
+      "originalHeight": 2400,
+      "originalSha256": "32ef1e33e33caa612de9318ddff454b48e6167c093f72d9db23fe9ddd9d9f2c8",
+      "cropPixels": {
+        "left": 0,
+        "top": 450,
+        "right": 1080,
+        "bottom": 2370
+      },
+      "storeUploadName": "tango-phone-4-3556887.jpg"
     }
   ],
-  "limits": "Phone viewport captures of the production web UI do not establish native installation, audio playback, or verified Trusted Web Activity launch."
+  "limits": "Authentic Chrome website captures on an Android emulator, cropped without layout alteration to 9:16. These do not establish a Play-installed version 2 launch, trusted full-screen behavior, physical audio output, or production store approval.",
+  "subsequentProductionObservation": {
+    "date": "2026-11-09",
+    "status": "Production alias later served a different asset set. Captures and preflight verify only the reviewed source above; later code is outside this evidence pass.",
+    "publicAssets": [
+      {
+        "path": "/assets/index-G2IAdRG3.js",
+        "sha256": "68a6049a174df6e268002a0ab891d9a6276ec95c47b9774e915b25c2f3e99ae3"
+      },
+      {
+        "path": "/assets/storage-D9zm6wwq.js",
+        "sha256": "64e4069b11f0969695a160331959bbf00f4ca71c2d3f25fd6e5a9187a603cfb4"
+      },
+      {
+        "path": "/assets/preload-helper-BLdHbfdN.js",
+        "sha256": "8aec9ff75ffa86a03d51268b63126abadb3754aa5a6b6c5bb16e4e2446a63dee"
+      }
+    ],
+    "privacySha256": "8e94050bc1fead4901415329e7d8f013d9f51f6e1388dcb23eb08c7f2fd540fd",
+    "assetlinksSha256": "26f83564cc9373c067d681a4dc50f3c3997b66535701e21197d905b020cca144"
+  },
+  "storeListingOrder": [
+    "phone-3.jpg",
+    "phone-2.jpg",
+    "phone-1.jpg",
+    "phone-4.jpg"
+  ]
 }
