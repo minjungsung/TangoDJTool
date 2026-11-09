@@ -1,6 +1,6 @@
 # Tango DJ Studio Privacy Policy
 
-Effective date: October 16, 2026
+Effective date: November 9, 2026
 
 Minjung Studio provides Tango DJ Studio, a tool for preparing and playing tango sets. This policy covers the Tango DJ Studio website and the Android app that opens that website in a supported browser.
 
@@ -18,7 +18,7 @@ Using the app can send information to external providers:
 
 - **Vercel:** The website's hosting provider receives web requests. These requests can include your IP address, browser and device information, requested URL, request time, and other connection metadata. The provider processes this information to deliver and protect its services.
 - **Google Fonts:** The interface requests fonts from Google. These requests can disclose connection information such as your IP address, browser information, and the referring website.
-- **YouTube:** Adding a YouTube link requests public video metadata. Using a YouTube source loads Google's player scripts and official embedded player. Google can receive the video identifier, IP address, referring website, browser and device information, and playback interactions. Embedded content may use cookies or other identifiers and may display advertisements according to Google's policies and your browser settings. Your local audio files are not sent to YouTube.
+- **YouTube:** Adding a YouTube link requests public video metadata. Using a YouTube source loads Google's player scripts and official embedded player. Google can receive the video identifier, IP address, referring website, browser and device information, and playback interactions. Google may infer approximate location from IP addresses and use these data for service operation, analytics, advertising, abuse prevention, and personalized content according to its policies and your settings. Embedded content may use cookies or other identifiers and may display advertisements according to Google's policies and your browser settings. Your local audio files are not sent to YouTube.
 
 These providers may process information on servers outside your country. Their retention periods, privacy controls, and processing practices are described in their policies:
 
