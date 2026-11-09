@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DJSession } from '../src/session.js';
+import { SessionControls } from '../src/session-ui.js';
 
 const key = 'studio-dj-session';
 const local = (id = 'recording', values = {}) => ({ id, title: 'Poema', artist: 'Francisco Canaro', singer: 'Roberto Maida', style: 'Tango', source: 'local', contentHash: 'a'.repeat(64), ...values });
@@ -112,10 +113,11 @@ test('CSV escapes quotations and embedded newlines and neutralizes spreadsheet f
   assert.ok(csv.includes('"Ángel D’Agostino"')); assert.ok(csv.includes('"12.5"')); assert.ok(csv.endsWith('\r\n'));
 });
 
-test('starting another session clears request deduplication only after saving succeeds', () => {
+test('starting another session clears played history while retaining delivered playback requests', () => {
   const { session } = fixture(); session.start('First event'); session.recordPlayback(1, clip(), 0);
   session.start('Second event'); assert.equal(session.events.length, 0); assert.equal(session.hasPlayed(local()), false);
-  assert.ok(session.recordPlayback(1, clip(), 0)); assert.equal(session.events.length, 1);
+  assert.equal(session.recordPlayback(1, clip(), 0), null); assert.equal(session.events.length, 0);
+  assert.ok(session.recordPlayback(2, clip(), 0)); assert.equal(session.events.length, 1);
   const temporary = new DJSession({ storage: null }); temporary.start('Temporary session'); temporary.recordPlayback(1, clip(), 0);
   assert.equal(temporary.events.length, 1);
 });
@@ -126,5 +128,79 @@ test('malformed new playback data cannot alter the saved session', () => {
   assert.throws(() => session.recordPlayback('', clip(), 0));
   assert.throws(() => session.recordPlayback(1, clip(local('invalid', { source: 'streaming' })), 0));
   assert.throws(() => session.recordPlayback(1, clip(local('invalid', { title: 't'.repeat(1001) })), 0));
+  assert.equal(values.get(key), original); assert.equal(session.events.length, 0);
+});
+
+function replaceGlobal(t, name, value) {
+  const original = Object.getOwnPropertyDescriptor(globalThis, name);
+  Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
+  t.after(() => { if (original) Object.defineProperty(globalThis, name, original); else delete globalThis[name]; });
+}
+
+for (const failure of ['invalid name', 'quota failure']) {
+  test(`recovering corrupt history preserves original bytes and UI state after ${failure}`, t => {
+    const original = '{preserved-corrupt-history';
+    const values = new Map([[key, original]]), notices = [];
+    let removals = 0;
+    replaceGlobal(t, 'localStorage', {
+      getItem: name => values.get(name) ?? null,
+      setItem(name, value) { if (failure === 'quota failure') throw new DOMException('Full', 'QuotaExceededError'); values.set(name, value); },
+      removeItem(name) { removals++; values.delete(name); },
+    });
+    replaceGlobal(t, 'prompt', () => failure === 'invalid name' ? 'n'.repeat(301) : 'Recovered session');
+    replaceGlobal(t, 'confirm', () => true);
+    const controls = Object.create(SessionControls.prototype);
+    Object.assign(controls, { error: 'Saved history is invalid.', notify: message => notices.push(message), render() {}, refreshLibrary() {} });
+    controls.startNew();
+    assert.equal(values.get(key), original); assert.equal(removals, 0);
+    assert.equal(controls.session, undefined); assert.equal(controls.error, 'Saved history is invalid.');
+    assert.equal(notices.length, 1);
+  });
+}
+
+test('corrupt-history recovery replaces saved bytes only after a successful validated save', t => {
+  const values = new Map([[key, '{corrupt']]);
+  let reads = 0, removals = 0, renders = 0;
+  replaceGlobal(t, 'localStorage', {
+    getItem(name) { reads++; return values.get(name) ?? null; },
+    setItem: (name, value) => values.set(name, value),
+    removeItem(name) { removals++; values.delete(name); },
+  });
+  replaceGlobal(t, 'prompt', () => '  Recovered session  ');
+  replaceGlobal(t, 'confirm', () => true);
+  const controls = Object.create(SessionControls.prototype);
+  Object.assign(controls, { error: 'Saved history is invalid.', notify() {}, render() { renders++; }, refreshLibrary() {} });
+  controls.startNew();
+  assert.equal(reads, 0); assert.equal(removals, 0); assert.equal(renders, 1);
+  assert.equal(controls.session.name, 'Recovered session'); assert.equal(controls.error, null);
+  assert.equal(JSON.parse(values.get(key)).name, 'Recovered session');
+});
+
+test('new sessions exclude duplicate callbacks from ongoing playback and include new Play requests', () => {
+  const { session } = fixture(); session.start('First session'); session.recordPlayback(1, clip(), 0);
+  session.start('Next session');
+  assert.equal(session.recordPlayback(1, clip(), 31), null);
+  assert.equal(session.events.length, 0);
+  assert.ok(session.recordPlayback(2, clip(), 0));
+  assert.equal(session.events.length, 1); assert.equal(session.events[0].position, 0);
+});
+
+test('duplicate UI callbacks avoid cloning or scanning retained session history', t => {
+  const { session } = fixture(); session.start('Milonga'); session.recordPlayback(1, clip(), 0);
+  const controls = Object.create(SessionControls.prototype);
+  Object.assign(controls, { session, notify() { assert.fail('Duplicate notification'); }, render() { assert.fail('Duplicate render'); }, refreshLibrary() { assert.fail('Duplicate refresh'); } });
+  let clones = 0, scans = 0;
+  const clone = structuredClone;
+  replaceGlobal(t, 'structuredClone', value => { clones++; return clone(value); });
+  const hasPlayed = session.hasPlayed.bind(session);
+  session.hasPlayed = track => { scans++; return hasPlayed(track); };
+  for (let callback = 0; callback < 100; callback++) controls.record(1, clip(), 31);
+  assert.equal(clones, 0); assert.equal(scans, 0);
+});
+
+test('recording identities reject coerced arrays without altering saved session history', () => {
+  const { session, values } = fixture(); session.start('Milonga'); const original = values.get(key);
+  assert.throws(() => session.recordPlayback(1, clip(local('invalid', { contentHash: ['a'.repeat(64)] })), 0), /content identity/);
+  assert.throws(() => session.recordPlayback(1, clip({ id: 'video', title: 'Video', source: 'youtube', videoId: ['abcdefghijk'] }), 0), /video identity/);
   assert.equal(values.get(key), original); assert.equal(session.events.length, 0);
 });

@@ -1,26 +1,46 @@
 import { getFile, getSource } from './storage.js';
+import { streamHash } from './stream-hash.js';
 export const canConnectFiles = () => typeof window.showOpenFilePicker === 'function';
 export const canConnectFolder = () => typeof window.showDirectoryPicker === 'function';
-export function contentHash(file) {
+export async function contentHash(file) {
+  let worker;
+  try { worker = new Worker(new URL('./hash-worker.js', import.meta.url), { type: 'module' }); }
+  catch { return streamHash(file); }
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./hash-worker.js', import.meta.url), { type: 'module' });
-    worker.onmessage = ({ data }) => { worker.terminate(); data.error ? reject(new Error(data.error)) : resolve(data.hash); };
-    worker.onerror = event => { worker.terminate(); reject(new Error(event.message)); };
-    worker.postMessage(file);
+    let finished = false;
+    const finish = (error, hash) => {
+      if (finished) return;
+      finished = true; worker.terminate(); error ? reject(error) : resolve(hash);
+    };
+    const fallback = () => {
+      if (finished) return;
+      finished = true; worker.terminate();
+      // The page already loaded this hasher, even if a new worker cannot load offline.
+      streamHash(file).then(resolve, reject);
+    };
+    worker.onmessage = ({ data }) => {
+      if (data?.error) finish(new Error(data.error));
+      else if (typeof data?.hash !== 'string' || !/^[a-f0-9]{64}$/.test(data.hash)) finish(new Error('Audio identity verification did not return a valid hash.'));
+      else finish(null, data.hash);
+    };
+    worker.onerror = event => { event.preventDefault?.(); fallback(); };
+    try { worker.postMessage(file); } catch { fallback(); }
   });
 }
 export async function resolveSource(track, requestPermission = false) {
-  const source = await getSource(track.id);
-  if (!source?.handle) {
-    const file = await getFile(track.id);
-    return { file, status: file ? 'Stored copy' : 'File missing' };
-  }
   try {
+    const source = await getSource(track.id);
+    if (!source?.handle) {
+      const file = await getFile(track.id);
+      if (file && track.contentHash && await contentHash(file) !== track.contentHash) return { status: 'File changed' };
+      return { file, status: file ? 'Stored copy' : 'File missing' };
+    }
     let permission = await source.handle.queryPermission({ mode: 'read' });
     if (permission !== 'granted' && requestPermission) permission = await source.handle.requestPermission({ mode: 'read' });
     if (permission !== 'granted') return { status: 'Permission needed' };
     const file = await source.handle.getFile();
-    if (track.contentHash && (track.fileSize !== file.size || track.lastModified !== file.lastModified) && await contentHash(file) !== track.contentHash) return { status: 'File changed' };
+    // Imported metadata and file size/timestamps cannot establish audio identity.
+    if (track.contentHash && await contentHash(file) !== track.contentHash) return { status: 'File changed' };
     return { file, status: 'Ready' };
   } catch { return { status: 'File missing' }; }
 }

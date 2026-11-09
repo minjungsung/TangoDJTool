@@ -16,14 +16,20 @@ const timestamp = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2
 function recordingIdentity(track) {
   if (!track || !text(track.id, 500, true) || !['local', 'youtube'].includes(track.source)) throw new Error('Invalid recording for DJ session history.');
   if (track.source === 'youtube') {
-    if (!/^[\w-]{11}$/.test(track.videoId || '')) throw new Error('Invalid video identity for DJ session history.');
+    if (typeof track.videoId !== 'string' || !/^[\w-]{11}$/.test(track.videoId)) throw new Error('Invalid video identity for DJ session history.');
     return `youtube:${track.videoId}`;
   }
   if (track.contentHash != null) {
-    if (!/^[a-f0-9]{64}$/.test(track.contentHash)) throw new Error('Invalid content identity for DJ session history.');
+    if (typeof track.contentHash !== 'string' || !/^[a-f0-9]{64}$/.test(track.contentHash)) throw new Error('Invalid content identity for DJ session history.');
     return `local:${track.contentHash}`;
   }
   return `local:id:${track.id}`;
+}
+
+function playbackKey(runId, item) {
+  if (!(typeof runId === 'string' && runId.length > 0 && runId.length <= 500) && !(typeof runId === 'number' && Number.isFinite(runId))) throw new Error('Invalid playback request for DJ session history.');
+  if (!text(item?.track?.id, 500, true)) throw new Error('Invalid recording for DJ session history.');
+  return JSON.stringify([runId, item.track.id, item.occurrenceId ?? null, item.groupId ?? null]);
 }
 
 function validIdentity(event) {
@@ -66,6 +72,8 @@ export class DJSession {
     // Explicit storage: null is a temporary, memory-only recovery workspace.
     if (this._storage === null) return;
     if (!this._storage?.getItem || !this._storage?.setItem) throw historyError('DJ session storage is unavailable.', 'storage-unavailable');
+    // Recovery prepares an empty replacement; start() validates and saves before replacing any bytes.
+    if (options.restore === false) return;
     let saved;
     try { saved = this._storage.getItem(STORAGE_KEY); }
     catch (cause) { throw historyError('DJ session history could not be read. Existing history has been kept.', 'storage-read', cause); }
@@ -78,7 +86,9 @@ export class DJSession {
     }
   }
 
+  get id() { return this._current.id; }
   get name() { return this._current.name; }
+  get eventCount() { return this._current.events.length; }
   get events() { return structuredClone(this._current.events); }
   get current() { return structuredClone(this._current); }
 
@@ -94,16 +104,17 @@ export class DJSession {
   start(name) {
     if (!text(name, 300, true)) throw new Error('Choose a DJ session name between 1 and 300 characters.');
     this._commit({ id: this._id(), name: name.trim(), startedAt: new Date(this._now()).toISOString(), events: [] });
-    this._runs.clear();
+    // A session change does not restart music. Keep delivered runs deduplicated until this instance is discarded.
     return this.current;
   }
 
+  hasRecordedPlayback(runId, item) { return this._runs.has(playbackKey(runId, item)); }
+
   recordPlayback(runId, item, sourcePosition = 0) {
     if (!this._current.id) return null;
-    if (!(typeof runId === 'string' && runId.length > 0 && runId.length <= 500) && !(typeof runId === 'number' && Number.isFinite(runId))) throw new Error('Invalid playback request for DJ session history.');
-    const track = item?.track, identity = recordingIdentity(track);
-    const key = JSON.stringify([runId, track.id, item.occurrenceId ?? null, item.groupId ?? null]);
+    const key = playbackKey(runId, item);
     if (this._runs.has(key)) return null;
+    const track = item.track, identity = recordingIdentity(track);
     const event = {
       id: this._id(), trackId: track.id, title: track.title, artist: track.artist || '', singer: track.singer || '', style: track.style || '',
       groupName: item.groupName || '', ...(item.groupId != null ? { groupId: item.groupId } : {}),

@@ -1,4 +1,10 @@
 const pairs = {
+  'Enter a recording title.': ['곡 제목을 입력하세요.', 'Introduce un título para la grabación.'],
+  'Enter a whole-number BPM from 20 to 300, or leave it blank.': ['BPM은 20~300 사이의 정수로 입력하거나 비워두세요.', 'Introduce un BPM entero de 20 a 300, o déjalo vacío.'],
+  'Use a name of at most 1,000 characters.': ['이름은 1,000자 이내로 입력하세요.', 'Usa un nombre de hasta 1.000 caracteres.'],
+  'The prepared set changed. Choose playback again.': ['준비한 세트가 변경됐습니다. 재생할 항목을 다시 선택하세요.', 'El programa preparado cambió. Elige de nuevo qué reproducir.'],
+  'Playback or the prepared set changed. Choose the target tanda again.': ['재생 상태 또는 준비한 세트가 변경됐습니다. 추가할 딴따를 다시 선택하세요.', 'La reproducción o el programa preparado cambió. Elige de nuevo la tanda de destino.'],
+  'Recording added to this tanda.': ['이 딴따에 곡을 추가했습니다.', 'Grabación añadida a esta tanda.'],
   'Tanda': ['딴따', 'Tanda'],
   'recordings': ['곡', 'grabaciones'],
   "Collect in set": ["세트에 모으기", "Reunir en colección"],

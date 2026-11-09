@@ -2,7 +2,7 @@
 
 A local-first web workspace for preparing and playing tango DJ sets, maintained independently from TangoDJ.
 
-Track completed capabilities, outstanding validation, and planned DJ features in the [development checklist](docs/dj-roadmap.md) or [progress board](docs/dj-roadmap.html). Completed checklist items are checked and crossed out. Run `npm run roadmap` after updating the checklist to regenerate the board; its completion percentage counts listed feature and validation tasks, not engineering effort or venue readiness.
+Track completed capabilities, confirmed defects, outstanding validation, and planned DJ features in the [development checklist](docs/dj-roadmap.md) or [progress board](docs/dj-roadmap.html). Completed checklist items are checked and crossed out. Run `npm run roadmap` after updating the checklist to regenerate the board; its completion percentage counts listed feature, defect, and validation tasks, not engineering effort or venue readiness. A daily review checks existing behavior and the backlog, records reproduced issues, and pushes validated routine improvements directly to `main`.
 
 ## Run locally
 

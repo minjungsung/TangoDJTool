@@ -21,7 +21,10 @@ export class Player {
     this.audio.addEventListener('ended', () => { if (this.track?.source === 'local' && this.audio.ended && !this.switching) onEnded(); });
     for (const event of ['play','pause','ended']) this.audio.addEventListener(event, () => this.onPlaybackState?.());
     this.audio.addEventListener('error', () => onError('This audio format could not be played. Try MP3, WAV, or a supported AAC file.'));
-    this.preview.addEventListener('error', () => onError('Preview playback failed.'));
+    this.preview.addEventListener('error', () => {
+      this.stopPreview();
+      this.onError({ type: 'preview', message: 'Preview playback failed.' });
+    });
     this.lastProgress = Date.now(); this.lastPosition = -1; this.stallNotified = false;
     this.timer = setInterval(() => {
       this.updateEnvelope();
@@ -35,7 +38,7 @@ export class Player {
       }
       if (this.track?.source !== 'youtube' || !this.youtube?.getCurrentTime || !this.matchesVideo()) return;
       const position = this.youtube.getCurrentTime(), state = this.youtube.getPlayerState?.();
-      this.onNeedsGesture?.(!this.youtubeArmed && ![1,3].includes(state) && Date.now() - this.loadStarted > 8000);
+      this.onNeedsGesture?.(this.youtubePending && ![1,3].includes(state) && Date.now() - this.loadStarted > 8000);
       if (Math.abs(position - this.lastPosition) > 0.1 || ![1,3].includes(state)) {
         this.lastPosition = position; this.lastProgress = Date.now();
         if (this.stallNotified) { this.stallNotified = false; this.onStall?.(false); }
@@ -96,7 +99,7 @@ export class Player {
             onReady: () => { if (settled) return; settled = true; clearTimeout(timeout); resolve(player); },
             onStateChange: event => {
               if (this.track?.source !== 'youtube' || !this.matchesVideo()) return;
-              if ([0, 1, 2].includes(event.data)) this.youtubePending = false;
+              if ([0, 1, 2].includes(event.data)) { this.youtubePending = false; this.onNeedsGesture?.(false); }
               // The iframe can begin playback independently of the deck controls.
               if ([1, 3].includes(event.data) && !this.hasSeparatePreviewOutput) this.stopPreview();
               this.onPlaybackState?.();
@@ -105,7 +108,7 @@ export class Player {
                 this.youtubeArmed = false; this.onEnded();
               }
             },
-            onError: event => { if (this.track?.source === 'youtube') { this.youtubePending = false; this.onError({ type: 'youtube', code: event.data, track: this.track }); } },
+            onError: event => { if (this.track?.source === 'youtube') { this.youtubePending = false; this.onNeedsGesture?.(false); this.onError({ type: 'youtube', code: event.data, track: this.track }); } },
           },
         });
       } catch (error) { settled = true; clearTimeout(timeout); reject(error); }
@@ -117,10 +120,20 @@ export class Player {
   get mainPlaybackPending() { return this.starting || (this.track?.source === 'youtube' && (this.youtubePending || this.youtube?.getPlayerState?.() === 3)); }
   updateEnvelope() {
     if (!this.track || this.switching || !this.isPlaying() || (this.track.source === 'youtube' && !this.matchesVideo())) return;
+    this.applyLevel(this.envelopeLevel());
+  }
+  envelopeLevel() {
+    const start = this.startSeconds || 0;
     const sourceDuration = this.track.source === 'youtube' ? this.youtube?.getDuration?.() : this.audio.duration;
-    const available = sourceDuration > 0 ? Math.max(0, sourceDuration - this.startSeconds) : Infinity;
+    const available = sourceDuration > 0 ? Math.max(0, sourceDuration - start) : Infinity;
     const duration = Math.min(this.limitSeconds || Infinity, available);
-    this.applyLevel(fadeLevel(this.position() - this.startSeconds, duration, this.fade));
+    return fadeLevel(this.position() - start, duration, this.fade);
+  }
+  prepareLocalPlayback() {
+    // A paused seek or control change must take effect before the first sample.
+    this.level = this.envelopeLevel();
+    this.gain.gain.cancelScheduledValues(this.ctx.currentTime);
+    this.gain.gain.setValueAtTime(this.targetGain() * this.level, this.ctx.currentTime);
   }
   applyLevel(level) {
     this.level = level;
@@ -163,14 +176,12 @@ export class Player {
       if (track.source === 'youtube') {
         const yt = await this.loadYouTube(track.videoId); if (token !== this.token) return false;
         this.applyLevel(this.fade > 0 ? 0 : 1);
-        this.youtubePending = true;
+        this.loadStarted = Date.now(); this.youtubePending = true;
         yt.loadVideoById(resumeSeconds ? { videoId: track.videoId, startSeconds: resumeSeconds } : track.videoId);
       } else {
         this.audio.src = this.fileUrl(track.id, file);
         this.audio.currentTime = resumeSeconds;
-        this.gain.gain.cancelScheduledValues(this.ctx.currentTime);
-        this.gain.gain.setValueAtTime(this.fade > 0 ? 0 : this.targetGain(), this.ctx.currentTime);
-        this.level = this.fade > 0 ? 0 : 1;
+        this.prepareLocalPlayback();
         try {
           await this.startMedia(this.audio, token, false);
         } catch (error) {
@@ -181,7 +192,7 @@ export class Player {
         this.updateEnvelope();
       }
       return true;
-    } catch (error) { if (token !== this.token) return false; this.youtubePending = false; throw error; }
+    } catch (error) { if (token !== this.token) return false; this.youtubePending = false; this.onNeedsGesture?.(false); throw error; }
     finally { if (token === this.token) this.starting = false; }
   }
   async startMedia(element, token, preview) {
@@ -202,21 +213,44 @@ export class Player {
       throw error;
     } finally { clearTimeout(timeout); }
   }
-  targetGain() { return this.volume * 10 ** ((this.normalize ? (this.track?.gainDb || 0) : 0) / 20); }
+  targetGain() {
+    const stored = this.track?.gainDb;
+    const gainDb = this.normalize && Number.isFinite(stored) ? Math.max(-12, Math.min(12, stored)) : 0;
+    return this.volume * 10 ** (gainDb / 20);
+  }
   setVolume(value, normalize) {
     this.volume = value; this.normalize = normalize;
     this.applyLevel(this.level);
   }
   setFade(value) { this.fade = value; this.updateEnvelope(); }
+  retryYouTube() {
+    const yt = this.youtube;
+    if (this.track?.source !== 'youtube' || !yt?.loadVideoById) return false;
+    const position = this.position();
+    const startSeconds = Number.isFinite(position) && position >= 0 ? position : this.startSeconds || 0;
+    ++this.token; this.starting = false; this.switching = false; this.youtubeArmed = false;
+    if (!this.hasSeparatePreviewOutput) this.stopPreview();
+    this.loadStarted = Date.now(); this.youtubePending = true; this.onNeedsGesture?.(false);
+    this.lastProgress = this.loadStarted; this.lastPosition = startSeconds;
+    this.stallNotified = false; this.onStall?.(false);
+    try {
+      yt.loadVideoById({ videoId: this.track.videoId, startSeconds });
+      return true;
+    } catch (error) {
+      this.youtubePending = false; this.onNeedsGesture?.(false);
+      throw error;
+    } finally { this.onPlaybackState?.(); }
+  }
   async toggle() {
     const token = ++this.token;
     this.starting = false; this.switching = false;
     if (this.track?.source === 'youtube') {
-      if (this.youtube?.getPlayerState() === 1 || this.mainPlaybackPending) { this.youtubePending = false; this.youtube?.pauseVideo(); }
+      if (this.youtube?.getPlayerState() === 1 || this.mainPlaybackPending) { this.youtubePending = false; this.onNeedsGesture?.(false); this.youtube?.pauseVideo(); }
       else {
         if (!this.hasSeparatePreviewOutput) this.stopPreview();
+        this.loadStarted = Date.now(); this.onNeedsGesture?.(false);
         this.youtubePending = Boolean(this.youtube?.playVideo);
-        try { this.youtube?.playVideo(); } catch (error) { this.youtubePending = false; throw error; }
+        try { this.youtube?.playVideo(); } catch (error) { this.youtubePending = false; this.onNeedsGesture?.(false); throw error; }
       }
     } else if (this.track) {
       if (!this.audio.paused) { this.audio.pause(); return true; }
@@ -224,6 +258,7 @@ export class Player {
       if (!this.hasSeparatePreviewOutput) this.stopPreview();
       try {
         await this.context(); if (token !== this.token) return false;
+        this.prepareLocalPlayback();
         await this.startMedia(this.audio, token, false);
         if (token !== this.token) return false;
         this.updateEnvelope();

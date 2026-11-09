@@ -140,3 +140,37 @@ test('removing a recording preserves identities of the remaining repeated placem
   assert.deepEqual(result.presets[0].cortina.occurrenceIds, ['b1', 'b2']);
   assert.deepEqual(group.occurrenceIds, ['a1', 'b1', 'a2', 'b2']);
 });
+
+test('set import rejects blank or oversized recording and playback metadata before history can fail', () => {
+  const track = { id: 'a', source: 'local', title: 'Music' };
+  const group = { id: 't', kind: 'tanda', name: 'Tanda', trackIds: ['a'], occurrenceIds: ['first'] };
+  const valid = { version: 1, tracks: [track], groups: [group] };
+  for (const id of ['', ' ', 'i'.repeat(501)]) assert.throws(() => validateSet({ ...valid, tracks: [{ ...track, id }], groups: [] }), /track data/);
+  for (const title of ['', ' ', 't'.repeat(1001)]) assert.throws(() => validateSet({ ...valid, tracks: [{ ...track, title }] }), /track data/);
+  for (const field of ['artist', 'singer', 'style', 'year', 'fileName']) assert.throws(() => validateSet({ ...valid, tracks: [{ ...track, [field]: 'm'.repeat(1001) }] }), /metadata/);
+  for (const id of ['', ' ', 'g'.repeat(501)]) assert.throws(() => validateSet({ ...valid, groups: [{ ...group, id }] }), /tanda data/);
+  for (const name of ['', ' ', 'g'.repeat(1001)]) assert.throws(() => validateSet({ ...valid, groups: [{ ...group, name }] }), /tanda data/);
+  assert.throws(() => validateSet({ ...valid, groups: [{ ...group, occurrenceIds: ['o'.repeat(501)] }] }), /occurrences/);
+  for (const field of ['parentId', 'presetId']) assert.throws(() => validateSet({ ...valid, groups: [{ ...group, [field]: 'r'.repeat(501) }] }), /metadata/);
+  assert.doesNotThrow(() => validateSet({ ...valid, groups: [{ ...group, parentId: '' }] }));
+});
+
+test('set import requires string source identities and bounds gain and tempo', () => {
+  const track = { id: 'a', source: 'local', title: 'Music' };
+  const valid = { version: 1, tracks: [track], groups: [] };
+  for (const contentHash of [['a'.repeat(64)], { toString: () => 'a'.repeat(64) }]) assert.throws(() => validateSet({ ...valid, tracks: [{ ...track, contentHash }] }), /identity/);
+  for (const videoId of [['abcdefghijk'], { toString: () => 'abcdefghijk' }]) assert.throws(() => validateSet({ ...valid, tracks: [{ ...track, source: 'youtube', videoId }] }), /YouTube/);
+  for (const bpm of [-1, -12, Infinity, '120']) assert.throws(() => validateSet({ ...valid, tracks: [{ ...track, bpm }] }), /analysis/);
+  for (const gainDb of [-12.1, 12.1, 10000, Infinity, '2']) assert.throws(() => validateSet({ ...valid, tracks: [{ ...track, gainDb }] }), /analysis/);
+  for (const gainDb of [-12, 0, 12]) assert.doesNotThrow(() => validateSet({ ...valid, tracks: [{ ...track, gainDb, bpm: 0 }] }));
+});
+
+test('largest supported imported playback metadata remains recordable in DJ session history', async () => {
+  const { DJSession } = await import('../src/session.js');
+  const track = { id: 'i'.repeat(500), source: 'local', title: 't'.repeat(1000), artist: 'a'.repeat(1000), singer: 's'.repeat(1000), style: 'm'.repeat(1000), contentHash: 'a'.repeat(64), bpm: 120, gainDb: 12 };
+  const group = { id: 'g'.repeat(500), kind: 'tanda', name: 'n'.repeat(1000), trackIds: [track.id], occurrenceIds: ['o'.repeat(500)] };
+  const imported = validateSet({ version: 1, tracks: [track], groups: [group] });
+  const session = new DJSession({ storage: null }); session.start('Milonga');
+  assert.ok(session.recordPlayback(1, flattenSet(imported.groups, imported.tracks)[0], 0));
+  assert.equal(session.events.length, 1);
+});

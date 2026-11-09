@@ -12,6 +12,7 @@ class FakeAudio extends EventTarget {
   constructor() { super(); this.paused = true; this.currentTime = 0; this.duration = 180; this.sinkId = ''; this.playCalls = 0; this.pauseCalls = 0; this.playQueue = []; this.sinkCalls = []; }
   play() {
     this.playCalls++;
+    this.onPlay?.();
     const pending = this.playQueue.shift();
     const started = () => { this.paused = false; this.dispatchEvent(new Event('play')); };
     if (pending) return pending.then(started);
@@ -31,7 +32,7 @@ class FakeContext {
   createMediaElementSource(element) { this.sources.push(element); return { connect() {} }; }
   resume() { return resume(); }
 }
-function player() { const result = new Player(() => {}, () => {}, () => {}); players.push(result); return result; }
+function player(onError = () => {}) { const result = new Player(() => {}, () => {}, onError); players.push(result); return result; }
 async function localPlaying(result, id = 'master') { assert.equal(await result.play(track(id), file(), 0, false), true); }
 const output = (deviceId, groupId) => ({ kind: 'audiooutput', deviceId, groupId, label: deviceId });
 async function youtubeLoaded(result) {
@@ -259,4 +260,197 @@ test('disabling fade during YouTube initialization avoids a stale silent start',
   result.setVolume(0.4, false); result.setFade(0); result.youtube = provider; gate.resolve(provider);
   assert.equal(await pending, true); assert.equal(result.fade, 0); assert.equal(result.normalize, false);
   assert.deepEqual(loads, [40]); assert.equal(result.level, 1);
+});
+
+test('resuming after a paused seek applies cue-relative intro and outro levels before native play', async () => {
+  const result = player(), gains = [];
+  await result.play(track('cued'), file(), 4, false, 30, 20);
+  result.audio.onPlay = () => gains.push(result.gain.gain.value);
+  result.audio.currentTime = 40; result.updateEnvelope(); await result.toggle();
+  result.seek(30); await result.toggle();
+  assert.equal(gains.at(-1), 0);
+  await result.toggle(); result.seek(48); await result.toggle();
+  assert.equal(gains.at(-1), 0.85 * 0.5);
+  await result.toggle(); result.seek(40); await result.toggle();
+  assert.equal(gains.at(-1), 0.85);
+});
+
+test('loading a saved local resume applies the current clip envelope before native play', async () => {
+  const result = player(), gains = []; result.audio.onPlay = () => gains.push(result.gain.gain.value);
+  await result.play({ ...track('cued'), gainDb: 6 }, file(), 4, true, 30, 20, 48);
+  assert.deepEqual(gains, [0.85 * 10 ** (6 / 20) * 0.5]);
+});
+
+test('resume reads fade, normalization and volume changes made while the context is loading', async () => {
+  const result = player(), gains = [], gate = deferred();
+  await result.play({ ...track('quiet'), gainDb: 12 }, file(), 4, false);
+  result.audio.onPlay = () => gains.push(result.gain.gain.value);
+  await result.toggle(); result.seek(2); resume = () => gate.promise;
+  const pending = result.toggle();
+  result.setVolume(0.4, true); result.setFade(2); gate.resolve();
+  assert.equal(await pending, true);
+  assert.equal(gains.at(-1), 0.4 * 10 ** (12 / 20));
+  await result.toggle(); result.seek(0); result.setFade(0); await result.toggle();
+  assert.equal(gains.at(-1), 0.4 * 10 ** (12 / 20));
+  await result.toggle(); result.setFade(4); await result.toggle();
+  assert.equal(gains.at(-1), 0);
+});
+
+test('a canceled resume cannot replace the starting gain of newer playback', async () => {
+  const result = player(), gate = deferred(), gains = [];
+  await result.play(track('cued'), file(), 4, false);
+  await result.toggle(); result.seek(0); resume = () => gate.promise;
+  const pending = result.toggle();
+  resume = () => Promise.resolve(); result.audio.onPlay = () => gains.push(result.gain.gain.value);
+  await result.play({ ...track('next'), gainDb: 6 }, file(), 0, true);
+  gate.resolve(); assert.equal(await pending, false);
+  assert.deepEqual(gains, [0.85 * 10 ** (6 / 20)]);
+  assert.equal(result.gain.gain.value, gains[0]); assert.equal(result.track.id, 'next'); assert.equal(result.isPlaying(), true);
+});
+
+test('YouTube gesture guidance appears only for an active attempt and clears on Pause or Stop', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 10000 });
+  const result = player(), prompts = []; result.onNeedsGesture = needed => prompts.push(needed);
+  await youtubeLoaded(result);
+  t.mock.timers.tick(8000); assert.equal(prompts.at(-1), false);
+  t.mock.timers.tick(50); assert.equal(prompts.at(-1), true);
+  await result.toggle(); assert.equal(prompts.at(-1), false);
+  t.mock.timers.tick(9000); assert.equal(prompts.at(-1), false);
+  await result.toggle(); t.mock.timers.tick(8050); assert.equal(prompts.at(-1), true);
+  result.stop(); assert.equal(prompts.at(-1), false);
+  t.mock.timers.tick(9000); assert.equal(prompts.at(-1), false);
+});
+
+test('every YouTube resume gets a fresh gesture deadline even after earlier successful playback', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 10000 });
+  const result = player(), prompts = []; result.onNeedsGesture = needed => prompts.push(needed);
+  const provider = await youtubeLoaded(result);
+  provider.emit(1); t.mock.timers.tick(20000); await result.toggle();
+  await result.toggle(); assert.equal(prompts.at(-1), false);
+  t.mock.timers.tick(8000); assert.equal(prompts.at(-1), false);
+  t.mock.timers.tick(50); assert.equal(prompts.at(-1), true);
+  provider.emit(2); assert.equal(prompts.at(-1), false);
+  await result.toggle(); t.mock.timers.tick(8050); assert.equal(prompts.at(-1), true);
+  provider.emit(3); t.mock.timers.tick(50); assert.equal(prompts.at(-1), false);
+  provider.emit(1); assert.equal(prompts.at(-1), false);
+  provider.emit(0); t.mock.timers.tick(9000); assert.equal(prompts.at(-1), false);
+});
+
+test('YouTube errors clear gesture guidance immediately and failed resumes leave no pending intent', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 10000 });
+  const result = player(), prompts = []; result.onNeedsGesture = needed => prompts.push(needed);
+  const provider = await youtubeLoaded(result);
+  t.mock.timers.tick(8050); assert.equal(prompts.at(-1), true);
+  provider.options.events.onError({ data: 150 }); assert.equal(prompts.at(-1), false);
+  t.mock.timers.tick(9000); assert.equal(prompts.at(-1), false);
+  provider.playVideo = () => { throw new Error('Playback blocked'); };
+  await assert.rejects(result.toggle(), /Playback blocked/);
+  assert.equal(result.mainPlaybackPending, false); assert.equal(prompts.at(-1), false);
+  t.mock.timers.tick(9000); assert.equal(prompts.at(-1), false);
+});
+
+test('YouTube initialization time does not consume the autoplay gesture deadline', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 10000 });
+  const result = player(), gate = deferred(), prompts = []; result.onNeedsGesture = needed => prompts.push(needed);
+  result.loadYouTube = () => gate.promise;
+  const pending = result.play({ id: 'video', source: 'youtube', videoId: 'abcdefghijk' }, null, 0, false);
+  t.mock.timers.tick(10000);
+  const provider = { getCurrentTime: () => 0, getDuration: () => 180, getPlayerState: () => -1, setVolume() {}, loadVideoById() {} };
+  result.youtube = provider; gate.resolve(provider); assert.equal(await pending, true);
+  t.mock.timers.tick(8000); assert.equal(prompts.at(-1), false);
+  t.mock.timers.tick(50); assert.equal(prompts.at(-1), true);
+});
+
+test('a preview error clears cue state without interrupting the playing master', async () => {
+  const errors = [], result = player(error => errors.push(error));
+  await result.setPreviewOutput('headphones'); await localPlaying(result); await result.previewTrack(track('cue'), file());
+  const mainPauses = result.audio.pauseCalls;
+  result.preview.dispatchEvent(new Event('error'));
+  assert.deepEqual(errors, [{ type: 'preview', message: 'Preview playback failed.' }]);
+  assert.equal(result.previewId, null); assert.equal(result.preview.paused, true);
+  assert.equal(result.audio.pauseCalls, mainPauses); assert.equal(result.isPlaying(), true);
+});
+
+test('a preview error cancels a pending cue and its late completion cannot restart playback', async () => {
+  const errors = [], result = player(error => errors.push(error)), gate = deferred();
+  await result.setPreviewOutput('headphones'); await localPlaying(result);
+  result.preview.playQueue.push(gate.promise);
+  const pending = result.previewTrack(track('cue'), file());
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(result.previewStarting, true); assert.equal(result.preview.playCalls, 1);
+  result.preview.dispatchEvent(new Event('error')); gate.resolve();
+  assert.equal(await pending, false); assert.equal(result.previewStarting, false); assert.equal(result.previewId, null);
+  assert.equal(result.preview.paused, true); assert.equal(result.isPlaying(), true);
+  assert.deepEqual(errors, [{ type: 'preview', message: 'Preview playback failed.' }]);
+});
+
+test('YouTube retry clears expired guidance and stall before reloading the current position', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 10000 });
+  const result = player(), prompts = [], stalls = [], loads = [];
+  result.onNeedsGesture = needed => prompts.push(needed); result.onStall = stalled => stalls.push(stalled);
+  const provider = await youtubeLoaded(result), load = provider.loadVideoById.bind(provider);
+  t.mock.timers.tick(8050); assert.equal(prompts.at(-1), true);
+  provider.position = 42; result.stallNotified = true;
+  provider.loadVideoById = value => {
+    assert.equal(result.youtubePending, true); assert.equal(prompts.at(-1), false); assert.equal(stalls.at(-1), false);
+    assert.equal(result.loadStarted, Date.now()); assert.equal(result.lastProgress, Date.now());
+    loads.push(value); load(value);
+  };
+  assert.equal(result.retryYouTube(), true);
+  assert.deepEqual(loads, [{ videoId: 'abcdefghijk', startSeconds: 42 }]); assert.equal(result.stallNotified, false);
+  t.mock.timers.tick(8000); assert.equal(prompts.at(-1), false);
+  t.mock.timers.tick(50); assert.equal(prompts.at(-1), true);
+});
+
+test('YouTube retry starts a fresh pending attempt after iframe Pause and explicit Stop', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 10000 });
+  const result = player(), prompts = []; result.onNeedsGesture = needed => prompts.push(needed);
+  const provider = await youtubeLoaded(result);
+  for (const stop of [() => provider.emit(2), () => result.stop()]) {
+    stop(); t.mock.timers.tick(20000); provider.position = 25;
+    assert.equal(result.mainPlaybackPending, false); assert.equal(prompts.at(-1), false);
+    assert.equal(result.retryYouTube(), true); assert.equal(result.mainPlaybackPending, true);
+    t.mock.timers.tick(8000); assert.equal(prompts.at(-1), false);
+    t.mock.timers.tick(50); assert.equal(prompts.at(-1), true);
+  }
+});
+
+test('a failed YouTube retry clears pending intent and does not revive permission guidance', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setInterval'], now: 10000 });
+  const result = player(), prompts = []; result.onNeedsGesture = needed => prompts.push(needed);
+  const provider = await youtubeLoaded(result);
+  t.mock.timers.tick(8050); assert.equal(prompts.at(-1), true);
+  provider.loadVideoById = () => { throw new Error('Provider unavailable'); };
+  assert.throws(() => result.retryYouTube(), /Provider unavailable/);
+  assert.equal(result.mainPlaybackPending, false); assert.equal(prompts.at(-1), false);
+  t.mock.timers.tick(9000); assert.equal(prompts.at(-1), false);
+});
+
+test('YouTube retry stops shared cue audio and preserves only verified separate headphones', async () => {
+  const result = player(); await youtubeLoaded(result); result.stop();
+  await result.previewTrack(track('shared'), file()); assert.equal(result.preview.paused, false);
+  result.retryYouTube(); assert.equal(result.preview.paused, true);
+  result.stop(); await result.setPreviewOutput('headphones'); await result.previewTrack(track('separate'), file());
+  result.retryYouTube(); assert.equal(result.preview.paused, false); assert.equal(result.previewId, 'separate');
+});
+
+test('YouTube retry leaves local playback and unavailable providers alone', async () => {
+  const result = player(); assert.equal(result.retryYouTube(), false);
+  await localPlaying(result); const token = result.token;
+  result.youtube = { loadVideoById() { throw new Error('A local recording must not reload YouTube'); } };
+  assert.equal(result.retryYouTube(), false); assert.equal(result.token, token); assert.equal(result.isPlaying(), true);
+  result.stop(); result.track = { source: 'youtube', videoId: 'abcdefghijk' }; result.youtube = null;
+  assert.equal(result.retryYouTube(), false); assert.equal(result.mainPlaybackPending, false);
+});
+
+test('legacy stored normalization stays finite and within twelve decibels at initial playback and control changes', async () => {
+  const result = player(), gains = []; result.audio.onPlay = () => gains.push(result.gain.gain.value);
+  const cases = [[1200, 12], [-1200, -12], [12, 12], [-12, -12], [6, 6], [Infinity, 0], [-Infinity, 0], [NaN, 0], ['12', 0], [null, 0], [undefined, 0], [{ value: 12 }, 0]];
+  for (const [gainDb, expectedDb] of cases) {
+    await result.play({ ...track('legacy'), gainDb }, file(), 0, true);
+    const expected = 0.85 * 10 ** (expectedDb / 20);
+    assert.equal(gains.at(-1), expected); assert.equal(Number.isFinite(gains.at(-1)), true);
+    result.setVolume(0.4, true); assert.equal(result.gain.gain.value, 0.4 * 10 ** (expectedDb / 20));
+    result.setVolume(0.85, false); assert.equal(result.gain.gain.value, 0.85);
+  }
 });

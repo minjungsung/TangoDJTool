@@ -24,7 +24,8 @@ export class SessionControls {
   record(runId, item, position) {
     if (!this.session) return;
     try {
-      if (!this.session.current?.id) this.session.start('Milonga session');
+      if (this.session.hasRecordedPlayback(runId, item)) return;
+      if (!this.session.id) this.session.start('Milonga session');
       const repeated = item.kind !== 'cortina' && this.played(item.track);
       const event = this.session.recordPlayback(runId, item, position);
       if (!event) return;
@@ -40,10 +41,11 @@ export class SessionControls {
   startNew() {
     const name = prompt(t('DJ session name'), 'Milonga session');
     if (!name?.trim()) return;
-    if ((this.error || this.session?.events.length) && !confirm(t('Start a new DJ session? Export the current history first if you want to keep it.'))) return;
+    if ((this.error || this.session?.eventCount) && !confirm(t('Start a new DJ session? Export the current history first if you want to keep it.'))) return;
     try {
-      if (!this.session) { localStorage.removeItem('studio-dj-session'); this.session = new DJSession(); }
-      this.session.start(name.trim()); this.error = null; this.render(); this.refreshLibrary();
+      const replacement = this.session || new DJSession({ restore: false });
+      replacement.start(name.trim());
+      this.session = replacement; this.error = null; this.render(); this.refreshLibrary();
     } catch (error) { this.notify(error.message, true); }
   }
 
@@ -66,7 +68,7 @@ export class SessionControls {
   }
 
   export() {
-    if (!this.session?.events.length) return;
+    if (!this.session?.eventCount) return;
     const url = URL.createObjectURL(new Blob([this.session.exportCSV()], { type: 'text/csv;charset=utf-8' }));
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'tango-dj-session.csv'; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);

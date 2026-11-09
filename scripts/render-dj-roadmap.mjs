@@ -62,7 +62,7 @@ html, body { margin: 0; color: var(--foreground, CanvasText); font-family: var(-
 <div class="summary"><strong>${counts.complete} / ${features.length} tracked items complete · ${percent}%</strong><span class="note">Updated ${escape(updated)}</span></div>
 <div class="track" role="img" aria-label="${counts.complete} complete, ${counts.validation} awaiting validation, ${counts.backlog} planned"><span class="complete" style="width:${counts.complete / features.length * 100}%"></span><span class="validation" style="width:${counts.validation / features.length * 100}%"></span></div>
 <div class="legend"><span><i class="swatch complete" aria-hidden="true"></i>Complete ${counts.complete}</span><span><i class="swatch validation" aria-hidden="true"></i>Awaiting validation ${counts.validation}</span><span><i class="swatch backlog" aria-hidden="true"></i>Planned ${counts.backlog}</span></div>
-<div class="note">Counts include feature and validation tasks. They measure this checklist's scope, not effort or readiness for every venue.</div>
+<div class="note">Counts include feature, defect, and validation tasks. They measure this checklist's scope, not effort or readiness for every venue.</div>
 <details open><summary>Planned work (${counts.backlog})</summary><ul>${rows('backlog')}</ul></details>
 <details open><summary>Awaiting validation (${counts.validation})</summary><ul>${rows('validation')}</ul></details>
 <details><summary>✓ Completed (${counts.complete})</summary><ul>${rows('complete')}</ul></details>

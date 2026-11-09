@@ -87,6 +87,13 @@ async function saveCues(page, id, cueIn, cueOut) {
 
 const playback = page => page.evaluate(() => ({ id: testYT.id, position: testYT.position, state: testYT.state, loads: testYT.loads.length }));
 const savedSession = page => page.evaluate(() => JSON.parse(localStorage.getItem('studio-dj-session') || 'null'));
+const savedWorkspace = page => page.evaluate(async () => (await import('/src/storage.js')).loadState());
+
+async function importWorkspace(page, workspace) {
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#set-input').setInputFiles({ name: 'set.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ version: 1, ...workspace })) });
+  await expect(page.locator('#notice')).toContainText('Set imported.');
+}
 
 async function finishRecording(page) {
   await page.evaluate(() => { testYT.position = testYT.getDuration(); testYT.state = 0; testYT.options.events.onStateChange({ data: 0 }); });
@@ -113,7 +120,7 @@ async function delayFileReads(page) {
 }
 
 async function saveLocalAudio(page, id = 'local', seconds = 10) {
-  await page.evaluate(async ({ id, seconds }) => {
+  return page.evaluate(async ({ id, seconds }) => {
     const sampleCount = 8000 * seconds, bytes = new Uint8Array(44 + sampleCount * 2), view = new DataView(bytes.buffer);
     const text = (offset, value) => [...value].forEach((char, i) => view.setUint8(offset + i, char.charCodeAt(0)));
     text(0, 'RIFF'); view.setUint32(4, bytes.length - 8, true); text(8, 'WAVE'); text(12, 'fmt '); view.setUint32(16, 16, true);
@@ -125,8 +132,126 @@ async function saveLocalAudio(page, id = 'local', seconds = 10) {
       const tx = db.transaction('files', 'readwrite'); tx.objectStore('files').put(new Blob([bytes], { type: 'audio/wav' }), id);
       tx.oncomplete = resolve; tx.onabort = () => reject(tx.error);
     }); db.close();
+    return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(value => value.toString(16).padStart(2, '0')).join('');
   }, { id, seconds });
 }
+
+test('same-ID set imports verify retained stored audio before preview or master playback', async ({ page }) => {
+  const local = { id: 'local', source: 'local', title: 'Original local', duration: 10 };
+  await bootstrap(page, { tracks: [local], groups: [group('t', ['local'])] });
+  const hash = await saveLocalAudio(page);
+  const workspace = { tracks: [{ ...local, contentHash: hash }], groups: [group('t', ['local'])] };
+  await importWorkspace(page, workspace); await nav(page, 'library');
+  await expect(page.locator('[data-track=local] .source-status')).toHaveText('Stored copy');
+  await page.locator('[data-action=play][data-id=local]').click(); await expect(page.locator('#session-count')).toHaveText('1');
+  await importWorkspace(page, { ...workspace, tracks: [{ ...workspace.tracks[0], title: 'Different imported identity', contentHash: 'b'.repeat(64) }] });
+  await nav(page, 'library');
+  await expect(page.locator('[data-track=local] .source-status')).toHaveText('File changed');
+  await page.locator('[data-action=play][data-id=local]').click();
+  await expect(page.locator('#notice')).toContainText('Files need attention before playback');
+  await expect(page.locator('#playing-title')).toHaveText('No recording loaded');
+  await recordingAction(page, 'preview', 'local');
+  await expect(page.locator('#preview-status')).toBeHidden(); await expect(page.locator('#session-count')).toHaveText('1');
+  expect(await page.evaluate(async () => Boolean(await (await import('/src/storage.js')).getFile('local')))).toBe(true);
+  await importWorkspace(page, workspace); await nav(page, 'library');
+  await page.locator('[data-action=play][data-id=local]').click(); await expect(page.locator('#session-count')).toHaveText('2');
+  expect((await savedSession(page)).events.map(event => event.identity)).toEqual([`local:${hash}`, `local:${hash}`]);
+});
+
+test('connected originals verify content even when imported size and timestamp match', async ({ page }) => {
+  await bootstrap(page); const hash = await saveLocalAudio(page);
+  const results = await page.evaluate(async hash => {
+    const { resolveSource, attachIdentical } = await import('/src/file-sources.js');
+    const blob = await (await import('/src/storage.js')).getFile('local');
+    const file = new File([blob], 'original.wav', { type: blob.type, lastModified: 1000 });
+    const nativeGet = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.get = function(key) {
+      if (this.name !== 'sources' || key !== 'local') return nativeGet.call(this, key);
+      const request = { result: { handle: { queryPermission: async () => 'granted', getFile: async () => file } } };
+      setTimeout(() => request.onsuccess?.(), 0); return request;
+    };
+    try {
+      const track = { id: 'local', fileSize: file.size, lastModified: file.lastModified, contentHash: 'b'.repeat(64) };
+      const changed = await resolveSource(track);
+      track.contentHash = hash;
+      const identical = await resolveSource(track);
+      const attached = await attachIdentical(track, file);
+      return { changed: changed.status, blocked: !changed.file, identical: identical.status, bytes: identical.file.size, attached: attached.size };
+    } finally { IDBObjectStore.prototype.get = nativeGet; }
+  }, hash);
+  expect(results).toMatchObject({ changed: 'File changed', blocked: true, identical: 'Ready' });
+  expect(results.bytes).toBeGreaterThan(0); expect(results.attached).toBe(results.bytes);
+});
+
+test('metadata rejects whitespace titles and invalid BPM without mutating the recording', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'library'); await recordingAction(page, 'edit', 'a');
+  await page.locator('[name=title]').fill('   '); await page.locator('#metadata-form [type=submit]').click();
+  await expect(page.locator('#metadata-dialog')).toBeVisible();
+  expect(await page.locator('[name=title]').evaluate(input => input.validationMessage)).toBe('Enter a recording title.');
+  expect((await savedWorkspace(page)).tracks.find(track => track.id === 'a').title).toBe('A');
+  await page.locator('[name=title]').fill('Edited A'); await page.locator('[name=bpm]').fill('-10');
+  await page.evaluate(() => document.querySelector('#metadata-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  await expect(page.locator('#metadata-dialog')).toBeVisible();
+  expect((await savedWorkspace(page)).tracks.find(track => track.id === 'a')).toMatchObject({ title: 'A', videoId: 'abcdefghij0' });
+  await page.locator('[name=bpm]').fill('64'); await page.locator('#metadata-form [type=submit]').click();
+  await expect(page.locator('#metadata-dialog')).toBeHidden(); await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
+  expect((await savedWorkspace(page)).tracks.find(track => track.id === 'a')).toMatchObject({ title: 'Edited A', bpm: 64 });
+});
+
+test('preparation prompts reject oversized names and preserve a portable workspace', async ({ page }) => {
+  await bootstrap(page); await nav(page, 'collections');
+  page.once('dialog', dialog => dialog.accept('x'.repeat(1001))); await page.locator('#new-collection').click();
+  await expect(page.locator('#notice')).toContainText('Use a name of at most 1,000 characters.');
+  expect((await savedWorkspace(page)).collections).toHaveLength(2);
+  await nav(page, 'set');
+  page.once('dialog', dialog => dialog.accept('x'.repeat(1001))); await page.locator('[data-group-action=rename][data-id=t]').click();
+  expect((await savedWorkspace(page)).groups.find(group => group.id === 't').name).toBe('My tanda');
+  page.once('dialog', dialog => dialog.accept('x'.repeat(1001))); await page.locator('#save-preset').click();
+  expect((await savedWorkspace(page)).presets || []).toHaveLength(0);
+});
+
+test('a failed separate preview clears cue UI while the local master continues', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeAudio = window.Audio, sinks = new WeakMap(); window.testAudioElements = [];
+    window.Audio = function(...args) { const audio = new NativeAudio(...args); window.testAudioElements.push(audio); return audio; };
+    window.Audio.prototype = NativeAudio.prototype;
+    Object.defineProperty(HTMLMediaElement.prototype, 'sinkId', { configurable: true, get() { return sinks.get(this) || ''; } });
+    HTMLMediaElement.prototype.setSinkId = async function(id) { sinks.set(this, id); };
+    Object.defineProperty(navigator.mediaDevices, 'enumerateDevices', { configurable: true, value: async () => [
+      { kind: 'audiooutput', deviceId: 'default', groupId: 'room', label: 'Room' },
+      { kind: 'audiooutput', deviceId: 'headphones', groupId: 'headphones', label: 'Headphones' },
+    ] });
+  });
+  await bootstrap(page, { tracks: [{ id: 'main', source: 'local', title: 'Main local', duration: 120 }, { id: 'local', source: 'local', title: 'Preview local', duration: 120 }], groups: [group('t', ['main'])] });
+  await saveLocalAudio(page, 'main', 120); await saveLocalAudio(page, 'local', 120);
+  await page.locator('#open-settings').click(); await page.locator('#detect-outputs').click();
+  await page.locator('#preview-output').selectOption('headphones'); await page.locator('[data-close=settings-dialog]').click();
+  await nav(page, 'library'); await page.locator('[data-action=play][data-id=main]').click();
+  await expect(page.locator('#session-count')).toHaveText('1');
+  await recordingAction(page, 'preview', 'local'); await nav(page, 'deck');
+  await expect(page.locator('#preview-status')).toBeVisible();
+  const position = await page.evaluate(() => testAudioElements[0].currentTime);
+  await page.evaluate(() => testAudioElements[1].dispatchEvent(new Event('error')));
+  await expect(page.locator('#notice')).toContainText('Preview playback failed.');
+  await expect(page.locator('#preview-status')).toBeHidden(); await expect(page.locator('#playback-recovery')).toBeHidden();
+  await expect(page.locator('#playing-title')).toHaveText('Main local'); await expect(page.locator('#session-count')).toHaveText('1');
+  expect(await page.evaluate(() => [testAudioElements[0].paused, testAudioElements[1].paused])).toEqual([false, true]);
+  expect(await page.evaluate(() => testAudioElements[0].currentTime)).toBeGreaterThanOrEqual(position);
+});
+
+test('Retry here starts a fresh YouTube permission deadline and Stop cancels it', async ({ page }) => {
+  await page.clock.install(); await bootstrap(page); await start(page);
+  await page.evaluate(() => { testYT.position = 42; testYT.state = 3; window.pendingYTLoads = true; });
+  await page.clock.runFor(18000); await expect(page.locator('#playback-stall')).toBeVisible();
+  await page.locator('#resume-video').click();
+  await expect(page.locator('#playback-permission')).toBeHidden(); await expect(page.locator('#playback-stall')).toBeHidden();
+  expect((await playback(page)).position).toBe(42);
+  // A provider blocked before playback stays nonplaying; buffering alone is a network wait.
+  await page.evaluate(() => { testYT.state = 2; });
+  await page.clock.runFor(7000); await expect(page.locator('#playback-permission')).toBeHidden();
+  await page.clock.runFor(1500); await expect(page.locator('#playback-permission')).toBeVisible();
+  await page.locator('#stop').click(); await page.clock.runFor(5000); await expect(page.locator('#playback-permission')).toBeHidden();
+});
 
 for (const width of [1440, 390]) {
   test(`${width}px Live mode protects playback replacement while Pause, Stop and Next stay usable`, async ({ page }) => {
@@ -399,15 +524,21 @@ test('actual starts create a DJ session, preserve history across resume and relo
 });
 
 test('successful local playback marks content-identical aliases while preview and cortinas remain eligible', async ({ page }) => {
-  const local = { id: 'local', source: 'local', title: 'Local tango', style: 'Tango', duration: 10, contentHash: 'a'.repeat(64) };
+  const local = { id: 'local', source: 'local', title: 'Local tango', style: 'Tango', duration: 10 };
   await bootstrap(page, { tracks: [local, { ...local, id: 'alias', title: 'Renamed copy' }, { ...local, id: 'cortina-copy', title: 'Cortina use', style: 'Cortina' }], groups: [group('t', ['local'])] });
-  await saveLocalAudio(page); await nav(page, 'library'); await recordingAction(page, 'preview', 'local');
+  const hash = await saveLocalAudio(page);
+  await page.evaluate(async hash => {
+    const { loadState, saveState } = await import('/src/storage.js');
+    const state = await loadState(); for (const track of state.tracks) track.contentHash = hash;
+    await saveState(state, state.revision);
+  }, hash);
+  await page.reload(); await nav(page, 'library'); await recordingAction(page, 'preview', 'local');
   await expect(page.locator('#session-count')).toHaveText('0');
   await page.locator('[data-action=play][data-id=local]').click(); await expect(page.locator('#session-count')).toHaveText('1');
   await nav(page, 'deck'); await page.locator('#play-pause').click(); await nav(page, 'library');
   await expect(page.locator('[data-track=alias] .played-badge')).toBeVisible();
   await page.locator('#hide-played').check(); await expect(page.locator('#tracks tr')).toHaveCount(1); await expect(page.locator('#tracks tr')).toHaveAttribute('data-track', 'cortina-copy');
-  expect((await savedSession(page)).events[0].source).toBe('local'); expect((await savedSession(page)).events[0].identity).toBe(`local:${'a'.repeat(64)}`);
+  expect((await savedSession(page)).events[0].source).toBe('local'); expect((await savedSession(page)).events[0].identity).toBe(`local:${hash}`);
 });
 
 test('MediaSession Play is idempotent and Pause cancels provider buffering before a history entry starts', async ({ page }) => {
