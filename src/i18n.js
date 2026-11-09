@@ -374,6 +374,7 @@ if (!['en', 'ko', 'es'].includes(language)) language = navigator.language.starts
 const originals = new WeakMap(), attributes = new WeakMap();
 let observer, scheduled = false;
 export const getLanguage = () => language;
+export function registerTranslations(values) { Object.assign(pairs, values); }
 export function t(text) {
   const countdown = text.match(/^(?:Remaining|남은 시간|Tiempo restante): (.*)$/);
   if (countdown) return `${language === 'ko' ? '남은 시간' : language === 'es' ? 'Tiempo restante' : 'Remaining'}: ${countdown[1]}`;
@@ -385,6 +386,7 @@ export function t(text) {
   const prefix = text.match(/^([▶♬⌁✎+↥]\s*)(.+)$/);
   if (prefix && pairs[prefix[2]]) return prefix[1] + pairs[prefix[2]][index];
   const dynamic = [
+    [/^Audio identity changed: (.+)\. Check the file before backing up\.$/, title => index === 0 ? `음원 원본이 변경됐습니다: ${title}. 백업 전에 파일을 확인하세요.` : `La identidad del audio cambió: ${title}. Comprueba el archivo antes de crear la copia.`],
     [/^Next recording in: ([\d.]+) seconds$/, seconds => `${t('Next recording in')}: ${seconds} ${t('seconds')}`],
     [/^Repeated recording in this DJ session: (.+)$/, title => `${t('Repeated recording in this DJ session')}: ${title}`],
     [/^Blocking issues: (\d+) · Review notes: (\d+) · Known runtime: (.+)$/, (errors, warnings, duration) => `${t('Blocking issues')}: ${errors} · ${t('Review notes')}: ${warnings} · ${t('Known runtime')}: ${duration}`],

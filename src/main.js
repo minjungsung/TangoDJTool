@@ -14,19 +14,38 @@ import { t, startI18n, setLanguage, getLanguage } from './i18n.js';
 import { PerformanceControls, performanceControls, performanceSettings, performanceDialog } from './performance.js';
 import { SessionControls, sessionControls, sessionDialog } from './session-ui.js';
 import { GapScheduler } from './spacing.js';
+import { EditHistory, preparation } from './edit-history.js';
+import { EventTools, eventTranslations } from './event-ui.js';
+import { registerTranslations } from './i18n.js';
+import { BackupControls, backupControls, backupDialog } from './backup-ui.js';
+import { commitBackupRestore, recoverBackupRestore } from './backup.js';
+import { restoreWorkspace } from './storage.js';
+import { LibraryTools, libraryToolsMarkup, libraryToolsDialogs, recordingSelectionMarkup, recordingNotesMarkup, libraryToolsTranslations } from './library-tools.js';
+import { libraryQuery } from './library-query.js';
+import { AudioTools, audioTranslations } from './audio-ui.js';
+import { workflowPairs } from './backup-i18n.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const time = seconds => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '—';
 let state = { tracks: [], groups: [] }, selected = null, queue = [], queueIndex = -1, current = null, busy = false;
 let playRequest = 0, committedPlayRequest = -1, gapRemaining = 0, timedEnd = false, loadedSignature = null, resumeIndex = 0, resumePosition = 0, queueGroupId = null;
-let undoGroups = null, transitioning = false, preparingPlayback = false, stopped = false, lastRenderedIndex = -1;
+let transitioning = false, preparingPlayback = false, stopped = false, lastRenderedIndex = -1;
 const files = new Map(), sourceStatuses = new Map();
 const gapScheduler = new GapScheduler();
 let activeCollection = null, collectingInto = null, reconnectMode = false, addingNext = false;
 let savedQueue = [], revision = 0, firstVisit = true;
+let backupRecoveryError = null;
+try { await recoverBackupRestore(); } catch (error) { backupRecoveryError = error; }
+let restoringBackup = false;
 let settings = {};
 try { settings = JSON.parse(localStorage.getItem('studio-settings') || '{}'); } catch {}
 let persistence = Promise.resolve(), temporaryWorkspace = false;
+const editHistory = new EditHistory();
+let editLabel = null, applyingHistory = false;
+registerTranslations(eventTranslations);
+registerTranslations(libraryToolsTranslations);
+registerTranslations(audioTranslations);
+registerTranslations(workflowPairs);
 const savedQueueItems = items => items.map(item => ({ trackId: item.track.id, occurrenceId: item.occurrenceId, addedAfter: item.addedAfter, pendingAddition: item.pendingAddition, groupId: item.groupId, groupName: item.groupName, kind: item.kind, limitSeconds: item.limitSeconds, startSeconds: item.startSeconds, holdAfter: item.holdAfter }));
 function workspaceSnapshot(tracks = state.tracks) {
   normalizeProgram(state);
@@ -34,10 +53,11 @@ function workspaceSnapshot(tracks = state.tracks) {
 }
 function persist(snapshot = null, afterSave = null) {
   if (temporaryWorkspace) return Promise.resolve(false);
+  if (!snapshot) capturePreparationEdit();
   $('#save-status').textContent = t('Saving…');
   // Capture ordinary saves when they run, so queued playback/edit saves include
   // any staged change committed by the preceding transaction.
-  persistence = persistence.then(() => saveState(snapshot || workspaceSnapshot(), revision)).then(savedRevision => { revision = savedRevision; afterSave?.(); $('#storage-recovery').hidden = true; $('#save-status').textContent = t('Saved in this browser'); checkpointPlayback(true); return true; }).catch(error => { $('#save-status').textContent = t('Save failed — export a backup'); notify(`Could not save your library: ${storageMessage(error)}`, true);
+  persistence = persistence.then(() => saveState(snapshot || workspaceSnapshot(), revision)).then(savedRevision => { revision = savedRevision; afterSave?.(); if (afterSave) capturePreparationEdit(); $('#storage-recovery').hidden = true; $('#save-status').textContent = t('Saved in this browser'); checkpointPlayback(true); return true; }).catch(error => { $('#save-status').textContent = t('Save failed — export a backup'); notify(`Could not save your library: ${storageMessage(error)}`, true);
     if (!error?.message?.includes('another tab. Export')) showStorageRecovery(error);
     return false; });
   return persistence;
@@ -86,14 +106,14 @@ function notify(message, error = false) {
   <nav class="device-nav" aria-label="Workspace navigation"><button data-view="library" aria-current="page">1 · Music</button><button data-view="collections">2 · Sets</button><button data-view="set">3 · Tandas</button><button data-view="deck">4 · Playback</button></nav>
   <main>
     <header class="workspace-header"><div class="workspace-title"><h1>DJ workspace</h1><span id="save-status" role="status">Saved in this browser</span></div><button id="open-menu" class="phone-menu" aria-expanded="false">Menu</button><div class="header-actions"><button id="open-examples">Example sets</button><button id="open-guide">User guide</button><button id="open-settings">Settings</button><button id="import-set">Import set</button><button id="export-set">Export set ↗</button></div></header>
-    <div id="notice" role="status" aria-live="polite" hidden><span id="notice-message"></span><button id="dismiss-notice" aria-label="Dismiss notification">×</button></div><div id="undo-bar" hidden><span>Set changed</span><button id="undo-set">Undo last set edit</button></div>
+    <div id="notice" role="status" aria-live="polite" hidden><span id="notice-message"></span><button id="dismiss-notice" aria-label="Dismiss notification">×</button></div><div id="undo-bar" hidden><span id="edit-history-label">Preparation changed</span><button id="undo-set">Undo</button><button id="redo-set" disabled>Redo</button><small id="edit-history-boundary">Reload starts a new edit history.</small></div>
     <p class="workflow-hint">Add music, arrange your tandas, then play your set.</p><div id="storage-recovery" class="storage-recovery" role="status" hidden><strong>Temporary workspace · not saved</strong><p id="storage-recovery-message"></p><p>You can play the example set in this tab. Export your edits before closing or reloading.</p><div><button id="retry-saving">Retry saving</button><button id="temporary-export">Export set</button></div></div><section id="collections" class="panel collections-panel"><div class="section-head"><div><div class="eyebrow">02 / CANDIDATES</div><h2>Sets</h2></div><button id="new-collection" class="primary">Create set</button></div><p class="hint">Collect candidate recordings here, then choose 3–4 for a tanda.</p><div id="collection-list"></div><div id="collection-detail"></div></section><div class="workspace">
       <section id="library" class="panel library">
         <div class="section-head"><div><div class="eyebrow">01 / COLLECTION</div><h2>Music library <span id="library-count">0</span></h2></div><button id="add-files" class="primary">+ Local files</button></div>
         <div id="drop-zone" tabindex="0" role="button" aria-label="Choose or drop local music files"><span class="drop-icon">↥</span><div><strong>Drop your music here</strong><span>MP3, WAV, FLAC, M4A and other browser-supported audio</span></div><span class="drop-link">Browse files</span></div>
         <div class="file-tools"><button id="connect-files">Connect originals</button><button id="check-files">Check files</button><button id="reconnect-folder">Reconnect from folder</button></div><p class="hint storage-explanation">Local files keeps an app copy. Connect originals reads files in place on supported browsers.</p><form id="youtube-form" class="youtube-form"><span class="youtube-mark">▶</span><input name="url" type="url" aria-label="YouTube video URL" placeholder="Paste a YouTube video link" required><button type="submit">Add video</button></form>
         <div class="library-destination"><label for="add-target">Add recordings to</label><select id="add-target" aria-label="Recording destination"></select><button id="finish-adding" hidden>Back to set</button><p id="library-target" class="hint"></p></div><p id="import-progress" class="hint" role="status" hidden></p><div class="filters"><input id="search" type="search" aria-label="Search library" placeholder="Search title, orchestra, singer…"><select id="collection-filter" aria-label="Filter set"><option value="">All sets</option></select><select id="style-filter" aria-label="Filter dance style"><option value="">All styles</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select><select id="source-filter" aria-label="Filter source"><option value="">All sources</option><option value="local">Local</option><option value="youtube">YouTube</option></select></div>
-        <label class="history-filter"><input id="hide-played" type="checkbox"> Hide played recordings</label><div class="table-scroll"><table><thead><tr><th>RECORDING</th><th>STYLE / YEAR</th><th>BPM</th><th>LENGTH</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="tracks"></tbody></table></div>
+        ${libraryToolsMarkup}<label class="history-filter"><input id="hide-played" type="checkbox"> Hide played recordings</label><div class="table-scroll"><table><thead><tr><th>RECORDING</th><th>STYLE / YEAR</th><th>BPM</th><th>LENGTH</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="tracks"></tbody></table></div>
         <div id="empty-library" class="empty"><span>♫</span><h3>A home for your collection</h3><p>Bring in your recordings, organize the details,<br>and find the right music for each moment.</p><button id="clear-filters" hidden>Clear filters</button></div>
         <div class="panel-foot"><span id="library-summary">0 recordings · 0:00 known duration</span><button id="analyze-all" class="text-button">Analyze local tracks</button></div>
       </section>
@@ -124,8 +144,8 @@ function notify(message, error = false) {
   <dialog id="dedication-dialog" aria-labelledby="dedication-title"><button class="dedication-close" data-close="dedication-dialog" aria-label="Close">×</button><span class="dedication-star" aria-hidden="true">✦</span><h2 id="dedication-title" data-preserve>Dedicated to 태풍</h2></dialog>
   <dialog id="examples-dialog"><div class="dialog-heading"><h2>Example sets</h2><button data-close="examples-dialog" aria-label="Close">×</button></div><p class="hint">Six tandas with cortinas. Add this set to your workspace when you need a starting point.</p><div class="example-flow">Tango · Tango · Vals · Tango · Tango · Milonga</div><div id="example-actions"></div></dialog>
   <dialog id="guide-dialog"><div class="dialog-heading"><h2>User guide</h2><button data-close="guide-dialog" aria-label="Close">×</button></div>${guideMarkup}</dialog>
-  <dialog id="settings-dialog"><div class="dialog-heading"><h2>Settings</h2><button data-close="settings-dialog" aria-label="Close">×</button></div><label class="language-control">Language <select id="language" aria-label="Language"><option value="ko">한국어</option><option value="en">English</option><option value="es">Español</option></select></label><p><a href="https://tangodjtool.vercel.app/privacy.html" target="_blank" rel="noopener noreferrer">Privacy policy</a> · <a href="https://minjung-world.notion.site/Tango-DJ-Studio-Terms-of-Use-c3174a525fd8831f9cab81b1b229fa08" target="_blank" rel="noopener noreferrer">Terms of use</a></p>${performanceSettings}<section class="storage-panel"><div><strong>Personal workspace</strong><p>Your library, audio files, set, queue, and preferences are saved for this site in this browser. Other visitors have their own workspace.</p></div><div><button id="persist-storage">Request persistent storage</button><small id="storage-details"></small></div></section></dialog>
-  ${performanceDialog}${sessionDialog}<dialog id="actions-dialog"><div class="dialog-heading"><h2>Recording actions</h2><button data-close="actions-dialog" aria-label="Close">×</button></div><p id="actions-title" data-preserve></p><div id="recording-actions"></div></dialog><input id="file-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" multiple hidden>
+  <dialog id="settings-dialog"><div class="dialog-heading"><h2>Settings</h2><button data-close="settings-dialog" aria-label="Close">×</button></div><label class="language-control">Language <select id="language" aria-label="Language"><option value="ko">한국어</option><option value="en">English</option><option value="es">Español</option></select></label><p><a href="/dj-roadmap.html" target="_blank" rel="noopener noreferrer">Development progress</a></p><p><a href="https://tangodjtool.vercel.app/privacy.html" target="_blank" rel="noopener noreferrer">Privacy policy</a> · <a href="https://minjung-world.notion.site/Tango-DJ-Studio-Terms-of-Use-c3174a525fd8831f9cab81b1b229fa08" target="_blank" rel="noopener noreferrer">Terms of use</a></p>${performanceSettings}${backupControls}<section class="storage-panel"><div><strong>Personal workspace</strong><p>Your library, audio files, set, queue, and preferences are saved for this site in this browser. Other visitors have their own workspace.</p></div><div><button id="persist-storage">Request persistent storage</button><small id="storage-details"></small></div></section></dialog>
+  ${performanceDialog}${sessionDialog}${backupDialog}${libraryToolsDialogs}<dialog id="actions-dialog"><div class="dialog-heading"><h2>Recording actions</h2><button data-close="actions-dialog" aria-label="Close">×</button></div><p id="actions-title" data-preserve></p><div id="recording-actions"></div></dialog><input id="file-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" multiple hidden>
   <input id="set-input" type="file" accept="application/json,.json" hidden>
   <input id="relink-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" hidden>
   <dialog id="target-dialog"><div class="dialog-heading"><h2 id="target-heading">Choose target tanda</h2><button data-close="target-dialog" aria-label="Close">×</button></div><p id="target-recording" data-preserve></p><p id="target-explanation" class="hint"></p><label id="target-label" for="next-target">Target tanda</label><select id="next-target" aria-label="Target tanda"></select><button id="confirm-next" class="primary">Add to play next</button></dialog><dialog id="repair-dialog"><div class="dialog-heading"><h2>Review reconnection</h2><button data-close="repair-dialog">×</button></div><div id="repair-results"></div></dialog><dialog id="metadata-dialog"><form id="metadata-form"><div class="eyebrow">RECORDING DETAILS</div><h2>Edit metadata</h2><input name="id" type="hidden"><label>Title<input name="title" required maxlength="300"></label><label>Orchestra / artist<input name="artist" maxlength="300"></label><label>Singer<input name="singer" maxlength="300"></label><div class="form-row"><label>Year<input name="year" maxlength="30"></label><label>Style<select name="style" aria-label="Style"><option value="">Unspecified</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select></label><label>BPM<input name="bpm" type="number" min="20" max="300" step="1"></label></div><label id="video-url-label" hidden>Video URL<input name="videoUrl" type="url" placeholder="https://www.youtube.com/watch?v=..."></label><fieldset class="recording-cues"><legend>Recording playback cues</legend><p class="hint">Applied to library playback and tandas. Cortinas keep their own intervals. Updating cues leaves the current recording unchanged; update the upcoming queue to apply them.</p><div class="form-row"><label>Cue in (seconds)<input name="cueStartSeconds" type="number" min="0" max="86400" step="0.1"></label><label>Cue out (seconds)<input name="cueEndSeconds" type="number" min="0.1" max="90000" step="0.1" placeholder="Recording end"></label></div><button id="cue-current-position" type="button">Use current position as cue in</button></fieldset><p id="analysis-details" class="hint"></p><div class="dialog-actions"><button id="close-metadata" type="button">Cancel</button><button class="primary" type="submit">Save details</button></div></form></dialog>
@@ -192,6 +212,7 @@ const player = new Player((position, duration) => {
     const original = state.tracks.find(t => t.id === track.id);
     if (original && Math.abs((original.duration || 0) - duration) > 1) {
       original.duration = duration; for (const item of queue) if (item.track.id === track.id) item.track.duration = duration;
+      editHistory.updateDuration(original);
       void persist(); renderLibrary(); refreshGroupSummaries();
     }
   }
@@ -229,7 +250,8 @@ $('#youtube-skip').onclick = next;
 $('#youtube-local').onclick = () => { reconnectMode = false; relinkId = player.track?.id; $('#relink-input').click(); };
 $('#youtube-replace').onclick = () => { const track = state.tracks.find(t => t.id === player.track?.id); if (track) editTrack(track); };
 function saveSettings() {
-  const value = { volume: Number($('#volume').value), fade: $('#fade').value, normalize: $('#normalize').checked, autoNext: $('#auto-next').checked, gapSeconds: Number($('#track-gap').value) || 0, guideHidden: $('#practice-guide').hidden };
+  const value = { ...settings, volume: Number($('#volume').value), fade: $('#fade').value, normalize: $('#normalize').checked, autoNext: $('#auto-next').checked, gapSeconds: Number($('#track-gap').value) || 0, guideHidden: $('#practice-guide').hidden };
+  settings = value;
   try { localStorage.setItem('studio-settings', JSON.stringify(value)); } catch { notify('Save failed — export a backup', true); }
 }
 $('#language').onchange = event => { setLanguage(event.target.value); render(); };
@@ -242,6 +264,10 @@ if (Number.isFinite(settings.gapSeconds)) $('#track-gap').value = Math.max(0, Ma
 player.setVolume(Number($('#volume').value) / 100, $('#normalize').checked);
 const performanceTools = new PerformanceControls({ player, context: () => ({ state, queue, index: queueIndex, resumeIndex, position: playbackPosition(), transitioning, current, sourceStatuses, gapRemaining, gapPending: gapScheduler.pending }), notify, readyFile, refreshLibrary: renderLibrary, showView });
 const sessionTools = new SessionControls({ notify, refreshLibrary: renderLibrary });
+const audioTools = new AudioTools({ player, state: () => state, readyFile, commitPreparation, notify, canEdit: () => !performanceTools.live && !transitioning });
+const libraryTools = new LibraryTools({ context: () => ({ state, current }), commit: commitPreparation, notify, readyFile, locateRecording, refreshLibrary: renderLibrary });
+const eventTools = new EventTools({ context: () => ({ state, queue: queue.length ? queue : flattenSet(state.groups, state.tracks), index: queue.length ? (queueIndex >= 0 ? queueIndex : resumeIndex) : -1, position: playbackPosition(), gapSeconds: Number($('#track-gap').value) || 0, gapRemaining: gapScheduler.pending ? gapRemaining : null }), preferences: () => settings, savePreferences: patch => { settings = { ...settings, ...patch }; saveSettings(); }, notify });
+const backupTools = new BackupControls({ notify, context: () => ({ state, revision, busy, transitioning, live: performanceTools.live, playing: player.isPlaying() || player.mainPlaybackPending }), getState: workspaceSnapshot, getPreferences: () => ({ settings: { ...settings, volume: Number($('#volume').value), fade: $('#fade').value, normalize: $('#normalize').checked, autoNext: $('#auto-next').checked, gapSeconds: Number($('#track-gap').value) || 0, guideHidden: $('#practice-guide').hidden }, language: getLanguage(), audioProcessing: player.processing }), getHistories: () => sessionTools.getHistories(), readyFile, commit: restoreBackup });
 player.onPlaybackState = () => { updateTransport(); checkpointPlayback(true); };
 async function storageDetails() {
   try { const estimate = await navigator.storage?.estimate(); const persistent = await navigator.storage?.persisted(); $('#storage-details').textContent = `${t('Browser storage')}: ${Math.round((estimate?.usage || 0) / 1024 / 1024)} MB · ${getLanguage() === 'ko' ? (persistent ? '유지 허용됨' : '브라우저 기본 정책') : getLanguage() === 'es' ? (persistent ? 'persistente' : 'política del navegador') : (persistent ? 'persistent' : 'browser default')}`; } catch {}
@@ -257,8 +283,9 @@ function renderLibrary() {
   syncDestination();
   const filteredCollection = $('#collection-filter').value || null;
   const search = searchKey($('#search').value), style = $('#style-filter').value, source = $('#source-filter').value;
-  const visible = state.tracks.filter(t => (!filteredCollection || state.collections?.find(c => c.id === filteredCollection)?.trackIds.includes(t.id)) && searchKey(`${t.title} ${t.artist} ${t.singer} ${t.year}`).includes(search) && (!style || t.style === style) && (!source || t.source === source) && (!$('#hide-played').checked || !sessionTools.played(t)));
-  $('#tracks').innerHTML = visible.map(track => `<tr draggable="true" data-track="${esc(track.id)}"><td><div class="track-title">${esc(track.title)}</div>${sessionTools.played(track) ? `<span class="played-badge">${t('Played this session')}</span>` : ''}<div class="track-detail"><span class="source-tag ${track.source}">${track.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(track.artist || 'Unknown orchestra')}${track.singer ? ` · ${esc(track.singer)}` : ''}${track.source === 'local' ? ` · <span class="source-status ${!files.has(track.id) ? 'missing' : ''}">${esc(track.source === 'local' ? tStatus(track.id) : '')}</span>` : ''}</div></td><td>${esc(track.style || '—')}<small>${esc(track.year || '')}</small></td><td>${track.bpm ? esc(track.bpm) : '—'}</td><td>${time(track.duration)}</td><td class="track-actions"><button data-action="play" data-id="${esc(track.id)}" aria-label="Play ${esc(track.title)}" title="Play">▶ Play</button>${track.source === 'local' ? `<button class="secondary-action" data-action="preview" data-id="${esc(track.id)}" aria-label="Preview ${esc(track.title)}" title="Preview local recording">♬ Preview</button><button class="secondary-action" data-action="analyze" data-id="${esc(track.id)}" aria-label="Analyze ${esc(track.title)}" title="Analyze BPM and level">⌁ Analyze</button>` : ''}<button class="next-action" data-action="play-next" data-id="${esc(track.id)}" ${current ? '' : 'hidden'}>${t('Play next')}</button><button class="collect-action" data-action="collection" data-id="${esc(track.id)}">${t('Collect in set')}</button>${track.source === 'local' ? `<button class="secondary-action" data-action="locate" data-id="${esc(track.id)}">Locate file</button><button class="secondary-action" data-action="copy" data-id="${esc(track.id)}">Keep an app copy</button><button class="secondary-action" data-action="relink" data-id="${esc(track.id)}">Replace recording</button>` : ''}<button class="secondary-action" data-action="edit" data-id="${esc(track.id)}" aria-label="Edit ${esc(track.title)}" title="Edit metadata">✎ Edit</button><button data-action="add" data-id="${esc(track.id)}" aria-label="Add ${esc(track.title)} to selected group" title="Add to selected group">${t(state.groups.find(group => group.id === selected)?.kind === 'cortina' ? 'Use as cortina' : 'Add to tanda')}</button><button class="secondary-action" data-action="delete" data-id="${esc(track.id)}" aria-label="Delete ${esc(track.title)}" title="Remove from library">×</button><button class="more-action" data-action="more" data-id="${esc(track.id)}" aria-label="More actions for ${esc(track.title)}">More</button></td></tr>`).join('');
+  const visible = libraryQuery(state.tracks, { search, style, source, ...(filteredCollection ? { ids: state.collections?.find(collection => collection.id === filteredCollection)?.trackIds || [] } : {}), hidePlayed: $('#hide-played').checked, ...libraryTools.queryOptions() }, { sourceStatus: track => sourceStatuses.get(track.id) || (files.has(track.id) ? 'Stored copy' : 'File missing'), hasPlayed: track => sessionTools.played(track) });
+  $('#tracks').innerHTML = visible.map(track => `<tr draggable="true" data-track="${esc(track.id)}"><td>${recordingSelectionMarkup(track)}<div class="track-title">${esc(track.title)}</div>${sessionTools.played(track) ? `<span class="played-badge">${t('Played this session')}</span>` : ''}<div class="track-detail"><span class="source-tag ${track.source}">${track.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(track.artist || 'Unknown orchestra')}${track.singer ? ` · ${esc(track.singer)}` : ''}${track.source === 'local' ? ` · <span class="source-status ${!files.has(track.id) ? 'missing' : ''}">${esc(track.source === 'local' ? tStatus(track.id) : '')}</span>` : ''}</div></td><td>${esc(track.style || '—')}<small>${esc(track.year || '')}</small></td><td>${track.bpm ? esc(track.bpm) : '—'}</td><td>${time(track.duration)}</td><td class="track-actions">${recordingNotesMarkup(track)}<button data-action="play" data-id="${esc(track.id)}" aria-label="Play ${esc(track.title)}" title="Play">▶ Play</button>${track.source === 'local' ? `<button class="secondary-action" data-action="preview" data-id="${esc(track.id)}" aria-label="Preview ${esc(track.title)}" title="Preview local recording">♬ Preview</button><button class="secondary-action" data-action="analyze" data-id="${esc(track.id)}" aria-label="Analyze ${esc(track.title)}" title="Analyze BPM and level">⌁ Analyze</button>` : ''}<button class="next-action" data-action="play-next" data-id="${esc(track.id)}" ${current ? '' : 'hidden'}>${t('Play next')}</button><button class="collect-action" data-action="collection" data-id="${esc(track.id)}">${t('Collect in set')}</button>${track.source === 'local' ? `<button class="secondary-action" data-action="locate" data-id="${esc(track.id)}">Locate file</button><button class="secondary-action" data-action="copy" data-id="${esc(track.id)}">Keep an app copy</button><button class="secondary-action" data-action="relink" data-id="${esc(track.id)}">Replace recording</button>` : ''}<button class="secondary-action" data-action="edit" data-id="${esc(track.id)}" aria-label="Edit ${esc(track.title)}" title="Edit metadata">✎ Edit</button><button data-action="add" data-id="${esc(track.id)}" aria-label="Add ${esc(track.title)} to selected group" title="Add to selected group">${t(state.groups.find(group => group.id === selected)?.kind === 'cortina' ? 'Use as cortina' : 'Add to tanda')}</button><button class="secondary-action" data-action="delete" data-id="${esc(track.id)}" aria-label="Delete ${esc(track.title)}" title="Remove from library">×</button><button class="more-action" data-action="more" data-id="${esc(track.id)}" aria-label="More actions for ${esc(track.title)}">More</button></td></tr>`).join('');
+  libraryTools.sync();
   $('#empty-library').hidden = visible.length > 0;
   $('#empty-library h3').textContent = state.tracks.length ? 'No matching recordings' : 'A home for your collection';
   $('#empty-library p').textContent = t(state.tracks.length ? 'Try another search or clear the filters to see your recordings.' : 'Bring in your recordings, organize the details, and find the right music for each moment.');
@@ -321,7 +348,7 @@ function renderQueue() {
     lastRenderedIndex = queueIndex;
   }
 }
-function render() { normalizeProgram(state); renderCollections(); renderPresets(); renderLibrary(); renderGroups(); renderQueue(); performanceTools.sync(); sessionTools.render(); }
+function render() { normalizeProgram(state); eventTools.render(); syncEditHistory(); renderCollections(); renderPresets(); renderLibrary(); renderGroups(); renderQueue(); performanceTools.sync(); sessionTools.render(); }
 
 async function importFiles(list, handles = []) {
   if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
@@ -431,19 +458,45 @@ function updateTransport() {
   $('#next-tanda').hidden = !cortina; $('#next-tanda').disabled = transitioning;
   $('#next-tanda').textContent = t(queue.slice(queueIndex + 1).some(item => item.kind === 'tanda') ? 'Next tanda' : 'End cortina');
   performanceTools.sync();
+  if (restoringBackup) for (const id of ['play-pause', 'previous', 'next', 'next-tanda', 'mini-play', 'mini-next', 'start-set']) $(`#${id}`).disabled = true;
   if (gapScheduler.pending) { $('#play-pause').textContent = 'Ⅱ'; $('#mini-play').textContent = 'Ⅱ'; }
   if (!transitioning && !stopped && committedPlayRequest === playRequest && player.isPlaying() && queue[queueIndex]?.track.id === player.track?.id) sessionTools.record(committedPlayRequest, queue[queueIndex], player.position());
 }
-function rememberSetEdit() { undoGroups = { groups: structuredClone(state.groups), selected }; $('#undo-bar').hidden = false; }
-$('#undo-set').onclick = () => {
-  if (!undoGroups) return;
-  state.groups = undoGroups.groups.map(group => {
-    const remaining = group.trackIds.map((id, index) => ({ id, occurrenceId: group.occurrenceIds[index] })).filter(item => state.tracks.some(track => track.id === item.id));
-    return { ...group, trackIds: remaining.map(item => item.id), occurrenceIds: remaining.map(item => item.occurrenceId) };
-  }); selected = undoGroups.selected; undoGroups = null;
-  $('#undo-bar').hidden = true; void persist(); renderGroups();
-};
+function syncEditHistory() {
+  $('#undo-bar').hidden = !editHistory.undoLabel && !editHistory.redoLabel;
+  $('#undo-set').disabled = !editHistory.undoLabel;
+  $('#redo-set').disabled = !editHistory.redoLabel;
+  $('#edit-history-label').textContent = editHistory.undoLabel ? `${t('Undo')}: ${t(editHistory.undoLabel)}` : t('Preparation restored');
+  $('#redo-set').textContent = editHistory.redoLabel ? `${t('Redo')}: ${t(editHistory.redoLabel)}` : t('Redo');
+  $('#edit-history-boundary').textContent = t(editHistory.boundary);
+}
+function capturePreparationEdit() {
+  normalizeProgram(state);
+  if (!applyingHistory) editHistory.observe(state, selected, editLabel);
+  editLabel = null; syncEditHistory();
+}
+function rememberSetEdit(label = 'Edit tanda composition') { editLabel = label; }
+async function commitPreparation(label, nextState, expectedState = null) {
+  if (temporaryWorkspace || restoringBackup) { notify('Finish saving or importing before editing.', true); return false; }
+  if (expectedState && JSON.stringify(preparation(state)) !== JSON.stringify(preparation(expectedState))) { notify('The prepared set changed. Review the changes again.', true); return false; }
+  const imported = validateSet({ version: 1, ...nextState });
+  state = imported; editLabel = label;
+  selected = state.groups.some(group => group.id === selected) ? selected : state.groups[0]?.id || null;
+  const saved = await persist(); render(); return saved;
+}
+async function moveEditHistory(direction) {
+  if (transitioning || addingNext || busy) { notify('Wait for the current import or analysis to finish.'); return; }
+  capturePreparationEdit();
+  const restored = editHistory.move(direction); if (!restored) return;
+  applyingHistory = true;
+  try { state = restored.state; selected = restored.selected; await persist(); render(); }
+  finally { applyingHistory = false; syncEditHistory(); }
+}
+$('#undo-set').onclick = () => moveEditHistory('undo');
+$('#redo-set').onclick = () => moveEditHistory('redo');
+
 async function playIndex(index, fromPosition = null, preparedSource = null) {
+  if (restoringBackup) return false;
   if (index < 0 || index >= queue.length) return;
   const item = queue[index];
   if (Number.isFinite(item.track.duration) && item.track.duration > 0 && (item.startSeconds || 0) >= item.track.duration) {
@@ -560,6 +613,7 @@ function addToGroup(id, groupId = selected) {
 function editTrack(track) {
   const form = $('#metadata-form');
   for (const field of ['title', 'bpm']) form.elements[field].setCustomValidity('');
+  form.elements.bpm.step = Number.isFinite(track.bpm) && !Number.isInteger(track.bpm) ? 'any' : '1';
   $('#video-url-label').hidden = track.source !== 'youtube'; form.elements.videoUrl.value = track.source === 'youtube' ? `https://www.youtube.com/watch?v=${track.videoId}` : '';
   for (const field of ['id', 'title', 'artist', 'singer', 'year', 'style', 'bpm', 'cueStartSeconds', 'cueEndSeconds']) form.elements[field].value = track[field] ?? '';
   $('#cue-current-position').disabled = current?.id !== track.id;
@@ -576,12 +630,12 @@ $('#drop-zone').ondragleave = () => $('#drop-zone').classList.remove('dragging')
 $('#drop-zone').ondrop = event => { event.preventDefault(); $('#drop-zone').classList.remove('dragging'); void importFiles(event.dataTransfer.files); };
 $('#youtube-form').onsubmit = event => { event.preventDefault(); void addYouTube(new FormData(event.target).get('url')); };
 for (const id of ['search', 'style-filter', 'source-filter', 'collection-filter']) $(`#${id}`).oninput = renderLibrary;
-$('#clear-filters').onclick = () => { $('#hide-played').checked = false;
+$('#clear-filters').onclick = () => { libraryTools.resetQuery(); $('#hide-played').checked = false;
   for (const id of ['search', 'style-filter', 'source-filter', 'collection-filter']) $(`#${id}`).value = '';
   renderLibrary(); $('#search').focus({ preventScroll: true });
 };
 $('#tracks').ondragstart = event => { const row = event.target.closest('[data-track]'); if (row) event.dataTransfer.setData('text/plain', row.dataset.track); };
-let relinkId = null;
+let relinkId = null, pendingRelink = null;
 $('#recording-actions').onclick = event => {
   const action = event.target.closest('[data-action]'); if (!action) return;
   $('#actions-dialog').close();
@@ -607,6 +661,8 @@ $('#tracks').onclick = async event => {
       case 'preview': if (await performanceTools.preview(track)) markStep('preview'); break;
       case 'analyze': await runAnalysis([track]); break;
       case 'edit': editTrack(track); break;
+      case 'library-details': libraryTools.openRecording(track.id); break;
+      case 'audio-review': audioTools.open(track.id); break;
       case 'add': if (state.groups.some(group => group.id === selected)) addToGroup(track.id); else chooseTandaDestination(track); break;
       case 'relink': if ((current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) return; reconnectMode = false; relinkId = track.id; $('#relink-input').click(); break;
       case 'delete':
@@ -637,7 +693,7 @@ $('#relink-input').onchange = async event => {
   const file = event.target.files[0], track = state.tracks.find(t => t.id === relinkId);
   if (file && track) {
     try {
-      if (reconnectMode) { await reconnectSame(track, file); render(); notify('File reconnected. Cues and analysis retained.'); return; }
+      if (reconnectMode) { const connected = await reconnectSame(track, file); if (connected !== false) { render(); notify('File reconnected. Cues and analysis retained.'); } pendingRelink?.resolve(connected !== false); pendingRelink = null; return; }
       if ((current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) return;
       await persistence;
       if ((current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) return;
@@ -645,7 +701,7 @@ $('#relink-input').onchange = async event => {
       const updated = { ...track, source: 'local', contentHash: await contentHash(file), fileName: file.name, fileSize: file.size, lastModified: file.lastModified };
       if ((current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) return;
       delete updated.videoId;
-      for (const field of ['duration', 'bpm', 'rmsDb', 'peakDb', 'gainDb']) updated[field] = null;
+      for (const field of ['duration', 'bpm', 'rmsDb', 'peakDb', 'gainDb', 'bpmConfidence', 'bpmCandidates', 'bpmSource', 'integratedLufs', 'truePeakDb', 'loudnessAnalysisVersion', 'measuredSeconds']) updated[field] = null;
       const snapshot = workspaceSnapshot(state.tracks.map(item => item.id === track.id ? updated : item));
       const replacement = persistence.then(async () => {
         if ((current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) throw new Error('Unlock Live mode to jump, seek or replace playback.');
@@ -660,11 +716,13 @@ $('#relink-input').onchange = async event => {
       for (const item of queue) if (item.track.id === track.id) item.track = structuredClone(track);
       sourceChanged(track);
       render(); notify('File relinked. Analyze it to refresh duration, BPM, and level.');
-    } catch (error) { notify(error.message, true); }
+    } catch (error) { pendingRelink?.reject(error); pendingRelink = null; notify(error.message, true); }
     finally { event.target.value = ''; reconnectMode = false; }
   }
+  pendingRelink?.resolve(false); pendingRelink = null;
   event.target.value = '';
 };
+$('#relink-input').addEventListener('cancel', () => { pendingRelink?.resolve(false); pendingRelink = null; reconnectMode = false; });
 function sourceChanged(track) {
   if (current?.id !== track.id && player.track?.id !== track.id) return;
   ++playRequest; player.stop(); player.track = structuredClone(track); current = queue[queueIndex]?.track || structuredClone(track);
@@ -679,7 +737,7 @@ $('#metadata-form').onsubmit = event => {
   const title = data.get('title').trim(), bpmText = data.get('bpm').trim(), bpm = bpmText ? Number(bpmText) : null;
   const form = event.target;
   form.elements.title.setCustomValidity(title ? '' : t('Enter a recording title.'));
-  form.elements.bpm.setCustomValidity(bpm == null || (Number.isFinite(bpm) && bpm >= 20 && bpm <= 300 && Number.isInteger(bpm)) ? '' : t('Enter a whole-number BPM from 20 to 300, or leave it blank.'));
+  form.elements.bpm.setCustomValidity(bpm == null || (Number.isFinite(bpm) && bpm >= 20 && bpm <= 300 && (Number.isInteger(bpm) || bpm === track.bpm)) ? '' : t('Enter a whole-number BPM from 20 to 300, or leave it blank.'));
   if (!form.reportValidity()) return;
   const oldVideoId = track.videoId;
   const cueStart = data.get('cueStartSeconds') === '' ? null : Number(data.get('cueStartSeconds'));
@@ -689,6 +747,7 @@ $('#metadata-form').onsubmit = event => {
   if (track.source === 'youtube' && youtubeId(data.get('videoUrl')) !== oldVideoId && (current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) return;
   if (track.source === 'youtube') { const id = youtubeId(data.get('videoUrl')); if (!id) { notify('Enter a YouTube watch, short, live, or youtu.be video link.', true); return; } track.videoId = id; for (const item of queue) if (item.track.id === track.id) item.track.videoId = id; }
   for (const field of ['title', 'artist', 'singer', 'year', 'style']) track[field] = data.get(field).trim();
+  if (track.bpm !== bpm) { track.bpmSource = bpm == null ? null : 'manual'; }
   track.bpm = bpm;
   track.cueStartSeconds = cueStart; track.cueEndSeconds = cueEnd;
   for (const item of queue) if (item.track.id === track.id) Object.assign(item.track, track);
@@ -842,7 +901,7 @@ $('#refresh-queue').onclick = async () => {
 };
 $('#start-set').onclick = () => { normalizeProgram(state); void replacePlaybackQueue(flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }))); };
 $('#queue').onclick = event => { const item = event.target.closest('[data-queue-index]'); if (item && performanceTools.canReplace()) void playIndex(Number(item.dataset.queueIndex)); };
-$('#play-pause').onclick = async () => { try { if (gapScheduler.pending) { cancelGap(); updateTransport(); notify('Automatic advance paused. Press Next when ready.'); return; } if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1), resumePosition); else if (timedEnd || stopped) await playIndex(queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); checkpointPlayback(true); } catch (error) { notify(playbackMessage(error), true); } };
+$('#play-pause').onclick = async () => { if (restoringBackup) return; try { if (gapScheduler.pending) { cancelGap(); updateTransport(); notify('Automatic advance paused. Press Next when ready.'); return; } if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1), resumePosition); else if (timedEnd || stopped) await playIndex(queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); checkpointPlayback(true); } catch (error) { notify(playbackMessage(error), true); } };
 $('#next-tanda').onclick = async () => { if (transitioning) return; const request = playRequest; const nextIndex = queue.findIndex((item, index) => index > queueIndex && item.kind === 'tanda'); if (nextIndex >= 0) await playIndex(nextIndex); else { transitioning = true; updateTransport(); await player.fadeOut(Number($('#fade').value)); if (request === playRequest) $('#stop').click(); } };
 $('#next').onclick = next; $('#previous').onclick = () => { if (performanceTools.canReplace()) void playIndex(queueIndex - 1); };
 $('#stop').onclick = () => {
@@ -871,10 +930,11 @@ $('#set-input').onchange = async event => {
     const file = event.target.files[0]; if (!file) return;
     if (file.size > 10 * 1024 * 1024) throw new Error('Set files must be smaller than 10 MB.');
     const imported = validateSet(JSON.parse(await file.text()));
+    normalizeProgram(imported);
     if (!performanceTools.canReplace()) return;
     if (!confirm(t('Replace your current library and set with this file? Export your current set first if you want to keep it.'))) return;
     ++playRequest; player.stop(); player.track = null; queue = []; queueIndex = -1; current = null;
-    resumeIndex = 0; resumePosition = 0; loadedSignature = null; queueGroupId = null; undoGroups = null; timedEnd = false; stopped = false; transitioning = false;
+    resumeIndex = 0; resumePosition = 0; loadedSignature = null; queueGroupId = null; editHistory.reset(imported); timedEnd = false; stopped = false; transitioning = false;
     $('#undo-bar').hidden = true; $('#queue-resume').hidden = true; $('#preview-status').hidden = true; $('#youtube-error').hidden = true;
     $('#position').textContent = '0:00 / 0:00'; $('#seek').value = 0;
     $('#playing-title').textContent = 'No recording loaded'; $('#playing-artist').textContent = 'Play a track or load your prepared set.'; $('#playing-group').textContent = 'READY WHEN YOU ARE'; $('#youtube-wrap').hidden = true;
@@ -983,23 +1043,50 @@ $('#connect-files').onclick = async () => {
   } catch (error) { if (error.name !== 'AbortError') notify(error.message, true); }
 };
 async function reconnectSame(track, file, handle) {
-  await attachIdentical(track, file, handle);
-  const updated = { ...track, fileName: file.name || track.fileName, fileSize: file.size, lastModified: file.lastModified || track.lastModified };
-  await persistence;
-  const snapshot = workspaceSnapshot(state.tracks.map(item => item.id === track.id ? updated : item));
-  const operation = persistence.then(() => reconnectRecording(track.id, file, handle, snapshot, revision));
-  persistence = operation.then(saved => { revision = saved; return true; }).catch(() => false);
-  revision = await operation;
-  Object.assign(track, updated); files.set(track.id, file); sourceStatuses.set(track.id, handle ? 'Ready' : 'Stored copy');
-  $('#save-status').textContent = t('Saved in this browser');
+  const expected = JSON.stringify(track);
+  const originalSource = track.source, originalHash = track.contentHash;
+  const adopting = !track.contentHash && Boolean(track.provenance?.length);
+  const assertFresh = () => {
+    if (restoringBackup || !state.tracks.includes(track) || JSON.stringify(track) !== expected) throw new Error('The prepared set changed. Review the source again.');
+    if (adopting && (current?.id === track.id || player.track?.id === track.id)) throw new Error('Stop this recording before adopting a new source identity.');
+  };
+  let adoptedHash = null;
+  if (adopting) {
+    if (current?.id === track.id || player.track?.id === track.id) throw new Error('Stop this recording before adopting a new source identity.');
+    if (!confirm(t(`Use “${file.name}” as the audio for “${track.title}”? This imported entry has no verified audio identity. Review the recording and cues before playback.`))) return false;
+    adoptedHash = await contentHash(file);
+  } else await attachIdentical(track, file, handle);
+  assertFresh();
+  const sourceFields = { ...(adoptedHash ? { contentHash: adoptedHash } : {}), fileName: file.name || track.fileName, fileSize: file.size, lastModified: file.lastModified || track.lastModified };
+  const operation = persistence.then(async () => {
+    assertFresh();
+    let snapshot;
+    const capture = () => snapshot = workspaceSnapshot(state.tracks.map(item => item.id === track.id ? { ...item, ...sourceFields } : item));
+    revision = await reconnectRecording(track.id, file, handle, capture, revision, assertFresh);
+    // Preparation can change while IndexedDB commits. Publish only source fields
+    // into the current identity, then reconcile without replacing newer edits.
+    const latest = state.tracks.find(item => item.id === track.id);
+    if (!latest || latest.source !== originalSource || latest.contentHash !== originalHash) throw new Error('The prepared set changed. Review the source again.');
+    Object.assign(latest, sourceFields);
+    files.set(track.id, file); sourceStatuses.set(track.id, handle ? 'Ready' : 'Stored copy');
+    const latestSnapshot = workspaceSnapshot();
+    if (JSON.stringify(latestSnapshot) !== JSON.stringify(snapshot)) revision = await saveState(latestSnapshot, revision);
+    capturePreparationEdit();
+    $('#save-status').textContent = t('Saved in this browser');
+    return true;
+  });
+  persistence = operation.catch(() => false);
+  return operation;
 }
 async function locateRecording(track) {
   if (busy || temporaryWorkspace) throw new Error('Finish saving or importing before reconnecting files.');
   if (canConnectFiles()) {
     const [handle] = await window.showOpenFilePicker({ multiple: false });
     const file = await handle.getFile();
-    await reconnectSame(track, file, handle); render(); notify('File reconnected. Cues and analysis retained.');
-  } else { reconnectMode = true; relinkId = track.id; $('#relink-input').click(); }
+    const connected = await reconnectSame(track, file, handle);
+    if (connected === false) return false;
+    render(); notify('File reconnected. Cues and analysis retained.'); return true;
+  } else { reconnectMode = true; relinkId = track.id; const connected = new Promise((resolve, reject) => { pendingRelink?.resolve(false); pendingRelink = { resolve, reject }; }); $('#relink-input').click(); return connected; }
 }
 async function keepCopy(track) {
   if (busy || temporaryWorkspace) throw new Error('Finish saving or importing before copying files.');
@@ -1231,7 +1318,50 @@ $('#pending-additions').onclick = event => {
   void persist(); renderGroups(); renderQueue();
 };
 
+async function restoreBackup(restore) {
+  await persistence;
+  if (busy || restoringBackup || transitioning || performanceTools.live || player.isPlaying() || player.mainPlaybackPending || temporaryWorkspace) throw new Error('Stop playback and unlock Live mode before restoring a backup.');
+  if (revision !== restore.expectedRevision) throw new Error('The workspace changed after review. Choose the backup again.');
+  const expected = JSON.stringify(preparation(state)), request = playRequest;
+  restoringBackup = true; updateTransport();
+  try {
+  const result = await commitBackupRestore(restore, { commitWorkspace: (...args) => {
+    const canApply = () => {
+      if (request !== playRequest || JSON.stringify(preparation(state)) !== expected || busy || transitioning || performanceTools.live || player.isPlaying() || player.mainPlaybackPending) throw new Error('The workspace or playback changed. Review the backup again.');
+    };
+    canApply(); return restoreWorkspace(...args, canApply);
+  } });
+  revision = result.revision;
+  ++playRequest; cancelGap(); performanceTools.cancelPreview(); player.stop(); player.track = null;
+  state = validateSet({ version: 1, ...restore.workspace }); normalizeProgram(state);
+  queue = []; queueIndex = -1; current = null; resumeIndex = 0; resumePosition = 0; loadedSignature = null; queueGroupId = null;
+  timedEnd = false; stopped = true; transitioning = false; activeCollection = null; collectingInto = null;
+  candidateSelections.clear(); sourceStatuses.clear(); files.clear();
+  selected = state.groups[0]?.id || null;
+  for (const track of state.tracks.filter(track => track.source === 'local')) await readyFile(track);
+  sessionTools.reloadHistories();
+  try { settings = JSON.parse(localStorage.getItem('studio-settings') || '{}'); } catch { settings = {}; }
+  if (restore.preferences?.language) setLanguage(restore.preferences.language);
+  if (Number.isFinite(settings.volume)) $('#volume').value = settings.volume;
+  if (settings.fade != null) $('#fade').value = settings.fade;
+  if (typeof settings.normalize === 'boolean') $('#normalize').checked = settings.normalize;
+  if (typeof settings.autoNext === 'boolean') $('#auto-next').checked = settings.autoNext;
+  if (Number.isFinite(settings.gapSeconds)) $('#track-gap').value = settings.gapSeconds;
+  $('#event-deadline').value = settings.eventDeadline || '';
+  if (typeof settings.guideHidden === 'boolean') { $('#practice-guide').hidden = settings.guideHidden; $('#toggle-guide').textContent = t(settings.guideHidden ? 'Show walkthrough' : 'Hide walkthrough'); $('#toggle-guide').setAttribute('aria-expanded', String(!settings.guideHidden)); }
+  player.setVolume(Number($('#volume').value) / 100, $('#normalize').checked); player.setFade(Number($('#fade').value));
+  if (restore.preferences?.audioProcessing) await player.setLoudnessProcessing(restore.preferences.audioProcessing);
+  audioTools.syncSettings(); audioTools.routingStatus();
+  editHistory.reset(state, selected, 'Backup restore starts a new edit history.');
+  $('#playing-title').textContent = t('No recording loaded'); $('#playing-artist').textContent = t('Play a track or load your prepared set.'); $('#playing-group').textContent = t('READY WHEN YOU ARE');
+  $('#queue-resume').hidden = true; $('#youtube-wrap').hidden = true; $('#position').textContent = '0:00 / 0:00'; $('#seek').value = 0;
+  $('#save-status').textContent = t('Saved in this browser'); render(); updateTransport();
+  if (result.recoveryPending) notify('Backup restored; recovery cleanup will run on the next reload.', true);
+  } finally { restoringBackup = false; updateTransport(); }
+}
+
 try {
+  if (backupRecoveryError) throw backupRecoveryError;
   const saved = await loadState(); firstVisit = !saved; if (saved) { revision = saved.revision || 0; state = validateSet({ version: 1, ...saved }); selected = saved.selected; queueGroupId = typeof saved.queueGroupId === 'string' ? saved.queueGroupId : null; loadedSignature = typeof saved.loadedSignature === 'string' ? saved.loadedSignature : null; resumeIndex = Number.isInteger(saved.queueIndex) && saved.queueIndex >= 0 ? saved.queueIndex : 0; savedQueue = Array.isArray(saved.queue) ? saved.queue : []; resumePosition = Number.isFinite(saved.resumePosition) ? Math.max(0, saved.resumePosition) : 0; }
   const migrated = removeOldExamples(state); state = migrated.state; normalizeProgram(state);
   for (const group of state.groups) if (group.samplePack === REAL_SAMPLE_PACK && group.kind === 'cortina') {
@@ -1244,7 +1374,8 @@ try {
   for (const item of queue) { const key = `${item.groupId}:${item.track.id}`; const index = occurrenceCounts.get(key) || 0; occurrenceCounts.set(key, index + 1); if (!item.occurrenceId) { const group = state.groups.find(g => g.id === item.groupId); const positions = group?.trackIds.map((id, index) => ({ id, index })).filter(entry => entry.id === item.track.id); item.occurrenceId = group?.occurrenceIds[positions?.[index]?.index]; } }
   if (saved) {
     const original = savedQueue[resumeIndex];
-    resumeIndex = Math.max(0, queue.findIndex(item => original && item.track.id === original.trackId && item.occurrenceId === original.occurrenceId));
+    const legacyIndex = savedQueue.slice(0, resumeIndex).filter(item => state.tracks.some(track => track.id === item.trackId)).length;
+    resumeIndex = Math.max(0, queue.findIndex((item, index) => original && item.track.id === original.trackId && (original.occurrenceId ? item.occurrenceId === original.occurrenceId : index === legacyIndex)));
     let checkpoint;
     try { checkpoint = JSON.parse(localStorage.getItem('studio-playback-position') || 'null'); } catch {}
     const item = queue[resumeIndex];
@@ -1286,9 +1417,11 @@ if (new URLSearchParams(location.search).get('practice') === '1') {
 }
 
 if (settings.guideHidden) { $('#practice-guide').hidden = true; $('#toggle-guide').textContent = 'Show walkthrough'; $('#toggle-guide').setAttribute('aria-expanded', 'false'); }
+editHistory.reset(state, selected); syncEditHistory();
 startI18n();
 
 document.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.code === 'KeyZ' && !event.target.closest('input,textarea,[contenteditable]') && !document.querySelector('dialog[open]')) { event.preventDefault(); void moveEditHistory(event.shiftKey ? 'redo' : 'undo'); return; }
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || document.querySelector('dialog[open]') || event.target.closest('input,select,textarea,button,a,[contenteditable]')) return;
   if (event.repeat) return;
   if (event.code === 'KeyN') { event.preventDefault(); if (!$('#next').disabled) $('#next').click(); }

@@ -4,6 +4,8 @@ A local-first web workspace for preparing and playing tango DJ sets, maintained 
 
 Track completed capabilities, confirmed defects, outstanding validation, and planned DJ features in the [development checklist](docs/dj-roadmap.md) or [progress board](docs/dj-roadmap.html). Completed checklist items are checked and crossed out. Run `npm run roadmap` after updating the checklist to regenerate the board; its completion percentage counts listed feature, defect, and validation tasks, not engineering effort or venue readiness. A daily review checks existing behavior and the backlog, records reproduced issues, and pushes validated routine improvements directly to `main`.
 
+See [DJ preparation, event planning and recovery](docs/dj-workflows.md) for library import mappings, rich browsing, reviewed batch edits, Undo/Redo, audio review, output routing, event rundowns and portable audio backups.
+
 ## Run locally
 
 Requires Node.js 22.12+ (Node.js 24 recommended).

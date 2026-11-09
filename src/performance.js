@@ -68,6 +68,7 @@ export class PerformanceControls {
     window.addEventListener('online', () => this.sync());
     window.addEventListener('offline', () => this.sync());
     this.installMediaSession();
+    player.onRoutingChange = () => { this.renderOutputStatus(); };
   }
 
   get live() { return this.$('#live-mode').checked; }

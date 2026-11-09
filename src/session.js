@@ -2,7 +2,9 @@ const STORAGE_KEY = 'studio-dj-session';
 const MAX_EVENTS = 1000;
 const MAX_SAVED_LENGTH = 2_000_000;
 const metadataFields = ['title', 'artist', 'singer', 'style', 'groupName'];
-const eventFields = new Set(['id', 'trackId', ...metadataFields, 'groupId', 'occurrenceId', 'source', 'identity', 'startedAt', 'position']);
+const eventFields = new Set(['id', 'trackId', ...metadataFields, 'groupId', 'occurrenceId', 'source', 'identity', 'startedAt', 'position', 'note']);
+const MAX_SESSIONS = 100;
+const emptySession = () => ({ id: null, name: '', startedAt: null, events: [] });
 
 function historyError(message, code, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
@@ -38,10 +40,10 @@ function validIdentity(event) {
   return /^local:[a-f0-9]{64}$/.test(event.identity) || event.identity === `local:id:${event.trackId}`;
 }
 
-function validateHistory(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['id', 'name', 'startedAt', 'events'].includes(key))
+export function validateHistory(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['id', 'name', 'startedAt', 'events', 'note'].includes(key))
     || !text(value.id, 500, true) || !text(value.name, 300, true) || !timestamp(value.startedAt)
-    || !Array.isArray(value.events) || value.events.length > MAX_EVENTS) throw new Error('Invalid session data.');
+    || (value.note != null && !text(value.note, 10000)) || !Array.isArray(value.events) || value.events.length > MAX_EVENTS) throw new Error('Invalid session data.');
   const ids = new Set();
   for (const event of value.events) {
     if (!event || typeof event !== 'object' || Array.isArray(event) || Object.keys(event).some(key => !eventFields.has(key))
@@ -49,10 +51,49 @@ function validateHistory(value) {
       || metadataFields.some(field => !text(event[field], 1000, field === 'title'))
       || (event.groupId != null && !text(event.groupId, 500)) || (event.occurrenceId != null && !text(event.occurrenceId, 500))
       || !['local', 'youtube'].includes(event.source) || !validIdentity(event) || !timestamp(event.startedAt)
-      || !Number.isFinite(event.position) || event.position < 0 || event.position > 90000) throw new Error('Invalid session event.');
+      || (event.note != null && !text(event.note, 4000)) || !Number.isFinite(event.position) || event.position < 0 || event.position > 90000) throw new Error('Invalid session event.');
     ids.add(event.id);
   }
   return value;
+}
+
+export function validateSessionSnapshot(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !['version', 'currentId', 'sessions', 'trash'].includes(key)) || value.version !== 1
+    || (value.currentId !== null && !text(value.currentId, 500, true)) || !Array.isArray(value.sessions) || value.sessions.length > MAX_SESSIONS
+    || !Array.isArray(value.trash) || value.trash.length > MAX_SESSIONS) throw new Error('Invalid session archive.');
+  const ids = new Set();
+  for (const history of value.sessions) {
+    validateHistory(history);
+    if (ids.has(history.id)) throw new Error('Duplicate session identity.');
+    ids.add(history.id);
+  }
+  if (value.currentId !== null && !ids.has(value.currentId)) throw new Error('Current session is missing from the archive.');
+  for (const entry of value.trash) {
+    if (!entry || Object.keys(entry).some(key => !['history', 'deletedAt'].includes(key)) || !timestamp(entry.deletedAt)) throw new Error('Invalid deleted history.');
+    validateHistory(entry.history);
+    if (ids.has(entry.history.id)) throw new Error('Duplicate session identity.');
+    ids.add(entry.history.id);
+  }
+  return structuredClone(value);
+}
+
+export function serializeSessionSnapshot(value) {
+  const snapshot = validateSessionSnapshot(value);
+  const current = snapshot.sessions.find(history => history.id === snapshot.currentId) || emptySession();
+  const archives = snapshot.sessions.filter(history => history.id !== snapshot.currentId);
+  const saved = JSON.stringify({ ...current, ...((archives.length || !current.id) ? { archives } : {}), ...(snapshot.trash.length ? { trash: snapshot.trash } : {}) });
+  if (saved.length > MAX_SAVED_LENGTH) throw historyError('DJ session history is too large to save. Export histories before permanently deleting older entries from Deleted histories.', 'history-too-large');
+  return saved;
+}
+
+export function parseSessionSnapshot(value) {
+  if (typeof value !== 'string' || value.length > MAX_SAVED_LENGTH) throw new Error('Session history is too large.');
+  const parsed = JSON.parse(value);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid session data.');
+  const { archives = [], trash = [], ...current } = parsed;
+  if (current.id !== null) validateHistory(current);
+  else if (JSON.stringify(current) !== JSON.stringify(emptySession()) || !Object.hasOwn(parsed, 'archives')) throw new Error('Invalid empty session.');
+  return validateSessionSnapshot({ version: 1, currentId: current.id, sessions: [...archives, ...(current.id ? [current] : [])], trash });
 }
 
 function csvCell(value) {
@@ -68,7 +109,7 @@ export class DJSession {
     this._now = options.now || (() => Date.now());
     this._id = options.id || (() => crypto.randomUUID());
     this._runs = new Set();
-    this._current = { id: null, name: '', startedAt: null, events: [] };
+    this._current = emptySession(); this._archives = []; this._trash = [];
     // Explicit storage: null is a temporary, memory-only recovery workspace.
     if (this._storage === null) return;
     if (!this._storage?.getItem || !this._storage?.setItem) throw historyError('DJ session storage is unavailable.', 'storage-unavailable');
@@ -79,8 +120,9 @@ export class DJSession {
     catch (cause) { throw historyError('DJ session history could not be read. Existing history has been kept.', 'storage-read', cause); }
     if (saved == null) return;
     try {
-      if (typeof saved !== 'string' || saved.length > MAX_SAVED_LENGTH) throw new Error('Session history is too large.');
-      this._current = structuredClone(validateHistory(JSON.parse(saved)));
+      const snapshot = parseSessionSnapshot(saved);
+      this._current = snapshot.sessions.find(history => history.id === snapshot.currentId) || emptySession();
+      this._archives = snapshot.sessions.filter(history => history.id !== snapshot.currentId); this._trash = snapshot.trash;
     } catch (cause) {
       throw historyError('Saved DJ session history is invalid. It has been kept without changes.', 'invalid-history', cause);
     }
@@ -92,20 +134,66 @@ export class DJSession {
   get events() { return structuredClone(this._current.events); }
   get current() { return structuredClone(this._current); }
 
-  _commit(value) {
-    validateHistory(value);
-    const saved = JSON.stringify(value);
-    if (saved.length > MAX_SAVED_LENGTH) throw historyError('DJ session history is too large to save. Export the existing history before starting another session.', 'history-too-large');
+  get histories() { return structuredClone([...this._archives, ...(this.id ? [this._current] : [])]); }
+  get deletedHistories() { return structuredClone(this._trash); }
+  snapshot() { return { version: 1, currentId: this.id, sessions: this.histories, trash: this.deletedHistories }; }
+
+  _commit(value, archives = this._archives, trash = this._trash) {
+    const snapshot = validateSessionSnapshot({ version: 1, currentId: value.id, sessions: [...archives, ...(value.id ? [value] : [])], trash });
+    const saved = serializeSessionSnapshot(snapshot);
     try { this._storage?.setItem(STORAGE_KEY, saved); }
     catch (cause) { throw historyError('DJ session history could not be saved. Music can continue; export the history and retry saving.', 'storage-write', cause); }
-    this._current = value;
+    this._current = value; this._archives = archives; this._trash = trash;
   }
 
   start(name) {
     if (!text(name, 300, true)) throw new Error('Choose a DJ session name between 1 and 300 characters.');
-    this._commit({ id: this._id(), name: name.trim(), startedAt: new Date(this._now()).toISOString(), events: [] });
-    // A session change does not restart music. Keep delivered runs deduplicated until this instance is discarded.
+    const archives = [...this._archives, ...(this.id ? [this._current] : [])];
+    this._commit({ id: this._id(), name: name.trim(), startedAt: new Date(this._now()).toISOString(), events: [] }, archives);
+    // Retain delivered-run deduplication across session changes.
     return this.current;
+  }
+
+  restoreSnapshot(value) {
+    const snapshot = validateSessionSnapshot(value);
+    const current = snapshot.sessions.find(history => history.id === snapshot.currentId) || emptySession();
+    this._commit(current, snapshot.sessions.filter(history => history.id !== snapshot.currentId), snapshot.trash);
+    return this.snapshot();
+  }
+
+  search(query = '') {
+    const needle = String(query).trim().toLocaleLowerCase();
+    return this.histories.filter(history => !needle || [history.name, history.note, ...history.events.flatMap(event => [event.title, event.artist, event.singer, event.groupName, event.note])].some(value => String(value || '').toLocaleLowerCase().includes(needle)));
+  }
+
+  annotate(sessionId, note, eventId = null) {
+    if (!text(note, eventId ? 4000 : 10000)) throw new Error('History annotation is too long.');
+    const histories = this.histories, history = histories.find(item => item.id === sessionId);
+    if (!history) throw new Error('Choose a saved session.');
+    const target = eventId ? history.events.find(event => event.id === eventId) : history;
+    if (!target) throw new Error('Choose a saved playback event.');
+    target.note = note;
+    const current = histories.find(item => item.id === this.id) || emptySession();
+    this._commit(current, histories.filter(item => item.id !== this.id));
+  }
+
+  deleteHistory(sessionId) {
+    const history = this.histories.find(item => item.id === sessionId);
+    if (!history) throw new Error('Choose a saved session.');
+    const archives = this._archives.filter(item => item.id !== sessionId);
+    this._commit(sessionId === this.id ? emptySession() : this._current, archives, [...this._trash, { history, deletedAt: new Date(this._now()).toISOString() }]);
+  }
+
+  restoreHistory(sessionId) {
+    const entry = this._trash.find(item => item.history.id === sessionId);
+    if (!entry) throw new Error('Choose a deleted session.');
+    this._commit(this._current, [...this._archives, entry.history], this._trash.filter(item => item !== entry));
+    return structuredClone(entry.history);
+  }
+
+  purgeHistory(sessionId) {
+    if (!this._trash.some(entry => entry.history.id === sessionId)) throw new Error('Choose a deleted session.');
+    this._commit(this._current, this._archives, this._trash.filter(entry => entry.history.id !== sessionId));
   }
 
   hasRecordedPlayback(runId, item) { return this._runs.has(playbackKey(runId, item)); }
@@ -132,9 +220,13 @@ export class DJSession {
     return this._current.events.some(event => event.identity === identity);
   }
 
-  exportCSV() {
-    const header = ['Session', 'Session started', 'Played at', 'Title', 'Orchestra / artist', 'Singer', 'Dance style', 'Tanda / group', 'Source', 'Position (seconds)', 'Recording ID', 'Group ID', 'Occurrence ID', 'Recording identity', 'Event ID'];
-    const rows = this._current.events.map(event => [this.name, this._current.startedAt, event.startedAt, event.title, event.artist, event.singer, event.style, event.groupName, event.source, event.position, event.trackId, event.groupId, event.occurrenceId, event.identity, event.id]);
+  exportCSV(selection = {}) {
+    const sessionIds = selection.sessionIds || (this.id ? [this.id] : []);
+    const eventIds = selection.eventIds ? new Set(selection.eventIds) : null;
+    const histories = [...this.histories, ...this._trash.map(entry => entry.history)];
+    if (!Array.isArray(sessionIds) || sessionIds.some(id => !histories.some(history => history.id === id))) throw new Error('Choose saved histories to export.');
+    const header = ['Session', 'Session started', 'Played at', 'Title', 'Orchestra / artist', 'Singer', 'Dance style', 'Tanda / group', 'Source', 'Position (seconds)', 'Recording ID', 'Group ID', 'Occurrence ID', 'Recording identity', 'Event ID', 'Annotation', 'Session notes'];
+    const rows = histories.filter(history => sessionIds.includes(history.id)).flatMap(history => history.events.filter(event => !eventIds || eventIds.has(event.id)).map(event => [history.name, history.startedAt, event.startedAt, event.title, event.artist, event.singer, event.style, event.groupName, event.source, event.position, event.trackId, event.groupId, event.occurrenceId, event.identity, event.id, event.note, history.note]));
     return [header, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
   }
 }

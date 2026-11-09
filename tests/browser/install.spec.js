@@ -31,9 +31,20 @@ test('installed app caches its shell and restores local workspace after an offli
   await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
 });
 
-test('privacy page and icon resources remain available offline after caching', async ({ page, context }) => {
+test('Settings progress board, privacy page and icons remain available offline after caching', async ({ page, context }) => {
   await cacheApp(page);
+  await page.locator('#open-settings').click();
+  const progress = page.getByRole('link', { name: 'Development progress' });
+  await expect(progress).toHaveAttribute('href', '/dj-roadmap.html');
   await context.setOffline(true);
+  const [board] = await Promise.all([page.waitForEvent('popup'), progress.click()]);
+  await expect(board.getByRole('main', { name: 'Tango DJ development progress' })).toBeVisible();
+  await expect(board.locator('.summary')).toContainText('tracked items complete');
+  await expect(board.locator('.legend')).toContainText('Awaiting validation');
+  await expect(board.locator('.track')).toHaveAttribute('aria-label', /complete,.*awaiting validation/);
+  await board.reload();
+  await expect(board.getByRole('main', { name: 'Tango DJ development progress' })).toBeVisible();
+  await board.close();
   await page.goto('/privacy.html');
   await expect(page.locator('h1')).toHaveText('Tango DJ Studio privacy policy');
   for (const path of ['/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png']) {

@@ -123,7 +123,7 @@ test('local transport: pause/resume, previous/next, seek, volume/mute, keyboard,
   await page.locator('#auto-next').uncheck();await page.locator('#seek').fill('95');await expect(page.locator('#play-pause')).toHaveText('▶',{timeout:5000});await expect(page.locator('#playing-title')).toHaveText('A');
   await page.locator('#play-pause').click();await expect(page.locator('#position')).toContainText('0:00');await page.locator('#auto-next').check();await page.locator('#seek').fill('95');await expect(page.locator('#playing-title')).toHaveText('B');
   await page.locator('#stop').click();await expect(page.locator('#position')).toContainText('0:00');await page.locator('#play-pause').click();
-  await page.locator('h1').click();await page.keyboard.press('Space');await expect(page.locator('#play-pause')).toHaveText('▶');
+  await expect(page.locator('#play-pause')).toHaveText('Ⅱ');await page.locator('h1').click();await page.keyboard.press('Space');await expect(page.locator('#play-pause')).toHaveText('▶');
 });
 
 test('cortina segment cue/play reaches deck on phone, copies position, waits and resumes next tanda', async ({page}) => {

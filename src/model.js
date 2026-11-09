@@ -49,6 +49,26 @@ export function validateSet(value) {
     ids.add(track.id);
     if (track.source === 'youtube' && (typeof track.videoId !== 'string' || !/^[\w-]{11}$/.test(track.videoId))) throw new Error('Invalid YouTube video.');
     for (const field of ['artist', 'singer', 'year', 'style', 'fileName']) if (track[field] != null && !text(track[field], 1000)) throw new Error('Invalid metadata.');
+    if (track.notes != null && !text(track.notes, 4000)) throw new Error('Invalid recording notes.');
+    if (track.tags != null && (!Array.isArray(track.tags) || track.tags.length > 30 || Array.from(track.tags).some(tag => !text(tag, 60, true)) || new Set(track.tags.map(tag => tag.trim().toLowerCase())).size !== track.tags.length)) throw new Error('Invalid recording tags.');
+    if (track.rating != null && (!Number.isInteger(track.rating) || track.rating < 1 || track.rating > 5)) throw new Error('Invalid recording rating.');
+    for (const field of ['fileSize', 'lastModified']) if (track[field] != null && (!Number.isSafeInteger(track[field]) || track[field] < 0)) throw new Error('Invalid file metadata.');
+    if (track.bpmConfidence != null && (!Number.isFinite(track.bpmConfidence) || track.bpmConfidence < 0 || track.bpmConfidence > 1)) throw new Error('Invalid BPM confidence.');
+    if (track.bpmCandidates != null && (!Array.isArray(track.bpmCandidates) || track.bpmCandidates.length > 6 || Array.from(track.bpmCandidates).some(bpm => !Number.isFinite(bpm) || bpm < 20 || bpm > 300))) throw new Error('Invalid BPM candidates.');
+    if (track.bpmSource != null && !['estimate', 'manual', 'tap', 'half', 'double'].includes(track.bpmSource)) throw new Error('Invalid BPM source.');
+    if (track.integratedLufs != null && (!Number.isFinite(track.integratedLufs) || track.integratedLufs < -90 || track.integratedLufs > 10)) throw new Error('Invalid measured loudness.');
+    if (track.truePeakDb != null && (!Number.isFinite(track.truePeakDb) || track.truePeakDb < -180 || track.truePeakDb > 24)) throw new Error('Invalid measured peak.');
+    if (track.loudnessAnalysisVersion != null && track.loudnessAnalysisVersion !== 'bs1770-k-4x-v1') throw new Error('Invalid loudness analysis version.');
+    if (track.measuredSeconds != null && (!Number.isFinite(track.measuredSeconds) || track.measuredSeconds <= 0 || track.measuredSeconds > 86400)) throw new Error('Invalid measurement duration.');
+    if (track.provenance != null) {
+      if (!Array.isArray(track.provenance) || track.provenance.length > 50) throw new Error('Invalid recording provenance.');
+      for (const entry of track.provenance) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry) || Object.keys(entry).some(key => !['format', 'sourceName', 'sourceHash', 'row', 'reference', 'playlist'].includes(key)) || !['csv', 'm3u'].includes(entry.format)
+          || !text(entry.sourceName, 255, true) || /[\\/]/.test(entry.sourceName) || typeof entry.sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(entry.sourceHash)
+          || !Number.isInteger(entry.row) || entry.row < 1 || entry.row > 1000000 || (entry.reference != null && (!text(entry.reference, 1000) || (/[\\/]/.test(entry.reference) && !/^https:\/\/www\.youtube\.com\/watch\?v=[\w-]{11}$/.test(entry.reference))))
+          || (entry.playlist != null && !text(entry.playlist, 1000))) throw new Error('Invalid recording provenance.');
+      }
+    }
     for (const field of ['duration', 'bpm', 'rmsDb', 'peakDb', 'gainDb']) if (track[field] != null && (!Number.isFinite(track[field]) || (['duration', 'bpm'].includes(field) && track[field] < 0) || (field === 'gainDb' && Math.abs(track[field]) > 12))) throw new Error('Invalid analysis.');
     if (track.cueStartSeconds != null && (!Number.isFinite(track.cueStartSeconds) || track.cueStartSeconds < 0 || track.cueStartSeconds > 86400)) throw new Error('Invalid recording cue start.');
     if (track.cueEndSeconds != null && (!Number.isFinite(track.cueEndSeconds) || track.cueEndSeconds <= (track.cueStartSeconds ?? 0) || track.cueEndSeconds > 90000)) throw new Error('Invalid recording cue end.');

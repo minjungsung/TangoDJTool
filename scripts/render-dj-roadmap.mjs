@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 const source = new URL('../docs/dj-roadmap.md', import.meta.url);
 const destination = new URL('../docs/dj-roadmap.html', import.meta.url);
+const publicDestination = new URL('../public/dj-roadmap.html', import.meta.url);
 const markdown = await readFile(source, 'utf8');
 const escape = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
 const inline = value => escape(value).replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/~~([^~]+)~~/g, '<s>$1</s>').replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -34,7 +35,7 @@ const html = `<!doctype html>
 <style>
 :root { color-scheme: light dark; }
 html, body { margin: 0; color: var(--foreground, CanvasText); font-family: var(--font-sans, system-ui); }
-#dj-roadmap { display: grid; gap: 16px; }
+#dj-roadmap { display: grid; gap: 16px; max-width: 1100px; margin: auto; padding: 24px; }
 #dj-roadmap .summary { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; }
 #dj-roadmap strong { font-weight: 500; }
 #dj-roadmap .note, #dj-roadmap .acceptance { color: var(--muted-foreground, GrayText); }
@@ -72,4 +73,5 @@ html, body { margin: 0; color: var(--foreground, CanvasText); font-family: var(-
 </html>
 `;
 await writeFile(destination, html);
+await writeFile(publicDestination, html.replace('<a href="./dj-roadmap.md">Open the source checklist and verification evidence</a>', '<p class="note">The source checklist and detailed verification evidence are maintained in the project repository.</p>'));
 console.log(`DJ roadmap: ${counts.complete}/${features.length} items complete (${percent}%), ${counts.validation} awaiting validation, ${counts.backlog} planned.`);

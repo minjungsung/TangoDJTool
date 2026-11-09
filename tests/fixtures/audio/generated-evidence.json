@@ -1,0 +1,103 @@
+{
+  "evidence": "Digital PCM measurement and reproducible A/B artifacts. No physical output or human listening verification.",
+  "fixtures": [
+    {
+      "name": "expressive-transfer",
+      "source": "Deterministic generated melody, expressive pulse, wow, noise and optional transient; not a historical recording.",
+      "original": {
+        "file": "expressive-transfer-original.wav",
+        "sha256": "105440f3cb552f097ec5cbdaf1cac624c6e33f5106addab772db751619df3ece",
+        "integratedLufs": -28.59,
+        "truePeakDb": -10.21,
+        "loudnessAnalysisVersion": "bs1770-k-4x-v1",
+        "measuredSeconds": 16,
+        "ffmpeg": {
+          "integratedLufs": -28.6,
+          "truePeakDb": -10.2
+        }
+      },
+      "processed": {
+        "file": "expressive-transfer-processed.wav",
+        "sha256": "d7b3fdcd2b342a2b10e5da6e01dd3e9fe6116b84b7472ccf20fea2b8eb90d480",
+        "integratedLufs": -18.72,
+        "truePeakDb": -1.01,
+        "loudnessAnalysisVersion": "bs1770-k-4x-v1",
+        "measuredSeconds": 16,
+        "ffmpeg": {
+          "integratedLufs": -18.7,
+          "truePeakDb": -1
+        }
+      },
+      "settings": {
+        "enabled": true,
+        "targetLufs": -18,
+        "headroomDb": 1,
+        "limiter": true
+      },
+      "gainDb": 10.59,
+      "reductionDb": 1.44,
+      "tempo": {
+        "bpm": 133,
+        "bpmConfidence": 0.09,
+        "bpmCandidates": [
+          133,
+          67,
+          266
+        ],
+        "bpmSource": "estimate",
+        "rmsDb": -28.1,
+        "peakDb": -10.2,
+        "gainDb": 9.2
+      }
+    },
+    {
+      "name": "transient-transfer",
+      "source": "Deterministic generated melody, expressive pulse, wow, noise and optional transient; not a historical recording.",
+      "original": {
+        "file": "transient-transfer-original.wav",
+        "sha256": "3b31408095cac6b7449418fb9500bb6fdb01827ed8c638245df3232776bbf6b2",
+        "integratedLufs": -28.86,
+        "truePeakDb": -0.26,
+        "loudnessAnalysisVersion": "bs1770-k-4x-v1",
+        "measuredSeconds": 16,
+        "ffmpeg": {
+          "integratedLufs": -28.9,
+          "truePeakDb": -0.3
+        }
+      },
+      "processed": {
+        "file": "transient-transfer-processed.wav",
+        "sha256": "21a82dc4c3ea479c3291bf917c8f161e40dc946b8f28dba35b532b393355c68c",
+        "integratedLufs": -19.44,
+        "truePeakDb": -1.01,
+        "loudnessAnalysisVersion": "bs1770-k-4x-v1",
+        "measuredSeconds": 16,
+        "ffmpeg": {
+          "integratedLufs": -19.4,
+          "truePeakDb": -1
+        }
+      },
+      "settings": {
+        "enabled": true,
+        "targetLufs": -18,
+        "headroomDb": 1,
+        "limiter": true
+      },
+      "gainDb": 10.86,
+      "reductionDb": 11.67,
+      "tempo": {
+        "bpm": 113,
+        "bpmConfidence": 0.09,
+        "bpmCandidates": [
+          113,
+          57,
+          226
+        ],
+        "bpmSource": "estimate",
+        "rmsDb": -28.5,
+        "peakDb": -0.3,
+        "gainDb": -0.7
+      }
+    }
+  ]
+}

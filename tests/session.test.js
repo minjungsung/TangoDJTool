@@ -204,3 +204,55 @@ test('recording identities reject coerced arrays without altering saved session 
   assert.throws(() => session.recordPlayback(1, clip({ id: 'video', title: 'Video', source: 'youtube', videoId: ['abcdefghijk'] }), 0), /video identity/);
   assert.equal(values.get(key), original); assert.equal(session.events.length, 0);
 });
+
+test('new sessions archive searchable annotated histories and selected CSV survives reload', () => {
+  const { session, storage, values } = fixture(); session.start('Friday milonga'); const first = session.id;
+  const event = session.recordPlayback('first', clip(), 12);
+  session.annotate(first, 'Opening set worked well'); session.annotate(first, '=Keep this arrangement', event.id);
+  session.start('Saturday milonga'); session.recordPlayback('second', clip(local('other', { title: 'El choclo' })), 0);
+  assert.equal(session.histories.length, 2); assert.equal(session.events.length, 1);
+  assert.equal(session.search('opening set')[0].id, first); assert.equal(session.search('poema')[0].id, first);
+  const csv = session.exportCSV({ sessionIds: [first], eventIds: [event.id] });
+  assert.match(csv, /Friday milonga/); assert.doesNotMatch(csv, /Saturday milonga|El choclo/); assert.match(csv, /'=Keep this arrangement/);
+  const restored = new DJSession({ storage }); assert.deepEqual(restored.snapshot(), session.snapshot());
+  assert.equal(JSON.parse(values.get(key)).archives.length, 1);
+});
+
+test('history deletion is recoverable and failed deletion preserves every saved byte', () => {
+  const { session, storage, values } = fixture(); session.start('First'); const first = session.id;
+  session.recordPlayback(1, clip(), 0); session.start('Current'); const current = session.id;
+  const bytes = values.get(key), write = storage.setItem;
+  storage.setItem = () => { throw new Error('Full'); };
+  assert.throws(() => session.deleteHistory(first), error => error.code === 'storage-write');
+  assert.equal(values.get(key), bytes); assert.equal(session.histories.length, 2);
+  storage.setItem = write; session.deleteHistory(first);
+  assert.equal(session.id, current); assert.equal(session.histories.length, 1); assert.equal(session.deletedHistories.length, 1);
+  session.restoreHistory(first); assert.equal(session.id, current); assert.equal(session.histories.length, 2); assert.equal(session.deletedHistories.length, 0);
+  session.deleteHistory(current); assert.equal(session.id, null);
+  const restored = new DJSession({ storage }); assert.equal(restored.id, null); assert.equal(restored.histories.length, 1);
+  restored.restoreHistory(current); assert.equal(restored.id, null); assert.equal(restored.histories.length, 2);
+});
+
+test('portable history snapshots are validated atomically, including empty archives', () => {
+  const { session, storage, values } = fixture(); session.start('Milonga'); session.recordPlayback(1, clip(), 0);
+  const before = values.get(key), snapshot = session.snapshot();
+  assert.throws(() => session.restoreSnapshot({ ...snapshot, sessions: [snapshot.sessions[0], snapshot.sessions[0]] }), /Duplicate/);
+  assert.throws(() => session.restoreSnapshot({ ...snapshot, sessions: [{ ...snapshot.sessions[0], note: 'x'.repeat(10001) }] }));
+  assert.equal(values.get(key), before);
+  session.restoreSnapshot({ version: 1, currentId: null, sessions: [], trash: [] });
+  assert.equal(new DJSession({ storage }).histories.length, 0);
+  assert.equal(session.recordPlayback(1, clip(), 0), null);
+});
+
+test('deleted histories remain exportable and permanent deletion frees storage only after a successful save', () => {
+  const { session, storage, values } = fixture(); session.start('Archived event'); const archived = session.id;
+  session.recordPlayback(1, clip(), 0); session.start('Current event'); const current = session.id; session.deleteHistory(archived);
+  assert.match(session.exportCSV({ sessionIds: [archived] }), /Archived event|Poema/);
+  const before = values.get(key), snapshot = session.snapshot(), write = storage.setItem;
+  storage.setItem = () => { throw new Error('Unavailable'); };
+  assert.throws(() => session.purgeHistory(archived), error => error.code === 'storage-write');
+  assert.equal(values.get(key), before); assert.deepEqual(session.snapshot(), snapshot);
+  storage.setItem = write; session.purgeHistory(archived);
+  assert.equal(session.id, current); assert.equal(session.deletedHistories.length, 0); assert.ok(values.get(key).length < before.length);
+  assert.throws(() => session.restoreHistory(archived), /deleted session/); assert.equal(new DJSession({ storage }).deletedHistories.length, 0);
+});

@@ -1,0 +1,123 @@
+{
+  "evidence": "Independent FFmpeg digital PCM comparison. Audio and processed historical derivatives remained temporary and are not included. No physical output or human listening verification.",
+  "ffmpegVersion": "ffmpeg version 9.0.1 Copyright (c) 2000-2026 the FFmpeg developers",
+  "recordings": [
+    {
+      "source": {
+        "url": "https://archive.org/download/78_nelly_the-orquesta-tipica-francisco-canaro-hector-bates_gbia3007392a/NELLY%20-%20The%20Orquesta%20Tipica%20FRANCISCO%20CANARO.mp3",
+        "metadataUrl": "https://archive.org/metadata/78_nelly_the-orquesta-tipica-francisco-canaro-hector-bates_gbia3007392a",
+        "description": "Waltz, 78-rpm transfer",
+        "bytes": 6676316,
+        "sha256": "93e64eca1815a57c7be338e194cefb25099a6194f964817c4c52df0bf6d5cd07"
+      },
+      "decoded": {
+        "sampleRate": 48000,
+        "channels": 2,
+        "seconds": 206.65608333333333
+      },
+      "original": {
+        "integratedLufs": -29.36,
+        "truePeakDb": -0.63,
+        "loudnessAnalysisVersion": "bs1770-k-4x-v1",
+        "measuredSeconds": 206.65608333333333,
+        "ffmpeg": {
+          "integratedLufs": -29.4,
+          "truePeakDb": -0.6
+        }
+      },
+      "processed": {
+        "integratedLufs": -20.41,
+        "truePeakDb": -1.01,
+        "loudnessAnalysisVersion": "bs1770-k-4x-v1",
+        "measuredSeconds": 206.65608333333333,
+        "ffmpeg": {
+          "integratedLufs": -20.4,
+          "truePeakDb": -1
+        },
+        "sha256": "ba301493c309834d4257f2f5cf617c21dc5e0b9c5f11695b4a314d9233f92fa2",
+        "gainDb": 11.36,
+        "reductionDb": 13.51
+      },
+      "settings": {
+        "enabled": true,
+        "targetLufs": -18,
+        "headroomDb": 1,
+        "limiter": true
+      },
+      "tempo": {
+        "bpm": 158,
+        "bpmConfidence": 0.05,
+        "bpmCandidates": [
+          158,
+          79
+        ],
+        "bpmSource": "estimate",
+        "rmsDb": -33.5,
+        "peakDb": -7.5,
+        "gainDb": 6.5,
+        "analyzedSeconds": 180,
+        "interpretation": "Estimate only; no verified BPM ground truth, beat grid or musical suitability."
+      },
+      "softwareProcessingSeconds": 11.56
+    },
+    {
+      "source": {
+        "url": "https://archive.org/download/78_sufro-i-suffer_orquesta-tipica-francisco-canaro-canaro-blanco_gbia3007687b/SUFRO%20(I%20Suffer)%20-%20ORQUESTA%20TIPICA%20FRANCISCO%20CANARO.mp3",
+        "metadataUrl": "https://archive.org/metadata/78_sufro-i-suffer_orquesta-tipica-francisco-canaro-canaro-blanco_gbia3007687b",
+        "description": "Tango con canto, 78-rpm transfer",
+        "bytes": 5312518,
+        "sha256": "8ddd787b33575704e819dd1d415e52c17e197e37049cddd50fc655cd1718b200"
+      },
+      "decoded": {
+        "sampleRate": 48000,
+        "channels": 2,
+        "seconds": 200.02141666666665
+      },
+      "original": {
+        "integratedLufs": -23.26,
+        "truePeakDb": -2.24,
+        "loudnessAnalysisVersion": "bs1770-k-4x-v1",
+        "measuredSeconds": 200.02141666666665,
+        "ffmpeg": {
+          "integratedLufs": -23.3,
+          "truePeakDb": -2.2
+        }
+      },
+      "processed": {
+        "integratedLufs": -19.21,
+        "truePeakDb": -1.01,
+        "loudnessAnalysisVersion": "bs1770-k-4x-v1",
+        "measuredSeconds": 200.02141666666665,
+        "ffmpeg": {
+          "integratedLufs": -19.2,
+          "truePeakDb": -1
+        },
+        "sha256": "f09436044706860aac68d8b49bc25c8ceb02c660f0a7d1ec3a13b3f5fe5f7631",
+        "gainDb": 5.26,
+        "reductionDb": 5.03
+      },
+      "settings": {
+        "enabled": true,
+        "targetLufs": -18,
+        "headroomDb": 1,
+        "limiter": true
+      },
+      "tempo": {
+        "bpm": 125,
+        "bpmConfidence": 0.11,
+        "bpmCandidates": [
+          125,
+          63,
+          250
+        ],
+        "bpmSource": "estimate",
+        "rmsDb": -27.7,
+        "peakDb": -7.4,
+        "gainDb": 6.4,
+        "analyzedSeconds": 180,
+        "interpretation": "Estimate only; no verified BPM ground truth, beat grid or musical suitability."
+      },
+      "softwareProcessingSeconds": 10.32
+    }
+  ]
+}

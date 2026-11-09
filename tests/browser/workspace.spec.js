@@ -646,7 +646,7 @@ test('local session can play, edit and export while the network is offline', asy
   await expect(page.locator('#tracks tr')).toHaveCount(1);await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
   await context.setOffline(true);await view(page, 'set'); await page.locator('#add-tanda').click();await view(page, 'library'); await page.locator('[data-action="add"]').click();
   await view(page, 'set'); await page.locator('#start-set').click();await expect(page.locator('#playing-title')).toHaveText('offline-tango');
-  await view(page, 'library'); await recordingAction(page, 'edit');await page.locator('[name="artist"]').fill('Offline orchestra');await page.locator('#metadata-form button[type="submit"]').click();
+  await view(page, 'library'); await recordingAction(page, 'edit');await page.locator('#metadata-form [name="artist"]').fill('Offline orchestra');await page.locator('#metadata-form button[type="submit"]').click();
   await expect(page.locator('#save-status')).toHaveText('Saved in this browser');
   const download=page.waitForEvent('download');await page.locator('#export-set').click();expect((await download).suggestedFilename()).toBe('tango-dj-set.json');
   await context.setOffline(false);await page.reload();await expect(page.locator('.missing')).toHaveCount(0);await expect(page.locator('.track-detail')).toContainText('Offline orchestra');

@@ -15,7 +15,8 @@
     "test:install": "npm run build && playwright test --config playwright.install.config.js",
     "roadmap": "node scripts/render-dj-roadmap.mjs",
     "android:assetlinks": "node scripts/android-assetlinks.mjs",
-    "android:preflight": "node scripts/android-release-preflight.mjs"
+    "android:preflight": "node scripts/android-release-preflight.mjs",
+    "test:backlog": "playwright test --config playwright.backlog.config.js"
   },
   "dependencies": {
     "hash-wasm": "^4.12.0",

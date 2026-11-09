@@ -43,7 +43,9 @@ async function writeWorkspace(state, expectedRevision, replacement) {
       if (expectedRevision != null && expectedRevision !== currentRevision) { conflict = true; tx.abort(); return; }
       revision = currentRevision + 1;
       try {
-        const saving = store.put({ ...state, revision }, 'current'); saving.onerror = () => { operationError = saving.error; };
+        replacement?.canApply?.();
+        const snapshot = typeof state === 'function' ? state() : state;
+        const saving = store.put({ ...snapshot, ...(existing.result?.backupRestoreId ? { backupRestoreId: existing.result.backupRestoreId } : {}), revision }, 'current'); saving.onerror = () => { operationError = saving.error; };
         if (replacement) {
           if (replacement.file) { const file = tx.objectStore('files').put(replacement.file, replacement.id); file.onerror = () => { operationError = file.error; }; }
           const sources = tx.objectStore('sources');
@@ -78,10 +80,52 @@ export const saveSource = (id, source) => write('sources', store => source ? sto
 
 // Commit replacement audio and its metadata in one transaction.
 export const replaceRecording = async (id, file, state, expectedRevision) => writeWorkspace(state, expectedRevision, { id, file: await recordingData(file) });
-export const reconnectRecording = async (id, file, handle, state, expectedRevision) => writeWorkspace(state, expectedRevision, { id, handle, file: handle ? null : await recordingData(file) });
+export const reconnectRecording = async (id, file, handle, state, expectedRevision, canApply) => writeWorkspace(state, expectedRevision, { id, handle, file: handle ? null : await recordingData(file), canApply });
 
 export function storageMessage(error) {
   if (error?.name === 'QuotaExceededError') return 'Browser storage is full. Free space or import fewer files, then retry. Keep your original audio files.';
   if (error?.name === 'SecurityError' || error?.name === 'InvalidStateError') return 'Browser storage is unavailable. Open this site in a normal browser tab and allow website storage.';
   return error?.message || 'Browser storage could not complete this operation. Retry or export a backup.';
+}
+
+// Replace portable workspace and audio in one revision-protected transaction.
+// Connected file handles never cross a backup boundary.
+export async function restoreWorkspace(state, files, expectedRevision, restoreId, canApply = () => {}) {
+  if (!(files instanceof Map) || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new Error('Invalid workspace restore request.');
+  const localIds = new Set(state.tracks.filter(track => track.source === 'local').map(track => track.id));
+  for (const [id, file] of files) if (!localIds.has(id) || !(file instanceof Blob)) throw new Error('Invalid portable audio entry.');
+  // Uploaded Blob slices can leave WebKit transactions unable to settle.
+  // Materialize readable portable records before acquiring any write lock.
+  const entries = new Map(), converted = new Map();
+  for (const [id, file] of files) {
+    if (!converted.has(file)) converted.set(file, await recordingData(file));
+    entries.set(id, converted.get(file));
+  }
+  const commit = async entries => {
+    const tx = (await db()).transaction(['state', 'files', 'sources'], 'readwrite'), store = tx.objectStore('state');
+    return new Promise((resolve, reject) => {
+      let nextRevision, operationError, conflict = false, aborting = false;
+      tx.oncomplete = () => resolve(nextRevision);
+      tx.onerror = event => {
+        operationError ||= event.target?.error || tx.error;
+        if (aborting) return;
+        aborting = true;
+        // Report failure after the aborted transaction releases its lock.
+        try { tx.abort(); } catch (error) { reject(operationError || error); }
+      };
+      tx.onabort = () => reject(conflict ? new Error(conflictMessage) : operationError || tx.error);
+      const existing = store.get('current'); existing.onerror = () => { operationError = existing.error; };
+      existing.onsuccess = () => {
+        if ((existing.result?.revision || 0) !== expectedRevision) { conflict = true; tx.abort(); return; }
+        nextRevision = expectedRevision + 1;
+        try {
+          canApply();
+          const save = store.put({ ...state, revision: nextRevision, backupRestoreId: restoreId }, 'current'); save.onerror = () => { operationError ||= save.error; };
+          tx.objectStore('files').clear(); tx.objectStore('sources').clear();
+          for (const [id, file] of entries) { const save = tx.objectStore('files').put(file, id); save.onerror = () => { operationError ||= save.error; }; }
+        } catch (error) { operationError = error; aborting = true; tx.abort(); }
+      };
+    });
+  };
+  return commit(entries);
 }
