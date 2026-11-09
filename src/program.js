@@ -1,4 +1,4 @@
-import { uid } from './model.js';
+import { uid, recordingClip } from './model.js';
 
 export function normalizeProgram(state) {
   state.collections ||= [];
@@ -43,7 +43,7 @@ export function insertNext(state, queue, currentIndex, track, targetId) {
     if (queuePosition < 0) queuePosition = queue.length;
   }
   while (queue[queuePosition]?.addedAfter === active?.occurrenceId && queue[queuePosition]?.groupId === targetId) queuePosition++;
-  const item = { track: structuredClone(track), groupId: group.id, groupName: group.name, kind: 'tanda', occurrenceId, addedAfter: active?.occurrenceId, pendingAddition: true };
+  const item = { track: structuredClone(track), ...recordingClip(track), groupId: group.id, groupName: group.name, kind: 'tanda', occurrenceId, addedAfter: active?.occurrenceId, pendingAddition: true };
   queue.splice(queuePosition, 0, item);
   return item;
 }

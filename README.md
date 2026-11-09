@@ -2,6 +2,8 @@
 
 A local-first web workspace for preparing and playing tango DJ sets, maintained independently from TangoDJ.
 
+Track completed capabilities, outstanding validation, and planned DJ features in the [development checklist](docs/dj-roadmap.md) or [progress board](docs/dj-roadmap.html). Completed checklist items are checked and crossed out. Run `npm run roadmap` after updating the checklist to regenerate the board; its completion percentage counts listed feature and validation tasks, not engineering effort or venue readiness.
+
 ## Run locally
 
 Requires Node.js 22.12+ (Node.js 24 recommended).
@@ -29,7 +31,7 @@ Use a tanda's **▶** button to hear just that tanda, or a recording's **▶** t
 
 **Local files** copies audio into browser storage. **Connect originals**, where the browser supports file handles, reads originals without storing a full audio copy. **Check files** shows permission and availability; **Locate file** and **Reconnect from folder** verify identical content even after renaming. Different audio requires reviewed replacement and fresh analysis. Connecting an identical original can reuse an existing recording ID; **Keep an app copy** offers independent storage at the displayed space cost. Filesystem permission may require renewal, and handles are not portable backups.
 
-Phones and tablets use labeled navigation and recording action menus. Playback continues while moving between work areas; compact controls remain available. DJ performance histories and event records are outside this feature scope.
+Phones and tablets use labeled navigation and recording action menus. Playback continues while moving between work areas; compact controls remain available. **Played recordings** opens the current DJ session's playback-start history, with CSV export for later reference.
 
 ## Milonga DJ playlist
 
@@ -46,9 +48,9 @@ The set follows a Tango / Tango / Vals / Tango / Tango / Milonga cycle. Tango ta
 | Canaro / Maida · Rhythmic tango · 1937–1938 | Milagro; Recuerdos de París; Nada más; Yo seré como tú quieras | The Girl from Ipanema — Astrud Gilberto & Stan Getz |
 | Canaro / Maida · Milonga · 1935–1936 | Largá las penas; Milonga criolla; Silueta porteña | Stand By Me — Ben E. King |
 
-All 28 selections are real recordings linked through YouTube's official embed; no audio is downloaded. Preview the transfers and musical progression before a live event. Video availability and embedding restrictions can change. Unknown YouTube durations are excluded from the displayed known runtime.
+All 28 selections are real recordings linked through YouTube's official embed; no audio is downloaded. Preview the transfers and musical progression before a live event. Video availability and embedding restrictions can change. Unbounded recordings with unknown durations are excluded from known runtime; configured clip lengths contribute to that total.
 
-Cortinas stop after 20 seconds in the set queue. **Auto next** continues to the next tanda. Playing a cortina directly from the library opens its full source, appending an unrestricted entry when needed while retaining the prepared queue. The group play button uses its selected interval. Exported JSON retains the group playback limits.
+The sample cortinas stop after 20 seconds in the set queue. **Auto next** continues to the next tanda unless that cortina is configured to wait. Newly created cortinas instead use the rest of their source and wait for manual advance by default. Playing a recording directly from Music replaces the active queue with that recording and uses its recording cues. Enable Live mode to protect the performance queue. The group play button uses the cortina's own interval. Exported JSON retains recording cues and group playback settings.
 
 The walkthrough uses this playlist for library, metadata, composition, playback, YouTube, and backup examples. Import your own local tango recordings for preview, reliable fades, and BPM/level analysis. No synthesized demonstration audio is included.
 
@@ -61,6 +63,9 @@ The walkthrough uses this playlist for library, metadata, composition, playback,
 - Create, rename, reorder, and remove tandas and cortinas. Add tracks with **Add to tanda** or drag them into a group; reorder tracks within groups.
 - Load an ordered set into the play queue, switch between local and YouTube recordings, pause, seek, adjust volume, and optionally advance automatically.
 - Preview local recordings, fade recordings in and out at segment boundaries and during manual transitions, and optionally apply analyzed gain.
+- Save cue-in and cue-out positions for library and tanda playback, select a separate local-preview output where supported, and protect the live queue with Live mode.
+- Review prepared files and musical choices, display remaining runtime and manual waits, and request a visible-page screen wake lock.
+- Add optional silence between recordings in the same tanda, record successful playback starts in a DJ session, and hide already played music while choosing the next recording.
 - Estimate local BPM, RMS level, peak, and suggested gain. BPM remains editable.
 - Save metadata, set structure, and local audio in IndexedDB. Export and import portable JSON set files; relink missing audio when moving a set to another browser.
 
@@ -71,7 +76,8 @@ The walkthrough uses this playlist for library, metadata, composition, playback,
 | Library and tanda composition | Yes | Yes |
 | Playback, seeking, queue | Yes, if the browser supports the codec | Official embedded player; connection required |
 | Metadata | Embedded tags and manual editing | Available video title/channel and manual editing |
-| Audio preview | Yes, through the current output | Use the video player |
+| Audio preview | Shared output while paused, or a verified separate output where supported | Use the video player on the main output |
+| Recording cue-in/out | Yes | Yes |
 | Fades | Web Audio fade-in/out | Official volume API; device support varies |
 | Analyzed gain adjustment | Yes | No |
 | BPM and level analysis | Decoded audio | Manual BPM entry only |
@@ -81,8 +87,8 @@ YouTube audio is played through the official IFrame API. Videos are not download
 ## Practical limits
 
 - Local codec support varies by browser. MP3 and WAV are good starting points; parsing metadata does not guarantee that a codec can play.
-- Preview shares the main output. Separate headphone routing is not implemented; avoid previewing over a live room output.
-- Fade defaults to Off to preserve recording entrances. When enabled, each recording fades in from its playback position and fades out before its natural or configured endpoint. Manual changes use sequential fade-out/fade-in, without overlapping crossfade. Short segments clamp fades to half their length. Pausing, seeking, buffering, and changing master volume preserve or recalculate the envelope. YouTube uses the official player volume API; some mobile devices ignore programmatic video volume, so use local files when audible fades must be reliable. Groups play full recordings unless they carry a playback limit, as the sample cortinas do. Cortina groups support a saved start offset and playback length; general per-recording cue points are not implemented.
+- Local preview can use a separate headphone device when the browser supports `setSinkId` and exposes enough device information to verify that it differs from the system output. Shared or unverified output blocks preview while the main deck is starting or playing; Live mode requires a verified separate output even when paused. Test the actual headphones and venue output before performing. YouTube remains on the main output.
+- Fade defaults to Off to preserve recording entrances. When enabled, each recording fades in from its playback position and fades out before its natural or configured endpoint. Manual changes use sequential fade-out/fade-in, without overlapping crossfade. Short segments clamp fades to half their length. Pausing, seeking, buffering, and changing master volume preserve or recalculate the envelope. YouTube uses the official player volume API; some mobile devices ignore programmatic video volume, so use local files when audible fades must be reliable. Recording cues apply to Music and tanda playback. Cortinas use their own start offset and optional length.
 - BPM uses an onset-correlation estimate over up to the first three minutes; old recordings and expressive timing can produce half/double-tempo or inaccurate estimates. Review by ear.
 - RMS and peak are measured over the decoded recording. Suggested gain targets approximately -18 dBFS RMS, caps peak at -1 dBFS, and limits gain to ±12 dB. This is not integrated LUFS normalization or a limiter.
 - Analysis decodes one full recording at a time and may use substantial memory for long files.
@@ -102,13 +108,13 @@ npm run test:devices
 npm run test:review
 ```
 
-Unit checks cover URL validation, queue order, set integrity, and tempo/level estimation. Browser checks cover generated WAV import, metadata editing, analysis, local playback, set export, persistence, YouTube metadata import, missing-file relinking, and mobile layout. YouTube network playback is subject to provider restrictions and is not exercised by mocked metadata checks.
+Unit checks cover URL validation, queue order, cue ranges and duration bounds, musical preparation review, runtime estimates, cancellable recording gaps, session-history persistence and CSV escaping, and tempo/level estimation. Browser checks cover generated WAV import, metadata editing, analysis, local playback, set export, persistence, YouTube metadata import, missing-file relinking, and mobile layout. Automated output-routing checks use simulated devices; they do not verify physical headphones or venue sound. YouTube network playback is subject to provider restrictions and is not exercised by mocked metadata checks.
 
 The [complete feature validation](docs/all-features-validation.md) maps current controls and error/recovery paths to repeatable UI cases. `test:review` runs the production build in desktop Chromium, phone Chromium, and tablet WebKit. Review scripts support background execution; `REVIEW_HEADLESS=1` makes the real fade review headless. Provider availability checks and codec probes are short operational checks; codec probes require `ffmpeg`.
 
 ## Personal browser workspace and languages
 
-Each visitor has an independent workspace for the same site origin in their browser profile. IndexedDB stores library metadata, local audio (Blob values or a byte-based fallback for affected WebKit environments), group order, candidate sets, reusable tandas, original-file handles where supported, and the loaded queue; localStorage stores language, volume, fade, normalization, automatic advance, and walkthrough preferences. Reloading restores the queue without automatically starting audio. Regular visits preserve deleted/reordered sample groups; **Load milonga playlist** explicitly adds missing sample groups again.
+Each visitor has an independent workspace for the same site origin in their browser profile. IndexedDB stores library metadata, local audio (Blob values or a byte-based fallback for affected WebKit environments), group order, candidate sets, reusable tandas, original-file handles where supported, and the loaded queue; localStorage stores language, volume, fade, normalization, automatic advance, recording-gap and walkthrough preferences, plus the separate current DJ-session history. Reloading restores the queue without automatically starting audio. Regular visits preserve deleted/reordered sample groups; **Load milonga playlist** explicitly adds missing sample groups again.
 
 The language selector supports Korean, English, and Spanish, including the walkthrough and playback recovery controls. Recording titles, artist names, and user-entered metadata are preserved. The initial language follows the browser language and subsequent choices are saved. Interface text uses larger, readable sizes and controls remain usable on mobile.
 
@@ -132,43 +138,63 @@ Numeric loopback visits transfer the saved workspace, audio blobs, and preferenc
 
 ## Playback and editing improvements
 
-- Playing a library recording selects its entry in the existing queue. A recording outside the queue is appended; the prepared queue is preserved.
+- Playing a library recording or an individual recording in a tanda creates a one-recording listening queue. Playing a tanda or candidate set creates a queue for that selection. Live mode blocks these replacements.
 - The play button shows play or pause state, and previous/next controls are disabled while switching recordings or at queue boundaries.
-- Reload restores the last selected queue recording without autoplay. Press Play to start that recording again from its beginning.
+- Reload restores the last selected queue recording and saved source position without autoplay. Press Play to resume; a stopped or completed recording restarts at its cue-in position.
 - The set builder shows the destination group for additions. Group and recording order edits have a one-step undo while the page is open.
-- Editing the set after loading a queue shows a reminder to reload it. The current queue stays stable during performance.
-- New cortinas default to a 0–20 second interval. Edit the start and end together in one compact row; displayed duration follows the selected segment.
+- Editing the set after loading a queue shows a reminder to update the upcoming queue. The current queue stays stable during performance.
+- New cortinas default to the rest of the recording and a manual wait before the next tanda. Uncheck **Use the rest of the recording** to choose a bounded interval; the initial limit is 20 seconds. Edit the start and end in one compact row; displayed duration follows the playable segment.
 - YouTube duration is recorded when the player supplies it. Missing durations remain excluded from known runtime totals.
 
-Further playback checks preserve the remaining queue when its current recording is deleted, stop progress callbacks from paused/inactive sources, and restart a completed cortina from the beginning when replayed. Metadata edits update the loaded queue immediately. Canceling a rename or deletion keeps the previous undo action intact.
+Further playback checks preserve the remaining queue when its current recording is deleted, stop progress callbacks from paused/inactive sources, and restart a completed cortina at its cue start when replayed. Metadata-only edits update the loaded queue immediately; cue changes require an upcoming-queue update. Canceling a rename or deletion keeps the previous undo action intact.
 
 
 ## DJ preparation and live operation
 
-Each cortina group has **From** and **To** (absolute seconds into the source), and **Wait before the next tanda**. Play the source from the library, seek to a suitable musical entrance, then choose the position icon on its cortina group to save that cue. The adjacent play button checks the chosen segment on the main output. These controls work with local recordings and YouTube videos. They do not provide a separate headphone output.
+In a recording's **Edit** dialog, **Cue in (seconds)** and **Cue out (seconds)** are absolute positions into the source. A blank start means zero; a blank end means the rest of the recording. These defaults apply to Music, candidate-set, and tanda playback for local recordings and YouTube. **Use current position as cue in** captures the deck position. Cue edits leave the current queue entry unchanged; **Update upcoming queue** applies them to later entries. Playback and known runtime stop at the source end without rewriting a saved cue-out value.
+
+Each cortina group has **From** and **To** (absolute seconds into the source), **Use the rest of the recording**, and **Wait before the next tanda**. Play the source from Music, seek to a suitable musical entrance, then choose the position icon on its cortina group to save that cue. The adjacent play button checks the chosen segment on the main output. Cortinas retain their own intervals independently of the recording cues.
 
 Known source lengths bound cortina interval edits. Moving a cue close to the recording's end shortens its segment to the remaining time. A saved cue beyond the known source length is rejected before replacing the current playback.
 
-Use **Update upcoming queue** to apply edits after the current recording while it keeps playing. **Load & play set** loads the entire edited set and restarts it from the first recording. Changes stay separate from the active queue so editing the next tanda does not alter the current transition. At a held cortina's end, press **Next** when ready to start the next tanda's first recording. Press **Play** to replay the same segment. Stop rewinds to the segment's start; pause preserves its current position. Seeking while paused immediately updates elapsed and remaining time. Retry retains the current position; a finished recording or segment restarts from its beginning.
+Use **Update upcoming queue** to apply edits after the current recording while it keeps playing. **Load & play set** loads the entire edited set and restarts it from the first recording. Changes stay separate from the active queue so editing the next tanda does not alter the current transition. At a held cortina's end, press **Next** when ready to start the next tanda's first recording. Press **Play** to replay the same segment. Stop rewinds to the segment's start; pause preserves its current position. Seeking while paused immediately updates elapsed and remaining time. Retry retains the current position; a finished recording or segment restarts at its cue start.
+
+Enable **Live mode** before performing to protect against direct playback replacement, queue jumps, seeking, importing a replacement set, and changes to the active source. **Pause**, **Stop**, **Next**, and **Next tanda** remain available, as do upcoming-program edits and reservations. Unlock the mode for a deliberate jump or replacement. Local preview in this mode requires a verified separate device; choose it under **Settings → Headphone preview**, adjust **Preview volume**, and check the sound by ear.
+
+**Check prepared set** reviews local-file availability and permissions, missing references, cue ranges, repeated recordings, mixed styles, orchestra and singer consistency, cortina placement, and typical tanda sizes. Names are compared without case or accent differences; missing singer metadata does not imply an instrumental recording. With at least six tandas whose recording styles are all known and uniform, it also reviews departures from the common Tango / Tango / Vals / Tango / Tango / Milonga cycle. Musical findings ask whether a choice is intentional; they do not judge artistic quality or enforce composition rules. Online YouTube sources still need a playback rehearsal: this check cannot prove provider availability, codec decoding, or physical sound output.
+
+**Gap between tanda recordings** accepts 0–10 seconds and defaults to zero (Off). It adds silence only when automatic advance follows a recording's natural or configured endpoint into the next recording in the same tanda. It adds no gap around cortinas, between different groups, or during library/candidate-set listening. Manual **Next** bypasses the gap; **Pause** and **Stop** cancel a pending countdown.
+
+The deck's **Set remaining** total uses the current source position, effective clip lengths, and configured gaps within each tanda. **Unknown lengths** and **Manual waits** identify uncertainty; waits do not add a guessed duration. **Estimated finish** appears only during playback with automatic advance, known lengths, and no manual waits. It remains an estimate and does not account for future pauses or network stalls.
+
+**Keep screen awake** requests a screen wake lock while the page is visible. Support and power policies vary; this does not guarantee background playback. Supported browsers also expose play, pause, stop, and track controls through Media Session. With focus outside dialogs, editable fields, and interactive controls, **Space** toggles playback, **N** advances, and **S** stops. Live-mode guards apply to these controls as well.
 
 The deck shows the recording number within the tanda, remaining playable time, and the next recording. A compact deck appears when the full transport is outside the viewport, allowing playback control while browsing the library. On narrow screens, recordings display as cards with visible actions. Search accepts Spanish names with or without accents.
 
-Editing or relinking the current recording's source stops the old source. Press Play to load the updated source; metadata-only changes keep the music playing. Importing a replacement set clears the old deck and undo history.
+With Live mode unlocked, editing or relinking the current recording's source stops the old source. Press Play to load the updated source; metadata-only changes keep the music playing. Importing a replacement set clears the old deck and undo history.
 
 Saving uses a workspace revision to prevent an older tab from replacing newer edits saved by another tab. A conflicting tab keeps its in-memory edits available for export and reports a save failure. Export those edits if needed, then reload to adopt the latest saved workspace. A failed metadata save does not delete the stored audio.
+
+## DJ session history
+
+The first successful main-deck playback starts a DJ session automatically; **New DJ session** lets you choose a name. **Played recordings** lists successful playback starts with time, recording metadata, group, and source position. A start remains in the history even if only part of the recording is heard. Local preview is excluded, and a start is not evidence of completed or audible room playback.
+
+Already played music receives a **Played this session** badge. **Hide played recordings** removes it from the visible library while leaving the catalog intact. Playing it again produces a repeat reminder. Matching uses YouTube video IDs or local content hashes; local recordings without a known content hash use their recording ID. Cortinas remain available for reuse.
+
+The current history is saved in this browser separately from the set's JSON export. **New DJ session** replaces it after an export reminder; use **Export history CSV** to keep a separate record first. History retains the latest 1,000 starts. CSV cells are quoted, and formula-like values are escaped for spreadsheet use. Clearing site storage removes the local history; there is no automatic history synchronization across browsers or devices.
 
 ## Usage scenarios
 
 | Situation | Suggested workflow | Current limit |
 | --- | --- | --- |
-| Personal set preparation | Import recordings, edit orchestra/singer details, arrange tandas, choose cortina intervals, then export the set. | Cortina audition shares the main output. |
+| Personal set preparation | Import recordings, edit orchestra/singer details and recording cues, arrange tandas, review the prepared set, then export. | Cortina group-play uses the main output; local preview supports a verified separate device where available. |
 | Dance lessons and practice | Prepare short groups; disable Auto next for manual pacing and use Play to repeat a finished recording. | General per-recording loop markers are not available. |
-| Small milonga | Prepare local recordings, keep the upcoming queue updated, and use the compact deck while browsing. | Browser codec support and the room's output setup need a rehearsal. |
+| Small milonga | Prepare local recordings, enable Live mode, keep the upcoming queue updated, and use the compact deck while browsing. | Browser codec support, headphone isolation, and the room's output setup need a rehearsal. |
 | Announcements or performances between tandas | Enable Wait before the next tanda on the preceding cortina, then press Next when ready. | No microphone mixer is included. |
 | Online source research | Add a YouTube link, inspect the full source, choose a cortina interval, and retry at the same position if buffering stops. | Network access and permission to embed the video are required. |
 | Moving to another device | Export/import the set and relink its local recordings on the destination browser. | JSON includes metadata and structure, not audio; automatic synchronization is unavailable. |
 
-Local playback, editing, saving, and export work without a network connection after the app is open. Starting the app from an uncached offline browser is not supported.
+Local playback, editing, saving, and export work without a network connection after the app is open. A successful online launch must cache the app before it can open offline.
 
 ## Extended playback checks
 

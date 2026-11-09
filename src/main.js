@@ -1,6 +1,6 @@
 import './style.css';
 import { parseBlob } from 'music-metadata';
-import { uid, youtubeId, flattenSet, removeTrack, validateSet } from './model.js';
+import { uid, youtubeId, flattenSet, removeTrack, validateSet, recordingClip } from './model.js';
 import { saveState, loadState, saveFile, getFile, deleteFile, replaceRecording, storageMessage, saveSource, reconnectRecording } from './storage.js';
 import { normalizeProgram, insertGroupAfterSelection, insertNext } from './program.js';
 import { canConnectFiles, canConnectFolder, contentHash, resolveSource, attachIdentical, folderFiles } from './file-sources.js';
@@ -10,13 +10,17 @@ import { REAL_SAMPLE_PACK, realTracks, realGroups, realCollections, removeOldExa
 import { guideMarkup } from './guide.js';
 import { groupDuration, queueSignature } from './workspace.js';
 import { t, startI18n, setLanguage, getLanguage } from './i18n.js';
+import { PerformanceControls, performanceControls, performanceSettings, performanceDialog } from './performance.js';
+import { SessionControls, sessionControls, sessionDialog } from './session-ui.js';
+import { GapScheduler } from './spacing.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const time = seconds => Number.isFinite(seconds) ? `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}` : '—';
 let state = { tracks: [], groups: [] }, selected = null, queue = [], queueIndex = -1, current = null, busy = false;
-let playRequest = 0, timedEnd = false, loadedSignature = null, resumeIndex = 0, resumePosition = 0, queueGroupId = null;
-let undoGroups = null, transitioning = false, stopped = false, lastRenderedIndex = -1;
+let playRequest = 0, committedPlayRequest = -1, gapRemaining = 0, timedEnd = false, loadedSignature = null, resumeIndex = 0, resumePosition = 0, queueGroupId = null;
+let undoGroups = null, transitioning = false, preparingPlayback = false, stopped = false, lastRenderedIndex = -1;
 const files = new Map(), sourceStatuses = new Map();
+const gapScheduler = new GapScheduler();
 let activeCollection = null, collectingInto = null, reconnectMode = false, addingNext = false;
 let savedQueue = [], revision = 0, firstVisit = true;
 let settings = {};
@@ -50,13 +54,15 @@ function checkpointPlayback(force = false) {
   } catch {}
 }
 function renderTimeline(item, sourcePosition, sourceDuration = item?.track.duration) {
-  const start = item?.startSeconds || 0, available = Math.max(0, sourceDuration - start);
-  const duration = item?.limitSeconds ? Math.min(item.limitSeconds, available > 0 ? available : item.limitSeconds) : available;
+  const start = item?.startSeconds || 0, knownDuration = Number.isFinite(sourceDuration) && sourceDuration > 0;
+  const available = knownDuration ? Math.max(0, sourceDuration - start) : null;
+  const duration = item?.limitSeconds ? Math.min(item.limitSeconds, available ?? item.limitSeconds) : available;
   const position = Math.max(0, sourcePosition - start);
   $('#position').textContent = `${time(item?.limitSeconds ? Math.min(position, item.limitSeconds) : position)} / ${time(duration)}`;
   $('#remaining-time').textContent = duration > 0 ? `${t('Remaining')}: ${time(Math.max(0, duration - position))}` : '';
   $('#mini-remaining').textContent = $('#remaining-time').textContent;
   $('#seek').value = duration > 0 ? Math.min(100, position / duration * 100) : 0;
+  performanceTools.renderRuntime(queue, queueIndex >= 0 ? queueIndex : resumeIndex, sourcePosition);
 }
 window.addEventListener('pagehide', () => checkpointPlayback(true));
 document.addEventListener('visibilitychange', () => { if (document.hidden) checkpointPlayback(true); });
@@ -84,7 +90,7 @@ function notify(message, error = false) {
         <div id="drop-zone" tabindex="0" role="button" aria-label="Choose or drop local music files"><span class="drop-icon">↥</span><div><strong>Drop your music here</strong><span>MP3, WAV, FLAC, M4A and other browser-supported audio</span></div><span class="drop-link">Browse files</span></div>
         <div class="file-tools"><button id="connect-files">Connect originals</button><button id="check-files">Check files</button><button id="reconnect-folder">Reconnect from folder</button></div><p class="hint storage-explanation">Local files keeps an app copy. Connect originals reads files in place on supported browsers.</p><form id="youtube-form" class="youtube-form"><span class="youtube-mark">▶</span><input name="url" type="url" aria-label="YouTube video URL" placeholder="Paste a YouTube video link" required><button type="submit">Add video</button></form>
         <div class="library-destination"><label for="add-target">Add recordings to</label><select id="add-target" aria-label="Recording destination"></select><button id="finish-adding" hidden>Back to set</button><p id="library-target" class="hint"></p></div><p id="import-progress" class="hint" role="status" hidden></p><div class="filters"><input id="search" type="search" aria-label="Search library" placeholder="Search title, orchestra, singer…"><select id="collection-filter" aria-label="Filter set"><option value="">All sets</option></select><select id="style-filter" aria-label="Filter dance style"><option value="">All styles</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select><select id="source-filter" aria-label="Filter source"><option value="">All sources</option><option value="local">Local</option><option value="youtube">YouTube</option></select></div>
-        <div class="table-scroll"><table><thead><tr><th>RECORDING</th><th>STYLE / YEAR</th><th>BPM</th><th>LENGTH</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="tracks"></tbody></table></div>
+        <label class="history-filter"><input id="hide-played" type="checkbox"> Hide played recordings</label><div class="table-scroll"><table><thead><tr><th>RECORDING</th><th>STYLE / YEAR</th><th>BPM</th><th>LENGTH</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody id="tracks"></tbody></table></div>
         <div id="empty-library" class="empty"><span>♫</span><h3>A home for your collection</h3><p>Bring in your recordings, organize the details,<br>and find the right music for each moment.</p><button id="clear-filters" hidden>Clear filters</button></div>
         <div class="panel-foot"><span id="library-summary">0 recordings · 0:00 known duration</span><button id="analyze-all" class="text-button">Analyze local tracks</button></div>
       </section>
@@ -99,11 +105,11 @@ function notify(message, error = false) {
     </div>
     <section id="deck" class="panel deck">
       <div class="deck-main"><div class="eyebrow">04 / PLAYBACK</div><div class="now-playing"><div class="record-art">♫</div><div><span id="playing-group" class="eyebrow">READY WHEN YOU ARE</span><h2 id="playing-title">No recording loaded</h2><p id="playing-artist">Play a track or load your prepared set.</p></div></div>
-        <div class="transport"><button id="previous" aria-label="Previous track">⏮</button><button id="play-pause" class="play-button" aria-label="Play or pause">▶</button><button id="next" aria-label="Next track">⏭</button><button id="stop" aria-label="Stop playback">■</button><span id="position">0:00 / 0:00</span></div>
+        ${performanceControls}${sessionControls}<p id="gap-status" class="hint" role="status" hidden></p><div class="transport"><button id="previous" aria-label="Previous track">⏮</button><button id="play-pause" class="play-button" aria-label="Play or pause">▶</button><button id="next" aria-label="Next track">⏭</button><button id="stop" aria-label="Stop playback">■</button><span id="position">0:00 / 0:00</span></div>
         <button id="next-tanda" class="primary wide" hidden>Next tanda</button><div id="pending-additions"></div><div class="deck-context"><span id="recording-number"></span><span id="remaining-time"></span></div><div id="up-next" class="up-next" hidden></div>
         <input id="seek" type="range" min="0" max="100" value="0" aria-label="Playback position">
-        <details class="playback-options" open><summary>Playback settings</summary><div class="deck-settings"><label>Volume <input id="volume" type="range" min="0" max="100" value="85"></label><label>Fade <select id="fade"><option value="0" selected>Off</option><option value="1">1 sec</option><option value="2">2 sec</option><option value="4">4 sec</option></select></label><label><input id="normalize" type="checkbox"> Level local audio</label><label><input id="auto-next" type="checkbox" checked> Auto next</label></div>
-        <p class="hint">Fade follows the beginning and end of each recording. YouTube fades depend on device volume support; use local files for reliable fades. Preview uses the live output.</p></details><p id="playback-loading" class="hint" role="status" hidden>Loading recording…</p><div id="playback-recovery" class="playback-stall" hidden><span id="playback-recovery-message"></span><button id="playback-retry">Retry</button><button id="playback-relink">Relink file</button><button id="playback-skip">Skip recording</button></div>
+        <details class="playback-options" open><summary>Playback settings</summary><div class="deck-settings"><label>Volume <input id="volume" type="range" min="0" max="100" value="85"></label><label>Fade <select id="fade"><option value="0" selected>Off</option><option value="1">1 sec</option><option value="2">2 sec</option><option value="4">4 sec</option></select></label><label><input id="normalize" type="checkbox"> Level local audio</label><label>Gap between tanda recordings <input id="track-gap" type="number" min="0" max="10" step="0.5" value="0" aria-label="Gap between tanda recordings"> seconds</label><label><input id="auto-next" type="checkbox" checked> Auto next</label></div>
+        <p class="hint">Fade follows the beginning and end of each recording. YouTube fades depend on device volume support; use local files for reliable fades. Preview is blocked on shared output during playback. Select headphones in Settings.</p></details><p id="playback-loading" class="hint" role="status" hidden>Loading recording…</p><div id="playback-recovery" class="playback-stall" hidden><span id="playback-recovery-message"></span><button id="playback-retry">Retry</button><button id="playback-relink">Relink file</button><button id="playback-skip">Skip recording</button></div>
         <div id="preview-status" class="preview-status" hidden><span></span><button id="stop-preview">Stop preview</button></div>
         <p id="playback-permission" class="hint" role="status" hidden>Playback has not started. Press play inside the YouTube video below, or press Play again.</p><div id="playback-stall" class="playback-stall" hidden><span>Playback is waiting for YouTube. Check your connection or retry from the current position.</span><button id="resume-video">Retry here</button></div><div id="youtube-wrap" hidden><div id="youtube-player"></div><div id="youtube-error" hidden><strong>YouTube video unavailable</strong><p id="youtube-error-message"></p><div class="video-recovery"><a id="youtube-open" target="_blank" rel="noopener noreferrer">Open on YouTube</a><button id="youtube-retry">Retry video</button><button id="youtube-replace">Replace video link</button><button id="youtube-local">Use my local recording</button><button id="youtube-skip">Skip unavailable video</button></div></div><p class="hint">If automatic playback is blocked, press play in the video.</p></div>
       </div>
@@ -115,11 +121,11 @@ function notify(message, error = false) {
   <dialog id="dedication-dialog" aria-labelledby="dedication-title"><button class="dedication-close" data-close="dedication-dialog" aria-label="Close">×</button><span class="dedication-star" aria-hidden="true">✦</span><h2 id="dedication-title" data-preserve>Dedicated to 태풍</h2></dialog>
   <dialog id="examples-dialog"><div class="dialog-heading"><h2>Example sets</h2><button data-close="examples-dialog" aria-label="Close">×</button></div><p class="hint">Six tandas with cortinas. Add this set to your workspace when you need a starting point.</p><div class="example-flow">Tango · Tango · Vals · Tango · Tango · Milonga</div><div id="example-actions"></div></dialog>
   <dialog id="guide-dialog"><div class="dialog-heading"><h2>User guide</h2><button data-close="guide-dialog" aria-label="Close">×</button></div>${guideMarkup}</dialog>
-  <dialog id="settings-dialog"><div class="dialog-heading"><h2>Settings</h2><button data-close="settings-dialog" aria-label="Close">×</button></div><label class="language-control">Language <select id="language" aria-label="Language"><option value="ko">한국어</option><option value="en">English</option><option value="es">Español</option></select></label><p><a href="https://minjung-world.notion.site/Tango-DJ-Studio-Privacy-Policy-b7474a525fd882d39c2e01b0091b667b" target="_blank" rel="noopener noreferrer">Privacy policy</a> · <a href="https://minjung-world.notion.site/Tango-DJ-Studio-Terms-of-Use-c3174a525fd8831f9cab81b1b229fa08" target="_blank" rel="noopener noreferrer">Terms of use</a></p><section class="storage-panel"><div><strong>Personal workspace</strong><p>Your library, audio files, set, queue, and preferences are saved for this site in this browser. Other visitors have their own workspace.</p></div><div><button id="persist-storage">Request persistent storage</button><small id="storage-details"></small></div></section></dialog>
-  <dialog id="actions-dialog"><div class="dialog-heading"><h2>Recording actions</h2><button data-close="actions-dialog" aria-label="Close">×</button></div><p id="actions-title" data-preserve></p><div id="recording-actions"></div></dialog><input id="file-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" multiple hidden>
+  <dialog id="settings-dialog"><div class="dialog-heading"><h2>Settings</h2><button data-close="settings-dialog" aria-label="Close">×</button></div><label class="language-control">Language <select id="language" aria-label="Language"><option value="ko">한국어</option><option value="en">English</option><option value="es">Español</option></select></label><p><a href="https://minjung-world.notion.site/Tango-DJ-Studio-Privacy-Policy-b7474a525fd882d39c2e01b0091b667b" target="_blank" rel="noopener noreferrer">Privacy policy</a> · <a href="https://minjung-world.notion.site/Tango-DJ-Studio-Terms-of-Use-c3174a525fd8831f9cab81b1b229fa08" target="_blank" rel="noopener noreferrer">Terms of use</a></p>${performanceSettings}<section class="storage-panel"><div><strong>Personal workspace</strong><p>Your library, audio files, set, queue, and preferences are saved for this site in this browser. Other visitors have their own workspace.</p></div><div><button id="persist-storage">Request persistent storage</button><small id="storage-details"></small></div></section></dialog>
+  ${performanceDialog}${sessionDialog}<dialog id="actions-dialog"><div class="dialog-heading"><h2>Recording actions</h2><button data-close="actions-dialog" aria-label="Close">×</button></div><p id="actions-title" data-preserve></p><div id="recording-actions"></div></dialog><input id="file-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" multiple hidden>
   <input id="set-input" type="file" accept="application/json,.json" hidden>
   <input id="relink-input" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg,.aiff,.aif,.opus" hidden>
-  <dialog id="target-dialog"><div class="dialog-heading"><h2 id="target-heading">Choose target tanda</h2><button data-close="target-dialog" aria-label="Close">×</button></div><p id="target-recording" data-preserve></p><p id="target-explanation" class="hint"></p><label id="target-label" for="next-target">Target tanda</label><select id="next-target" aria-label="Target tanda"></select><button id="confirm-next" class="primary">Add to play next</button></dialog><dialog id="repair-dialog"><div class="dialog-heading"><h2>Review reconnection</h2><button data-close="repair-dialog">×</button></div><div id="repair-results"></div></dialog><dialog id="metadata-dialog"><form id="metadata-form"><div class="eyebrow">RECORDING DETAILS</div><h2>Edit metadata</h2><input name="id" type="hidden"><label>Title<input name="title" required maxlength="300"></label><label>Orchestra / artist<input name="artist" maxlength="300"></label><label>Singer<input name="singer" maxlength="300"></label><div class="form-row"><label>Year<input name="year" maxlength="30"></label><label>Style<select name="style" aria-label="Style"><option value="">Unspecified</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select></label><label>BPM<input name="bpm" type="number" min="20" max="300" step="1"></label></div><label id="video-url-label" hidden>Video URL<input name="videoUrl" type="url" placeholder="https://www.youtube.com/watch?v=..."></label><p id="analysis-details" class="hint"></p><div class="dialog-actions"><button id="close-metadata" type="button">Cancel</button><button class="primary" type="submit">Save details</button></div></form></dialog>
+  <dialog id="target-dialog"><div class="dialog-heading"><h2 id="target-heading">Choose target tanda</h2><button data-close="target-dialog" aria-label="Close">×</button></div><p id="target-recording" data-preserve></p><p id="target-explanation" class="hint"></p><label id="target-label" for="next-target">Target tanda</label><select id="next-target" aria-label="Target tanda"></select><button id="confirm-next" class="primary">Add to play next</button></dialog><dialog id="repair-dialog"><div class="dialog-heading"><h2>Review reconnection</h2><button data-close="repair-dialog">×</button></div><div id="repair-results"></div></dialog><dialog id="metadata-dialog"><form id="metadata-form"><div class="eyebrow">RECORDING DETAILS</div><h2>Edit metadata</h2><input name="id" type="hidden"><label>Title<input name="title" required maxlength="300"></label><label>Orchestra / artist<input name="artist" maxlength="300"></label><label>Singer<input name="singer" maxlength="300"></label><div class="form-row"><label>Year<input name="year" maxlength="30"></label><label>Style<select name="style" aria-label="Style"><option value="">Unspecified</option><option>Tango</option><option>Vals</option><option>Milonga</option><option>Cortina</option></select></label><label>BPM<input name="bpm" type="number" min="20" max="300" step="1"></label></div><label id="video-url-label" hidden>Video URL<input name="videoUrl" type="url" placeholder="https://www.youtube.com/watch?v=..."></label><fieldset class="recording-cues"><legend>Recording playback cues</legend><p class="hint">Applied to library playback and tandas. Cortinas keep their own intervals. Updating cues leaves the current recording unchanged; update the upcoming queue to apply them.</p><div class="form-row"><label>Cue in (seconds)<input name="cueStartSeconds" type="number" min="0" max="86400" step="0.1"></label><label>Cue out (seconds)<input name="cueEndSeconds" type="number" min="0.1" max="90000" step="0.1" placeholder="Recording end"></label></div><button id="cue-current-position" type="button">Use current position as cue in</button></fieldset><p id="analysis-details" class="hint"></p><div class="dialog-actions"><button id="close-metadata" type="button">Cancel</button><button class="primary" type="submit">Save details</button></div></form></dialog>
 `;
 const $ = selector => document.querySelector(selector);
 $('#dismiss-notice').onclick = () => { $('#notice').hidden = true; clearTimeout(notify.timer); };
@@ -176,7 +182,8 @@ $('#temporary-export').onclick = () => $('#export-set').click();
 
 
 const player = new Player((position, duration) => {
-  if (transitioning) return;
+  const switching = transitioning && !preparingPlayback;
+  if (switching) return;
   const track = player.track;
   if (track?.source === 'youtube' && Number.isFinite(duration) && duration > 0) {
     const original = state.tracks.find(t => t.id === track.id);
@@ -186,7 +193,7 @@ const player = new Player((position, duration) => {
     }
   }
   const startSeconds = queue[queueIndex]?.startSeconds || 0;
-  if (!transitioning && !timedEnd && Number.isFinite(duration) && duration > 0 && startSeconds >= duration) {
+  if (!switching && !timedEnd && Number.isFinite(duration) && duration > 0 && startSeconds >= duration) {
     timedEnd = true; player.stop(); updateTransport();
     notify('The start must be before the recording ends. Choose an earlier cue.', true); return;
   }
@@ -194,8 +201,8 @@ const player = new Player((position, duration) => {
   checkpointPlayback();
   position = Math.max(0, position - startSeconds);
   const limit = queue[queueIndex]?.limitSeconds;
-  if (!transitioning && limit && position >= limit && !timedEnd) { timedEnd = true; player.stop(); updateTransport(); checkpointPlayback(true); if ($('#auto-next').checked && !queue[queueIndex]?.holdAfter) void next(); else notify('Cortina finished. Press Next to continue.'); }
-}, () => { timedEnd = true; checkpointPlayback(true); updateTransport(); if ($('#auto-next').checked && !queue[queueIndex]?.holdAfter) void next(); else if (queue[queueIndex]?.kind === 'cortina') notify('Cortina finished. Press Next to continue.'); }, error => {
+  if (!switching && limit && position >= limit && !timedEnd) { timedEnd = true; player.stop({ preservePreview: true }); updateTransport(); checkpointPlayback(true); if ($('#auto-next').checked && !queue[queueIndex]?.holdAfter) void automaticNext(); else notify(queue[queueIndex]?.kind === 'cortina' ? 'Cortina finished. Press Next to continue.' : 'Recording finished. Press Next to continue.'); }
+}, () => { timedEnd = true; checkpointPlayback(true); updateTransport(); if ($('#auto-next').checked && !queue[queueIndex]?.holdAfter) void automaticNext(); else if (queue[queueIndex]?.kind === 'cortina') notify('Cortina finished. Press Next to continue.'); }, error => {
   if (error?.type !== 'youtube') {
     if (current?.source === 'local') { $('#playback-recovery').hidden = false; $('#playback-recovery-message').textContent = t(error); $('#playback-relink').hidden = false; }
     notify(error, true); return;
@@ -216,16 +223,19 @@ $('#youtube-skip').onclick = next;
 $('#youtube-local').onclick = () => { reconnectMode = false; relinkId = player.track?.id; $('#relink-input').click(); };
 $('#youtube-replace').onclick = () => { const track = state.tracks.find(t => t.id === player.track?.id); if (track) editTrack(track); };
 function saveSettings() {
-  const value = { volume: Number($('#volume').value), fade: $('#fade').value, normalize: $('#normalize').checked, autoNext: $('#auto-next').checked, guideHidden: $('#practice-guide').hidden };
+  const value = { volume: Number($('#volume').value), fade: $('#fade').value, normalize: $('#normalize').checked, autoNext: $('#auto-next').checked, gapSeconds: Number($('#track-gap').value) || 0, guideHidden: $('#practice-guide').hidden };
   try { localStorage.setItem('studio-settings', JSON.stringify(value)); } catch { notify('Save failed — export a backup', true); }
 }
 $('#language').onchange = event => { setLanguage(event.target.value); render(); };
-for (const id of ['volume','fade','normalize','auto-next']) $(`#${id}`).addEventListener('change', saveSettings);
+for (const id of ['volume','fade','normalize','auto-next','track-gap']) $(`#${id}`).addEventListener('change', saveSettings);
 if (Number.isFinite(settings.volume)) $('#volume').value = Math.max(0, Math.min(100, settings.volume));
 if (['0','1','2','4'].includes(settings.fade)) $('#fade').value = settings.fade;
 if (typeof settings.normalize === 'boolean') $('#normalize').checked = settings.normalize;
 if (typeof settings.autoNext === 'boolean') $('#auto-next').checked = settings.autoNext;
+if (Number.isFinite(settings.gapSeconds)) $('#track-gap').value = Math.max(0, Math.min(10, settings.gapSeconds));
 player.setVolume(Number($('#volume').value) / 100, $('#normalize').checked);
+const performanceTools = new PerformanceControls({ player, context: () => ({ state, queue, index: queueIndex, resumeIndex, position: playbackPosition(), transitioning, current, sourceStatuses, gapRemaining, gapPending: gapScheduler.pending }), notify, readyFile, refreshLibrary: renderLibrary, showView });
+const sessionTools = new SessionControls({ notify, refreshLibrary: renderLibrary });
 player.onPlaybackState = () => { updateTransport(); checkpointPlayback(true); };
 async function storageDetails() {
   try { const estimate = await navigator.storage?.estimate(); const persistent = await navigator.storage?.persisted(); $('#storage-details').textContent = `${t('Browser storage')}: ${Math.round((estimate?.usage || 0) / 1024 / 1024)} MB · ${getLanguage() === 'ko' ? (persistent ? '유지 허용됨' : '브라우저 기본 정책') : getLanguage() === 'es' ? (persistent ? 'persistente' : 'política del navegador') : (persistent ? 'persistent' : 'browser default')}`; } catch {}
@@ -241,19 +251,21 @@ function renderLibrary() {
   syncDestination();
   const filteredCollection = $('#collection-filter').value || null;
   const search = searchKey($('#search').value), style = $('#style-filter').value, source = $('#source-filter').value;
-  const visible = state.tracks.filter(t => (!filteredCollection || state.collections?.find(c => c.id === filteredCollection)?.trackIds.includes(t.id)) && searchKey(`${t.title} ${t.artist} ${t.singer} ${t.year}`).includes(search) && (!style || t.style === style) && (!source || t.source === source));
-  $('#tracks').innerHTML = visible.map(track => `<tr draggable="true" data-track="${esc(track.id)}"><td><div class="track-title">${esc(track.title)}</div><div class="track-detail"><span class="source-tag ${track.source}">${track.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(track.artist || 'Unknown orchestra')}${track.singer ? ` · ${esc(track.singer)}` : ''}${track.source === 'local' ? ` · <span class="source-status ${!files.has(track.id) ? 'missing' : ''}">${esc(track.source === 'local' ? tStatus(track.id) : '')}</span>` : ''}</div></td><td>${esc(track.style || '—')}<small>${esc(track.year || '')}</small></td><td>${track.bpm ? esc(track.bpm) : '—'}</td><td>${time(track.duration)}</td><td class="track-actions"><button data-action="play" data-id="${esc(track.id)}" aria-label="Play ${esc(track.title)}" title="Play">▶ Play</button>${track.source === 'local' ? `<button class="secondary-action" data-action="preview" data-id="${esc(track.id)}" aria-label="Preview ${esc(track.title)}" title="Preview on current output">♬ Preview</button><button class="secondary-action" data-action="analyze" data-id="${esc(track.id)}" aria-label="Analyze ${esc(track.title)}" title="Analyze BPM and level">⌁ Analyze</button>` : ''}<button class="next-action" data-action="play-next" data-id="${esc(track.id)}" ${current ? '' : 'hidden'}>${t('Play next')}</button><button class="collect-action" data-action="collection" data-id="${esc(track.id)}">${t('Collect in set')}</button>${track.source === 'local' ? `<button class="secondary-action" data-action="locate" data-id="${esc(track.id)}">Locate file</button><button class="secondary-action" data-action="copy" data-id="${esc(track.id)}">Keep an app copy</button><button class="secondary-action" data-action="relink" data-id="${esc(track.id)}">Replace recording</button>` : ''}<button class="secondary-action" data-action="edit" data-id="${esc(track.id)}" aria-label="Edit ${esc(track.title)}" title="Edit metadata">✎ Edit</button><button data-action="add" data-id="${esc(track.id)}" aria-label="Add ${esc(track.title)} to selected group" title="Add to selected group">${t(state.groups.find(group => group.id === selected)?.kind === 'cortina' ? 'Use as cortina' : 'Add to tanda')}</button><button class="secondary-action" data-action="delete" data-id="${esc(track.id)}" aria-label="Delete ${esc(track.title)}" title="Remove from library">×</button><button class="more-action" data-action="more" data-id="${esc(track.id)}" aria-label="More actions for ${esc(track.title)}">More</button></td></tr>`).join('');
+  const visible = state.tracks.filter(t => (!filteredCollection || state.collections?.find(c => c.id === filteredCollection)?.trackIds.includes(t.id)) && searchKey(`${t.title} ${t.artist} ${t.singer} ${t.year}`).includes(search) && (!style || t.style === style) && (!source || t.source === source) && (!$('#hide-played').checked || !sessionTools.played(t)));
+  $('#tracks').innerHTML = visible.map(track => `<tr draggable="true" data-track="${esc(track.id)}"><td><div class="track-title">${esc(track.title)}</div>${sessionTools.played(track) ? `<span class="played-badge">${t('Played this session')}</span>` : ''}<div class="track-detail"><span class="source-tag ${track.source}">${track.source === 'local' ? 'FILE' : 'YOUTUBE'}</span> ${esc(track.artist || 'Unknown orchestra')}${track.singer ? ` · ${esc(track.singer)}` : ''}${track.source === 'local' ? ` · <span class="source-status ${!files.has(track.id) ? 'missing' : ''}">${esc(track.source === 'local' ? tStatus(track.id) : '')}</span>` : ''}</div></td><td>${esc(track.style || '—')}<small>${esc(track.year || '')}</small></td><td>${track.bpm ? esc(track.bpm) : '—'}</td><td>${time(track.duration)}</td><td class="track-actions"><button data-action="play" data-id="${esc(track.id)}" aria-label="Play ${esc(track.title)}" title="Play">▶ Play</button>${track.source === 'local' ? `<button class="secondary-action" data-action="preview" data-id="${esc(track.id)}" aria-label="Preview ${esc(track.title)}" title="Preview local recording">♬ Preview</button><button class="secondary-action" data-action="analyze" data-id="${esc(track.id)}" aria-label="Analyze ${esc(track.title)}" title="Analyze BPM and level">⌁ Analyze</button>` : ''}<button class="next-action" data-action="play-next" data-id="${esc(track.id)}" ${current ? '' : 'hidden'}>${t('Play next')}</button><button class="collect-action" data-action="collection" data-id="${esc(track.id)}">${t('Collect in set')}</button>${track.source === 'local' ? `<button class="secondary-action" data-action="locate" data-id="${esc(track.id)}">Locate file</button><button class="secondary-action" data-action="copy" data-id="${esc(track.id)}">Keep an app copy</button><button class="secondary-action" data-action="relink" data-id="${esc(track.id)}">Replace recording</button>` : ''}<button class="secondary-action" data-action="edit" data-id="${esc(track.id)}" aria-label="Edit ${esc(track.title)}" title="Edit metadata">✎ Edit</button><button data-action="add" data-id="${esc(track.id)}" aria-label="Add ${esc(track.title)} to selected group" title="Add to selected group">${t(state.groups.find(group => group.id === selected)?.kind === 'cortina' ? 'Use as cortina' : 'Add to tanda')}</button><button class="secondary-action" data-action="delete" data-id="${esc(track.id)}" aria-label="Delete ${esc(track.title)}" title="Remove from library">×</button><button class="more-action" data-action="more" data-id="${esc(track.id)}" aria-label="More actions for ${esc(track.title)}">More</button></td></tr>`).join('');
   $('#empty-library').hidden = visible.length > 0;
   $('#empty-library h3').textContent = state.tracks.length ? 'No matching recordings' : 'A home for your collection';
   $('#empty-library p').textContent = t(state.tracks.length ? 'Try another search or clear the filters to see your recordings.' : 'Bring in your recordings, organize the details, and find the right music for each moment.');
   $('#clear-filters').hidden = !state.tracks.length;
   $('#library-count').textContent = state.tracks.length; $('#nav-count').textContent = state.tracks.length;
   $('#library-summary').textContent = `${state.tracks.length} recordings · ${time(state.tracks.reduce((s, t) => s + (t.duration || 0), 0))} known duration`;
+  performanceTools.sync();
 }
 function canMoveGroup(group, direction) { const top = state.groups.filter(g => !g.parentId); const index = top.findIndex(g => g.id === group.id); return !group.parentId && index >= 0 && Boolean(top[index + direction]); }
 function renderGroups() {
   $('#groups').innerHTML = state.groups.map((g, i) => `<article class="group ${g.collapsed ? 'collapsed' : ''} ${g.parentId ? 'attached-cortina' : ''} ${selected === g.id ? 'selected' : ''}" data-group="${esc(g.id)}"><div class="group-header"><button class="group-select" data-group-action="select" data-id="${esc(g.id)}"><span class="group-number">${String(i + 1).padStart(2, '0')}</span><span><span class="eyebrow">${t(g.kind === 'tanda' ? 'Tanda' : 'Cortina')}</span><strong>${esc(g.name)}</strong></span></button><div class="group-tools"><button data-group-action="collapse" data-id="${esc(g.id)}" aria-expanded="${!g.collapsed}">${t(g.collapsed ? 'Expand' : 'Collapse')}</button>${g.kind === 'tanda' ? `<button data-group-action="play-tanda" data-id="${esc(g.id)}" aria-label="${t('Play this tanda')}" title="${t('Play this tanda')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶ ${t('Play tanda')}</button><button data-group-action="cortina" data-id="${esc(g.id)}">${t('Cortina')}</button><button data-group-action="notes" data-id="${esc(g.id)}" aria-label="Tanda notes">Notes</button>` : ''}<button data-group-action="up" data-id="${esc(g.id)}" aria-label="Move group up" ${!canMoveGroup(g, -1) ? 'disabled' : ''}>↑</button><button data-group-action="down" data-id="${esc(g.id)}" aria-label="Move group down" ${!canMoveGroup(g, 1) ? 'disabled' : ''}>↓</button><button data-group-action="rename" data-id="${esc(g.id)}" aria-label="Rename group">✎</button><button data-group-action="delete" data-id="${esc(g.id)}" aria-label="Delete group">×</button></div></div>${g.notes ? `<p class="tanda-notes" data-preserve>${esc(g.notes)}</p>` : ''}<ol>${g.trackIds.map((id, j) => { const track = state.tracks.find(t => t.id === id); return `<li><span>${esc(track?.title || 'Missing track')}</span><div>${g.kind === 'tanda' ? `<button data-group-action="play-recording" data-id="${esc(g.id)}" data-index="${j}" aria-label="${esc(`${t('Play only this recording')}: ${track?.title || 'Missing track'}`)}" title="${t('Play only this recording')}">▶</button>` : ''}<button data-group-action="track-up" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording up" ${j === 0 ? 'disabled' : ''}>↑</button><button data-group-action="track-down" data-id="${esc(g.id)}" data-index="${j}" aria-label="Move recording down" ${j === g.trackIds.length - 1 ? 'disabled' : ''}>↓</button><button data-group-action="remove" data-id="${esc(g.id)}" data-index="${j}" aria-label="Remove recording from group">×</button></div></li>`; }).join('')}</ol>${g.kind === 'cortina' ? `<div class="cortina-range"><label><span>${t('From')}</span><input type="number" min="0" max="86400" step="1" value="${g.startSeconds || 0}" data-cortina-start="${esc(g.id)}" aria-label="${t('Cortina start position')}"></label><span class="range-arrow">→</span><label><span>${t('To')}</span><input type="number" min="1" max="90000" step="1" value="${(g.startSeconds || 0) + (g.limitSeconds || 20)}" data-cortina-end="${esc(g.id)}" ${g.fullLength ? 'disabled' : ''} aria-label="${t('Cortina end position')}"></label><span class="range-unit">${t('seconds')}</span><button data-group-action="cue-position" data-id="${esc(g.id)}" aria-label="${t('Use deck position')}" title="${t('Use deck position')}" ${!current || !g.trackIds.includes(current.id) ? 'disabled' : ''}>⌖</button><button data-group-action="cue-play" data-id="${esc(g.id)}" aria-label="${t('Play this cortina')}" title="${t('Play this cortina')} · ${t('Plays on the live output')}" ${!g.trackIds.length ? 'disabled' : ''}>▶</button></div><label class="cortina-hold"><input type="checkbox" data-cortina-full="${esc(g.id)}" ${g.fullLength ? 'checked' : ''}>${t('Use the rest of the recording')}</label><label class="cortina-hold"><input type="checkbox" data-cortina-hold="${esc(g.id)}" ${g.holdAfter ? 'checked' : ''}>${t('Wait before the next tanda')}</label>` : ''}${!g.trackIds.length ? '<p class="group-drop">Drop recordings here or select Add to tanda</p>' : ''}<div class="group-duration">${g.trackIds.length} recordings · ${time(groupDuration(g, state.tracks))} known duration</div></article>`).join('');
   refreshGroupSummaries();
+  performanceTools.sync();
 }
 function playbackGroups() { return queueGroupId ? state.groups.filter(group => group.id === queueGroupId) : state.groups; }
 function playbackSignature() { return queueSignature(playbackGroups(), state.tracks); }
@@ -295,7 +307,7 @@ function renderQueue() {
 
   $('#mini-open strong').textContent = current?.title || ''; $('#mini-open small').textContent = $('#recording-number').textContent; updateMiniDeck();
   $('#queue-count').textContent = queue.length;
-  $('#queue').innerHTML = queue.length ? queue.map((item, i) => `<button class="queue-item ${i === queueIndex ? 'playing' : ''}" data-queue-index="${i}"><span>${i === queueIndex ? '▶' : String(i + 1).padStart(2, '0')}</span><div><strong>${esc(item.track.title)}</strong><small>${esc(item.groupName || item.track.artist || 'Library track')}</small></div><span>${time(item.limitSeconds || item.track.duration)}</span></button>`).join('') : '<p class="hint">Load a set or play a library track.</p>';
+  $('#queue').innerHTML = queue.length ? queue.map((item, i) => `<button class="queue-item ${i === queueIndex ? 'playing' : ''}" data-queue-index="${i}"><span>${i === queueIndex ? '▶' : String(i + 1).padStart(2, '0')}</span><div><strong>${esc(item.track.title)}</strong><small>${esc(item.groupName || item.track.artist || 'Library track')}</small></div><span>${time(item.limitSeconds ? Math.min(item.limitSeconds, item.track.duration > 0 ? Math.max(0, item.track.duration - (item.startSeconds || 0)) : item.limitSeconds) : item.track.duration > 0 ? Math.max(0, item.track.duration - (item.startSeconds || 0)) : undefined)}</span></button>`).join('') : '<p class="hint">Load a set or play a library track.</p>';
   if (queueIndex !== lastRenderedIndex) {
     const active = $('#queue .playing'), panel = $('#queue');
     if (active) { const row = active.getBoundingClientRect(), box = panel.getBoundingClientRect();
@@ -303,7 +315,7 @@ function renderQueue() {
     lastRenderedIndex = queueIndex;
   }
 }
-function render() { normalizeProgram(state); renderCollections(); renderPresets(); renderLibrary(); renderGroups(); renderQueue(); }
+function render() { normalizeProgram(state); renderCollections(); renderPresets(); renderLibrary(); renderGroups(); renderQueue(); performanceTools.sync(); sessionTools.render(); }
 
 async function importFiles(list, handles = []) {
   if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
@@ -415,6 +427,9 @@ function updateTransport() {
   const cortina = queue[queueIndex]?.kind === 'cortina';
   $('#next-tanda').hidden = !cortina; $('#next-tanda').disabled = transitioning;
   $('#next-tanda').textContent = t(queue.slice(queueIndex + 1).some(item => item.kind === 'tanda') ? 'Next tanda' : 'End cortina');
+  performanceTools.sync();
+  if (gapScheduler.pending) { $('#play-pause').textContent = 'Ⅱ'; $('#mini-play').textContent = 'Ⅱ'; }
+  if (!transitioning && !stopped && committedPlayRequest === playRequest && player.isPlaying() && queue[queueIndex]?.track.id === player.track?.id) sessionTools.record(committedPlayRequest, queue[queueIndex], player.position());
 }
 function rememberSetEdit() { undoGroups = { groups: structuredClone(state.groups), selected }; $('#undo-bar').hidden = false; }
 $('#undo-set').onclick = () => {
@@ -434,21 +449,27 @@ async function playIndex(index, fromPosition = null) {
   const start = item.startSeconds || 0;
   const end = Math.min(Number.isFinite(item.track.duration) && item.track.duration > 0 ? item.track.duration : Infinity, item.limitSeconds ? start + item.limitSeconds : Infinity);
   const position = Number.isFinite(fromPosition) && fromPosition >= start && fromPosition < end ? fromPosition : start;
-  const request = ++playRequest; transitioning = true; updateTransport();
+  cancelGap();
+  const request = ++playRequest; let attemptedStart = false; preparingPlayback = false; transitioning = true; updateTransport();
   $('#playback-loading').hidden = false; $('#playback-recovery').hidden = true;
   try {
     $('#youtube-error').hidden = true;
     const sourceFile = item.track.source === 'local' ? await readyFile(item.track, true) : null;
-    if (request !== playRequest) return;
+    if (request !== playRequest || queue[index] !== item || !state.tracks.some(track => track.id === item.track.id)) return;
+    if (item.track.source === 'local' && !sourceFile) throw new Error('Relink the local file before playing this track.');
+    attemptedStart = true;
     if (!await player.play(item.track, sourceFile, Number($('#fade').value), $('#normalize').checked, item.startSeconds || 0, item.limitSeconds, position)) return;
     if (request !== playRequest) return;
-    queueIndex = index; resumeIndex = index; resumePosition = position; current = item.track; timedEnd = false; stopped = false; $('#queue-resume').hidden = true; void persist();
+    queueIndex = index; resumeIndex = index; resumePosition = position; current = item.track; committedPlayRequest = request; timedEnd = false; stopped = false; $('#queue-resume').hidden = true; void persist();
     $('#playing-title').textContent = current.title; $('#playing-artist').textContent = [current.artist, current.singer, current.year].filter(Boolean).join(' · ') || (current.source === 'youtube' ? 'YouTube video' : 'Local recording');
-    $('#playing-group').textContent = item.groupName || 'LIBRARY TRACK'; $('#preview-status').hidden = true;
+    $('#playing-group').textContent = item.groupName || 'LIBRARY TRACK'; $('#preview-status').hidden = player.preview.paused;
     renderTimeline(item, position);
     renderQueue(); refreshGroupSummaries(); markStep('play'); notify(`Playing ${current.title}`);
   } catch (error) {
     if (request === playRequest) {
+      if (!attemptedStart && player.track && player.isPlaying()) {
+        notify(playbackMessage(error), true); renderQueue(); return;
+      }
       player.stop(); current = structuredClone(item.track); player.track = structuredClone(item.track);
       queueIndex = index; resumeIndex = index; resumePosition = position; stopped = true; timedEnd = false; player.seek(position);
       $('#playing-title').textContent = current.title; $('#playing-artist').textContent = [current.artist, current.singer, current.year].filter(Boolean).join(' · ');
@@ -462,10 +483,45 @@ async function playIndex(index, fromPosition = null) {
   finally { if (request === playRequest) { transitioning = false; $('#playback-loading').hidden = true; updateTransport(); } }
 }
 async function playRecording(track) {
-  queue = [{ track: structuredClone(track) }]; queueIndex = -1; queueGroupId = null; loadedSignature = null;
-  renderGroups(); renderQueue(); await playIndex(0);
+  await replacePlaybackQueue([{ track: structuredClone(track), ...recordingClip(track) }]);
 }
-async function next() { if (queueIndex + 1 < queue.length) await playIndex(queueIndex + 1); else { notify('End of play queue.'); } }
+
+async function replacePlaybackQueue(items, groupId = null) {
+  if (!performanceTools.canReplace() || transitioning) return;
+  if (!items.length) { notify('The prepared set has no playable recordings.', true); return; }
+  const request = ++playRequest;
+  preparingPlayback = true; transitioning = true; updateTransport();
+  if (!player.hasSeparatePreviewOutput) performanceTools.cancelPreview();
+  try {
+    const unavailable = [];
+    for (const item of items) {
+      if (item.track.duration > 0 && (item.startSeconds || 0) >= item.track.duration) throw new Error('The start must be before the recording ends. Choose an earlier cue.');
+      if (item.track.source === 'local' && !await readyFile(item.track, true)) unavailable.push(item.track.title);
+      if (request !== playRequest) return;
+    }
+    if (unavailable.length) { notify(`${t('Files need attention before playback')}: ${unavailable.join(', ')}`, true); return; }
+    if (request !== playRequest || performanceTools.live || items.some(item => !state.tracks.some(track => track.id === item.track.id))) return;
+    preparingPlayback = false; queue = items; queueIndex = -1; resumeIndex = 0; resumePosition = items[0].startSeconds || 0;
+    queueGroupId = groupId; loadedSignature = items[0].groupId ? playbackSignature() : null;
+    renderGroups(); renderQueue(); await playIndex(0);
+  } catch (error) { if (request === playRequest) notify(error.message, true); }
+  finally {
+    if (request === playRequest) { preparingPlayback = false; transitioning = false; updateTransport(); }
+    renderLibrary(); performanceTools.sync();
+  }
+}
+function cancelGap() { gapScheduler.cancel(); gapRemaining = 0; $('#gap-status').hidden = true; }
+async function automaticNext() {
+  const index = queueIndex, request = playRequest, item = queue[index], upcoming = queue[index + 1];
+  if (!upcoming) { notify('End of play queue.'); return; }
+  const gap = item?.kind === 'tanda' && item.groupId && upcoming.kind === 'tanda' && upcoming.groupId === item.groupId ? Math.max(0, Math.min(10, Number($('#track-gap').value) || 0)) : 0;
+  if (gap) {
+    const completed = await gapScheduler.wait(gap, seconds => { gapRemaining = seconds; $('#gap-status').hidden = seconds <= 0; $('#gap-status').textContent = `${t('Next recording in')}: ${seconds.toFixed(1)} ${t('seconds')}`; updateTransport(); });
+    if (!completed || request !== playRequest || queue[index] !== item || !$('#auto-next').checked) return;
+  }
+  if (request === playRequest && queue[index] === item) await playIndex(index + 1);
+}
+async function next() { cancelGap(); if (queueIndex + 1 < queue.length) await playIndex(queueIndex + 1); else { notify('End of play queue.'); } }
 function addToGroup(id, groupId = selected) {
   const group = state.groups.find(g => g.id === groupId);
   if (!group) { showView('set'); notify('Create or select a tanda or cortina first.'); return; }
@@ -478,7 +534,8 @@ function addToGroup(id, groupId = selected) {
 function editTrack(track) {
   const form = $('#metadata-form');
   $('#video-url-label').hidden = track.source !== 'youtube'; form.elements.videoUrl.value = track.source === 'youtube' ? `https://www.youtube.com/watch?v=${track.videoId}` : '';
-  for (const field of ['id', 'title', 'artist', 'singer', 'year', 'style', 'bpm']) form.elements[field].value = track[field] || '';
+  for (const field of ['id', 'title', 'artist', 'singer', 'year', 'style', 'bpm', 'cueStartSeconds', 'cueEndSeconds']) form.elements[field].value = track[field] ?? '';
+  $('#cue-current-position').disabled = current?.id !== track.id;
   $('#analysis-details').textContent = track.source === 'youtube' ? 'YouTube audio cannot be decoded for analysis. Enter BPM and metadata manually.' : track.rmsDb != null ? `RMS ${track.rmsDb} dBFS · Peak ${track.peakDb} dBFS · Suggested gain ${track.gainDb} dB. RMS level is not integrated LUFS. BPM estimates can be corrected here.` : 'Use Analyze to estimate BPM, RMS level, peak, and gain. You can edit BPM manually.';
   $('#metadata-dialog').showModal();
 }
@@ -492,7 +549,7 @@ $('#drop-zone').ondragleave = () => $('#drop-zone').classList.remove('dragging')
 $('#drop-zone').ondrop = event => { event.preventDefault(); $('#drop-zone').classList.remove('dragging'); void importFiles(event.dataTransfer.files); };
 $('#youtube-form').onsubmit = event => { event.preventDefault(); void addYouTube(new FormData(event.target).get('url')); };
 for (const id of ['search', 'style-filter', 'source-filter', 'collection-filter']) $(`#${id}`).oninput = renderLibrary;
-$('#clear-filters').onclick = () => {
+$('#clear-filters').onclick = () => { $('#hide-played').checked = false;
   for (const id of ['search', 'style-filter', 'source-filter', 'collection-filter']) $(`#${id}`).value = '';
   renderLibrary(); $('#search').focus({ preventScroll: true });
 };
@@ -520,15 +577,16 @@ $('#tracks').onclick = async event => {
       case 'collection': addRecordingToCollection(track); break;
       case 'locate': await locateRecording(track); break;
       case 'copy': await keepCopy(track); break;
-      case 'preview': await player.previewTrack(track, await readyFile(track, true)); $('#preview-status span').textContent = `Preview: ${track.title} · same output`; $('#preview-status').hidden = false; markStep('preview'); break;
+      case 'preview': if (await performanceTools.preview(track)) markStep('preview'); break;
       case 'analyze': await runAnalysis([track]); break;
       case 'edit': editTrack(track); break;
       case 'add': if (state.groups.some(group => group.id === selected)) addToGroup(track.id); else chooseTandaDestination(track); break;
-      case 'relink': reconnectMode = false; relinkId = track.id; $('#relink-input').click(); break;
+      case 'relink': if ((current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) return; reconnectMode = false; relinkId = track.id; $('#relink-input').click(); break;
       case 'delete':
+        if (queue.some(item => item.track.id === track.id) && !performanceTools.canReplace()) return;
         if (!confirm(t(`Remove “${track.title}” from the library and every group? Your original file will be kept.`))) return;
         if (busy) { notify('Wait for the current import or analysis to finish.'); return; }
-        if (player.previewId === track.id) { player.preview.pause(); player.previewId = null; $('#preview-status').hidden = true; }
+        if (player.previewId === track.id) performanceTools.cancelPreview();
         const playingItem = queue[queueIndex], restoredItem = queue[resumeIndex];
         const removingCurrent = current?.id === track.id || player.track?.id === track.id;
         const priorIndex = queueIndex >= 0 ? queueIndex : resumeIndex;
@@ -553,13 +611,17 @@ $('#relink-input').onchange = async event => {
   if (file && track) {
     try {
       if (reconnectMode) { await reconnectSame(track, file); render(); notify('File reconnected. Cues and analysis retained.'); return; }
+      if ((current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) return;
       await persistence;
+      if ((current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) return;
       if (!confirm(t('Replace recording and reset analysis? Check all cortina cues after replacement.'))) return;
       const updated = { ...track, source: 'local', contentHash: await contentHash(file), fileName: file.name, fileSize: file.size, lastModified: file.lastModified };
+      if ((current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) return;
       delete updated.videoId;
       for (const field of ['duration', 'bpm', 'rmsDb', 'peakDb', 'gainDb']) updated[field] = null;
       const snapshot = workspaceSnapshot(state.tracks.map(item => item.id === track.id ? updated : item));
       const replacement = persistence.then(async () => {
+        if ((current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) throw new Error('Unlock Live mode to jump, seek or replace playback.');
         revision = await replaceRecording(track.id, file, snapshot, revision);
         return true;
       });
@@ -588,9 +650,15 @@ $('#metadata-form').onsubmit = event => {
   event.preventDefault(); const data = new FormData(event.target), track = state.tracks.find(t => t.id === data.get('id'));
   if (!track) return;
   const oldVideoId = track.videoId;
+  const cueStart = data.get('cueStartSeconds') === '' ? null : Number(data.get('cueStartSeconds'));
+  const cueEnd = data.get('cueEndSeconds') === '' ? null : Number(data.get('cueEndSeconds'));
+  if ((cueStart != null && (!Number.isFinite(cueStart) || cueStart < 0 || cueStart > 86400)) || (cueEnd != null && (!Number.isFinite(cueEnd) || cueEnd <= (cueStart || 0) || cueEnd > 90000))) { notify('Cue out must be after cue in. Use valid seconds.', true); return; }
+  if (track.duration > 0 && (cueStart || 0) >= track.duration) { notify('The start must be before the recording ends. Choose an earlier cue.', true); return; }
+  if (track.source === 'youtube' && youtubeId(data.get('videoUrl')) !== oldVideoId && (current?.id === track.id || player.track?.id === track.id) && !performanceTools.canReplace()) return;
   if (track.source === 'youtube') { const id = youtubeId(data.get('videoUrl')); if (!id) { notify('Enter a YouTube watch, short, live, or youtu.be video link.', true); return; } track.videoId = id; for (const item of queue) if (item.track.id === track.id) item.track.videoId = id; }
   for (const field of ['title', 'artist', 'singer', 'year', 'style']) track[field] = data.get(field).trim();
   track.bpm = data.get('bpm') ? Number(data.get('bpm')) : null;
+  track.cueStartSeconds = cueStart; track.cueEndSeconds = cueEnd;
   for (const item of queue) if (item.track.id === track.id) Object.assign(item.track, track);
   if (current?.id === track.id) { $('#playing-title').textContent = track.title; $('#playing-artist').textContent = [track.artist, track.singer, track.year].filter(Boolean).join(' · '); }
   if (oldVideoId !== track.videoId) { track.duration = null; for (const item of queue) if (item.track.id === track.id) item.track.duration = null; sourceChanged(track); }
@@ -598,6 +666,7 @@ $('#metadata-form').onsubmit = event => {
   void persist(); render(); markStep('edit'); $('#metadata-dialog').close();
 };
 $('#close-metadata').onclick = () => $('#metadata-dialog').close();
+$('#cue-current-position').onclick = () => { const form = $('#metadata-form'); if (form.elements.id.value === current?.id) form.elements.cueStartSeconds.value = Math.round(player.position() * 10) / 10; };
 function addGroup(kind) {
   normalizeProgram(state);
   const parent = kind === 'cortina' ? state.groups.find(g => g.id === selected && g.kind === 'tanda') : null;
@@ -608,7 +677,7 @@ function addGroup(kind) {
   void persist(); renderGroups(); revealSelectedGroup();
 }
 $('#add-tanda').onclick = () => addGroup('tanda'); $('#add-cortina').onclick = () => addGroup('cortina');
-$('#groups').onclick = event => {
+$('#groups').onclick = async event => {
   const button = event.target.closest('[data-group-action]'); if (!button) return;
   const group = state.groups.find(g => g.id === button.dataset.id); if (!group) return;
   const i = state.groups.indexOf(group), j = Number(button.dataset.index);
@@ -624,16 +693,23 @@ $('#groups').onclick = event => {
     if (track) void playRecording(track);
     return;
   }
+  if (['play-tanda', 'cue-play'].includes(action) && !performanceTools.canReplace()) return;
   if (action === 'play-tanda') {
     const clips = flattenSet([group], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
     if (!clips.length) return;
-    selected = group.id; queue = clips; queueIndex = -1; queueGroupId = group.id; loadedSignature = playbackSignature();
-    renderGroups(); renderQueue(); void playIndex(0);
+    selected = group.id; void replacePlaybackQueue(clips, group.id);
     return;
   }
   if (action === 'cue-play') {
     const clips = flattenSet([group], state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
     if (!clips.length) return;
+    const request = playRequest;
+    for (const clip of clips) {
+      if (clip.track.duration > 0 && (clip.startSeconds || 0) >= clip.track.duration) { notify('The start must be before the recording ends. Choose an earlier cue.', true); return; }
+      if (clip.track.source === 'local' && !await readyFile(clip.track, true)) { notify('Relink the local file before playing this track.', true); renderLibrary(); return; }
+      if (request !== playRequest) return;
+    }
+    if (!performanceTools.canReplace()) return;
     const index = queue.findIndex((item, index) => item.groupId === group.id && clips.every((clip, offset) => {
       const queued = queue[index + offset];
       return queued?.groupId === clip.groupId && queued.track.id === clip.track.id && queued.occurrenceId === clip.occurrenceId && (queued.startSeconds || 0) === (clip.startSeconds || 0) && queued.limitSeconds === clip.limitSeconds && Boolean(queued.holdAfter) === Boolean(clip.holdAfter);
@@ -720,39 +796,38 @@ $('#refresh-queue').onclick = async () => {
   $('#playing-group').textContent = queue[queueIndex]?.groupName || 'LIBRARY TRACK';
   loadedSignature = playbackSignature(); render(); await persist(); notify('Upcoming queue updated. Current recording keeps playing.');
 };
-$('#start-set').onclick = async () => { normalizeProgram(state);
-  if (transitioning) return;
-  const unavailable = [];
-  for (const track of state.tracks.filter(t => t.source === 'local' && state.groups.some(group => group.trackIds.includes(t.id)))) if (!await readyFile(track)) unavailable.push(track.title);
-  renderLibrary();
-  if (unavailable.length) { notify(`${t('Files need attention before playback')}: ${unavailable.join(', ')}`, true); return; } queueGroupId = null; loadedSignature = playbackSignature(); queue = flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) })); queueIndex = -1; renderQueue(); void playIndex(0); };
-$('#queue').onclick = event => { const item = event.target.closest('[data-queue-index]'); if (item) void playIndex(Number(item.dataset.queueIndex)); };
-$('#play-pause').onclick = async () => { try { if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1), resumePosition); else if (timedEnd || stopped) await playIndex(queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); checkpointPlayback(true); } catch (error) { notify(playbackMessage(error), true); } };
-$('#next-tanda').onclick = async () => { if (transitioning) return; const nextIndex = queue.findIndex((item, index) => index > queueIndex && item.kind === 'tanda'); if (nextIndex >= 0) await playIndex(nextIndex); else { transitioning = true; updateTransport(); await player.fadeOut(Number($('#fade').value)); $('#stop').click(); } };
-$('#next').onclick = next; $('#previous').onclick = () => playIndex(queueIndex - 1);
+$('#start-set').onclick = () => { normalizeProgram(state); void replacePlaybackQueue(flattenSet(state.groups, state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }))); };
+$('#queue').onclick = event => { const item = event.target.closest('[data-queue-index]'); if (item && performanceTools.canReplace()) void playIndex(Number(item.dataset.queueIndex)); };
+$('#play-pause').onclick = async () => { try { if (gapScheduler.pending) { cancelGap(); updateTransport(); notify('Automatic advance paused. Press Next when ready.'); return; } if (!player.track && queue.length) await playIndex(Math.min(resumeIndex, queue.length - 1), resumePosition); else if (timedEnd || stopped) await playIndex(queueIndex >= 0 ? queueIndex : Math.min(resumeIndex, queue.length - 1)); else await player.toggle(); updateTransport(); checkpointPlayback(true); } catch (error) { notify(playbackMessage(error), true); } };
+$('#next-tanda').onclick = async () => { if (transitioning) return; const request = playRequest; const nextIndex = queue.findIndex((item, index) => index > queueIndex && item.kind === 'tanda'); if (nextIndex >= 0) await playIndex(nextIndex); else { transitioning = true; updateTransport(); await player.fadeOut(Number($('#fade').value)); if (request === playRequest) $('#stop').click(); } };
+$('#next').onclick = next; $('#previous').onclick = () => { if (performanceTools.canReplace()) void playIndex(queueIndex - 1); };
 $('#stop').onclick = () => {
-  ++playRequest; player.stop(); $('#playback-loading').hidden = true; $('#playback-stall').hidden = true; player.seek(queue[queueIndex]?.startSeconds || 0); stopped = true; transitioning = false;
+  cancelGap(); ++playRequest; preparingPlayback = false; performanceTools.cancelPreview(); player.stop(); $('#playback-loading').hidden = true; $('#playback-stall').hidden = true; player.seek(queue[queueIndex]?.startSeconds || 0); stopped = true; transitioning = false;
   resumePosition = queue[queueIndex]?.startSeconds || 0; renderTimeline(queue[queueIndex], resumePosition); checkpointPlayback(true);
   $('#seek').value = 0; $('#preview-status').hidden = true; updateTransport(); notify('Playback stopped.');
 };
-$('#seek').oninput = () => { const available = (current?.source === 'youtube' ? player.youtube?.getDuration() : player.audio.duration) - (queue[queueIndex]?.startSeconds || 0); const duration = Math.min(queue[queueIndex]?.limitSeconds || Infinity, available); if (Number.isFinite(duration) && player.track) { const position = (queue[queueIndex]?.startSeconds || 0) + Number($('#seek').value) / 100 * duration; player.seek(position); resumePosition = position; stopped = false; timedEnd = false; renderTimeline(queue[queueIndex], position, available + (queue[queueIndex]?.startSeconds || 0)); checkpointPlayback(true); } };
+$('#seek').oninput = () => { if (!performanceTools.canReplace()) return; cancelGap(); const available = (current?.source === 'youtube' ? player.youtube?.getDuration() : player.audio.duration) - (queue[queueIndex]?.startSeconds || 0); const duration = Math.min(queue[queueIndex]?.limitSeconds || Infinity, available); if (Number.isFinite(duration) && player.track) { const position = (queue[queueIndex]?.startSeconds || 0) + Number($('#seek').value) / 100 * duration; player.seek(position); resumePosition = position; stopped = false; timedEnd = false; renderTimeline(queue[queueIndex], position, available + (queue[queueIndex]?.startSeconds || 0)); checkpointPlayback(true); } };
 $('#fade').oninput = () => player.setFade(Number($('#fade').value));
 for (const id of ['volume', 'normalize']) $(`#${id}`).oninput = () => player.setVolume(Number($('#volume').value) / 100, $('#normalize').checked);
-$('#stop-preview').onclick = () => { player.preview.pause(); $('#preview-status').hidden = true; };
+$('#stop-preview').onclick = () => { performanceTools.cancelPreview(); updateTransport(); };
 player.preview.addEventListener('ended', () => { $('#preview-status').hidden = true; });
+$('#hide-played').onchange = renderLibrary;
+$('#auto-next').addEventListener('change', () => { if (!$('#auto-next').checked) cancelGap(); updateTransport(); });
 $('#analyze-all').onclick = () => runAnalysis(state.tracks.filter(t => t.source === 'local'));
 $('#export-set').onclick = () => {
   const blob = new Blob([JSON.stringify({ version: 1, ...state }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = 'tango-dj-set.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   markStep('export'); notify('Set exported. Audio is not included; keep your original recordings.');
 };
-$('#import-set').onclick = () => { if (busy) { notify('Wait for the current import or analysis to finish.'); return; } $('#set-input').click(); };
+$('#import-set').onclick = () => { if (!performanceTools.canReplace()) return; if (busy) { notify('Wait for the current import or analysis to finish.'); return; } $('#set-input').click(); };
 $('#set-input').onchange = async event => {
   try {
+    if (!performanceTools.canReplace()) return;
     if (busy) throw new Error('Wait for the current import or analysis to finish.');
     const file = event.target.files[0]; if (!file) return;
     if (file.size > 10 * 1024 * 1024) throw new Error('Set files must be smaller than 10 MB.');
     const imported = validateSet(JSON.parse(await file.text()));
+    if (!performanceTools.canReplace()) return;
     if (!confirm(t('Replace your current library and set with this file? Export your current set first if you want to keep it.'))) return;
     ++playRequest; player.stop(); player.track = null; queue = []; queueIndex = -1; current = null;
     resumeIndex = 0; resumePosition = 0; loadedSignature = null; queueGroupId = null; undoGroups = null; timedEnd = false; stopped = false; transitioning = false;
@@ -801,9 +876,7 @@ $('#guide-preview').onclick = async () => {
   closePanels(); const track = state.tracks.find(t => t.source === 'local' && files.has(t.id));
   if (!track) { notify('Import a local tango recording with + Local files to use Preview. YouTube recordings use Play.'); return; }
   try {
-    await player.previewTrack(track, await readyFile(track, true));
-    $('#preview-status span').textContent = `Preview: ${track.title} · same output`;
-    $('#preview-status').hidden = false; markStep('preview');
+    if (await performanceTools.preview(track)) markStep('preview');
   } catch (error) { notify(playbackMessage(error), true); }
 };
 $('#guide-analyze').onclick = () => {
@@ -825,7 +898,9 @@ async function loadRealSamples() {
 }
 $('#load-real-samples').onclick = async () => { if (await loadRealSamples()) $('#examples-dialog').close(); };
 $('#real-sample-play').onclick = async () => {
-  if (!await loadRealSamples()) return; closePanels(); queueGroupId = null; loadedSignature = null;
+  if (!performanceTools.canReplace()) return;
+  const request = ++playRequest;
+  if (!await loadRealSamples() || request !== playRequest || performanceTools.live) return; closePanels(); queueGroupId = null; loadedSignature = null;
   queue = flattenSet(state.groups.filter(g => g.samplePack === REAL_SAMPLE_PACK), state.tracks).map(item => ({ ...item, track: structuredClone(item.track) }));
   queueIndex = -1; renderQueue(); await playIndex(0);
 };
@@ -977,11 +1052,10 @@ function renderCollections() {
   $('#collection-detail').innerHTML = collection ? `<div class="builder-actions"><button id="collection-play" ${collection.trackIds.some(id => state.tracks.some(track => track.id === id)) ? '' : 'disabled'}>▶ ${t('Play set')}</button><button id="collection-browse">${t('Add recordings')}</button><button id="collection-tanda">${t('Create tanda from selected recordings')}</button><button id="collection-rename">${t('Rename')}</button></div>${collection.trackIds.map((id, index) => { const track = state.tracks.find(t => t.id === id); return `<div class="collection-recording"><label><input type="checkbox" data-candidate="${esc(id)}"><span data-preserve>${esc(track?.title)}</span></label><div class="candidate-actions"><button data-candidate-play="${esc(id)}" aria-label="${esc(`${t('Play only this recording')}: ${track?.title || 'Missing track'}`)}" title="${t('Play only this recording')}" ${track ? '' : 'disabled'}>▶ ${t('Play')}</button><button data-candidate-remove="${index}">${t('Remove')}</button></div></div>`; }).join('')}` : '';
   if (collection) {
     $('#collection-play').onclick = () => {
+      if (!performanceTools.canReplace()) return;
       const tracks = collection.trackIds.map(id => state.tracks.find(track => track.id === id)).filter(Boolean);
       if (!tracks.length) return;
-      queue = tracks.map(track => ({ track: structuredClone(track), groupName: collection.name }));
-      queueIndex = -1; queueGroupId = null; loadedSignature = null;
-      renderGroups(); renderQueue(); void playIndex(0);
+      void replacePlaybackQueue(tracks.map(track => ({ track: structuredClone(track), ...recordingClip(track), groupName: collection.name })));
     };
     for (const input of detail.querySelectorAll('[data-candidate]')) input.checked = candidateSelections.get(collection.id)?.has(input.dataset.candidate) || false;
     $('#collection-browse').onclick = () => { collectingInto = collection.id; choosingForGroup = false; activeCollection = null; $('#collection-filter').value = ''; renderLibrary(); showView('library'); };
@@ -993,6 +1067,7 @@ function renderCollections() {
     };
     $('#collection-rename').onclick = () => { const name = prompt(t('Set name'), collection.name); if (name?.trim()) { collection.name = name.trim(); void persist(); renderCollections(); } };
   }
+  performanceTools.sync();
 }
 $('#new-collection').onclick = () => { const name = prompt(t('Set name')); if (!name?.trim()) return; state.collections ||= []; const collection = { id: uid(), name: name.trim(), trackIds: [] }; state.collections.push(collection); activeCollection = collection.id; void persist(); renderCollections(); };
 $('#collection-list').onclick = event => {
@@ -1160,5 +1235,7 @@ startI18n();
 document.addEventListener('keydown', event => {
   if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || document.querySelector('dialog[open]') || event.target.closest('input,select,textarea,button,a,[contenteditable]')) return;
   if (event.repeat) return;
+  if (event.code === 'KeyN') { event.preventDefault(); if (!$('#next').disabled) $('#next').click(); }
+  if (event.code === 'KeyS') { event.preventDefault(); if (!$('#stop').disabled) $('#stop').click(); }
   if (event.code === 'Space') { event.preventDefault(); if (!$('#play-pause').disabled) $('#play-pause').click(); }
 });

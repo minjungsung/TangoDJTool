@@ -51,3 +51,15 @@ test('cortina insertion targets next tanda without reopening prior tanda', () =>
   assert.deepEqual(state.groups[2].trackIds, ['x','b']);
   assert.deepEqual(queue.map(item => item.track.id), ['a','b','a','c','x','b']);
 });
+test('a reserved recording keeps its saved cue range in the queue and refreshed tanda', () => {
+  const { state, queue } = fixture();
+  Object.assign(state.tracks[3], { cueStartSeconds: 8.5, cueEndSeconds: 128.5 });
+  const current = queue[0];
+  const addition = insertNext(state, queue, 0, state.tracks[3], 't');
+  assert.equal(queue[0], current);
+  assert.equal(addition.startSeconds, 8.5);
+  assert.equal(addition.limitSeconds, 120);
+  const refreshed = flattenSet(state.groups, state.tracks).find(item => item.occurrenceId === addition.occurrenceId);
+  assert.equal(refreshed.startSeconds, addition.startSeconds);
+  assert.equal(refreshed.limitSeconds, addition.limitSeconds);
+});

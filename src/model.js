@@ -14,11 +14,21 @@ export function youtubeId(input) {
   } catch { return null; }
 }
 
+export function recordingClip(track) {
+  const startSeconds = track.cueStartSeconds ?? 0;
+  return { startSeconds, ...(track.cueEndSeconds != null ? { limitSeconds: track.cueEndSeconds - startSeconds } : {}) };
+}
+
 export function flattenSet(groups, tracks) {
   const library = new Map(tracks.map(t => [t.id, t]));
-  return groups.flatMap(group => group.trackIds.map((id, index) => ({ id, index })).filter(({ id }) => library.has(id)).map(({ id, index }) => ({
-    track: library.get(id), ...(group.occurrenceIds?.[index] ? { occurrenceId: group.occurrenceIds[index] } : {}), groupId: group.id, kind: group.kind, groupName: group.name, ...(group.limitSeconds ? { limitSeconds: group.limitSeconds } : {}), ...(group.startSeconds ? { startSeconds: group.startSeconds } : {}), ...(group.holdAfter ? { holdAfter: true } : {}),
-  })));
+  return groups.flatMap(group => group.trackIds.map((id, index) => ({ id, index })).filter(({ id }) => library.has(id)).map(({ id, index }) => {
+    const track = library.get(id);
+    const clip = group.kind === 'tanda' ? recordingClip(track) : {
+      startSeconds: group.startSeconds ?? 0,
+      ...(group.limitSeconds && !(group.kind === 'cortina' && group.fullLength) ? { limitSeconds: group.limitSeconds } : {}),
+    };
+    return { track, ...clip, ...(group.occurrenceIds?.[index] ? { occurrenceId: group.occurrenceIds[index] } : {}), groupId: group.id, kind: group.kind, groupName: group.name, ...(group.holdAfter ? { holdAfter: true } : {}) };
+  }));
 }
 
 export function removeTrack(state, id) {
@@ -38,14 +48,22 @@ export function validateSet(value) {
     if (track.source === 'youtube' && !/^[\w-]{11}$/.test(track.videoId || '')) throw new Error('Invalid YouTube video.');
     for (const field of ['artist', 'singer', 'year', 'style', 'fileName']) if (track[field] != null && typeof track[field] !== 'string') throw new Error('Invalid metadata.');
     for (const field of ['duration', 'bpm', 'rmsDb', 'peakDb', 'gainDb']) if (track[field] != null && (!Number.isFinite(track[field]) || (field === 'duration' && track[field] < 0))) throw new Error('Invalid analysis.');
+    if (track.cueStartSeconds != null && (!Number.isFinite(track.cueStartSeconds) || track.cueStartSeconds < 0 || track.cueStartSeconds > 86400)) throw new Error('Invalid recording cue start.');
+    if (track.cueEndSeconds != null && (!Number.isFinite(track.cueEndSeconds) || track.cueEndSeconds <= (track.cueStartSeconds ?? 0) || track.cueEndSeconds > 90000)) throw new Error('Invalid recording cue end.');
   }
-  const groupIds = new Set();
+  const groupIds = new Set(), occurrenceIds = new Set();
   for (const group of value.groups) {
     if (!group || typeof group.id !== 'string' || groupIds.has(group.id) || typeof group.name !== 'string' || !['tanda', 'cortina'].includes(group.kind) || !Array.isArray(group.trackIds) || group.trackIds.some(id => !ids.has(id))) throw new Error('Invalid tanda data.');
     if (group.limitSeconds != null && (!Number.isFinite(group.limitSeconds) || group.limitSeconds <= 0 || group.limitSeconds > 3600)) throw new Error('Invalid group playback limit.');
     if (group.startSeconds != null && (!Number.isFinite(group.startSeconds) || group.startSeconds < 0 || group.startSeconds > 86400)) throw new Error('Invalid group start position.');
     if (group.holdAfter != null && typeof group.holdAfter !== 'boolean') throw new Error('Invalid group hold setting.');
-    if (group.occurrenceIds != null && (!Array.isArray(group.occurrenceIds) || group.occurrenceIds.length !== group.trackIds.length || group.occurrenceIds.some(id => typeof id !== 'string') || new Set(group.occurrenceIds).size !== group.occurrenceIds.length)) throw new Error('Invalid recording occurrences.');
+    if (group.occurrenceIds != null) {
+      if (!Array.isArray(group.occurrenceIds) || group.occurrenceIds.length !== group.trackIds.length) throw new Error('Invalid recording occurrences.');
+      for (const id of group.occurrenceIds) {
+        if (typeof id !== 'string' || !id.trim() || occurrenceIds.has(id)) throw new Error('Invalid recording occurrences.');
+        occurrenceIds.add(id);
+      }
+    }
     for (const field of ['parentId', 'notes', 'presetId']) if (group[field] != null && typeof group[field] !== 'string') throw new Error('Invalid tanda metadata.');
     for (const field of ['collapsed', 'fullLength']) if (group[field] != null && typeof group[field] !== 'boolean') throw new Error('Invalid tanda setting.');
     groupIds.add(group.id);

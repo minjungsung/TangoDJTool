@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { youtubeId, flattenSet, removeTrack, validateSet } from '../src/model.js';
+import { youtubeId, recordingClip, flattenSet, removeTrack, validateSet } from '../src/model.js';
 import { analyzeSamples } from '../src/analysis.js';
 
 test('YouTube URLs accept canonical variants and reject unrelated hosts', () => {
@@ -73,4 +73,70 @@ test('cortina start positions survive export and queue construction, rejecting i
   const value = { version: 1, tracks: [{ id: 'a', source: 'youtube', title: 'Break', videoId: 'abcdefghijk' }], groups: [{ id: 'g', kind: 'cortina', name: 'Break', trackIds: ['a'], startSeconds: 35, limitSeconds: 20 }] };
   assert.equal(flattenSet(validateSet(value).groups, value.tracks)[0].startSeconds, 35);
   for (const startSeconds of [-1, Infinity, '35', 86401]) assert.throws(() => validateSet({ ...value, groups: [{ ...value.groups[0], startSeconds }] }));
+});
+
+test('recording cues use an absolute end position and preserve saved values beyond a known source end', () => {
+  assert.deepEqual(recordingClip({}), { startSeconds: 0 });
+  assert.deepEqual(recordingClip({ cueStartSeconds: null, cueEndSeconds: null }), { startSeconds: 0 });
+  assert.deepEqual(recordingClip({ cueStartSeconds: 12.5 }), { startSeconds: 12.5 });
+  assert.deepEqual(recordingClip({ cueEndSeconds: 30 }), { startSeconds: 0, limitSeconds: 30 });
+  const track = { duration: 20, cueStartSeconds: 15, cueEndSeconds: 45 };
+  assert.deepEqual(recordingClip(track), { startSeconds: 15, limitSeconds: 30 });
+  assert.deepEqual(track, { duration: 20, cueStartSeconds: 15, cueEndSeconds: 45 });
+});
+
+test('tanda occurrences inherit recording cues while cortinas keep their own ranges', () => {
+  const tracks = [{ id: 'a', cueStartSeconds: 12, cueEndSeconds: 150 }];
+  const groups = [
+    { id: 't', kind: 'tanda', name: 'Tanda', trackIds: ['a', 'a'], occurrenceIds: ['first', 'repeat'], startSeconds: 2, limitSeconds: 10 },
+    { id: 'c', kind: 'cortina', name: 'Short break', trackIds: ['a'], startSeconds: 35, limitSeconds: 20 },
+    { id: 'f', kind: 'cortina', name: 'Remaining break', trackIds: ['a'], startSeconds: 40, limitSeconds: 20, fullLength: true },
+    { id: 'u', kind: 'cortina', name: 'Whole break', trackIds: ['a'], fullLength: true },
+  ];
+  const queue = flattenSet(groups, tracks);
+  assert.deepEqual(queue.map(item => [item.startSeconds, item.limitSeconds]), [[12, 138], [12, 138], [35, 20], [40, undefined], [0, undefined]]);
+  assert.deepEqual(queue.slice(0, 2).map(item => item.occurrenceId), ['first', 'repeat']);
+  assert.equal(queue[0].track, tracks[0]);
+  assert.equal(groups[2].limitSeconds, 20);
+});
+
+test('set import accepts optional recording cues and rejects invalid positions without rewriting source bounds', () => {
+  const valid = { version: 1, tracks: [{ id: 'a', source: 'local', title: 'Music', duration: 15 }], groups: [] };
+  for (const cues of [{}, { cueStartSeconds: null, cueEndSeconds: null }, { cueStartSeconds: 12.5 }, { cueEndSeconds: 20 }, { cueStartSeconds: 86400, cueEndSeconds: 90000 }]) {
+    const track = { ...valid.tracks[0], ...cues };
+    assert.equal(validateSet({ ...valid, tracks: [track] }).tracks[0], track);
+  }
+  for (const cueStartSeconds of [-1, 86401, Infinity, NaN, '12', true]) {
+    assert.throws(() => validateSet({ ...valid, tracks: [{ ...valid.tracks[0], cueStartSeconds }] }), /cue start/);
+  }
+  for (const cueEndSeconds of [0, -1, 90001, Infinity, NaN, '20', true]) {
+    assert.throws(() => validateSet({ ...valid, tracks: [{ ...valid.tracks[0], cueEndSeconds }] }), /cue end/);
+  }
+  for (const cueEndSeconds of [10, 9]) {
+    assert.throws(() => validateSet({ ...valid, tracks: [{ ...valid.tracks[0], cueStartSeconds: 10, cueEndSeconds }] }), /cue end/);
+  }
+});
+
+test('recording occurrence identities remain aligned, nonempty, and unique throughout the live set', () => {
+  const track = { id: 'a', source: 'local', title: 'Music' };
+  const group = { id: 't', kind: 'tanda', name: 'Tanda', trackIds: ['a', 'a'], occurrenceIds: ['first', 'repeat'] };
+  const valid = { version: 1, tracks: [track], groups: [group] };
+  assert.doesNotThrow(() => validateSet(valid));
+  assert.doesNotThrow(() => validateSet({ ...valid, groups: [{ ...group, occurrenceIds: undefined }] }));
+  for (const occurrenceIds of [['first'], ['first', 'first'], ['first', ''], ['first', ' '], ['first', 1], ['first', null], new Array(2)]) {
+    assert.throws(() => validateSet({ ...valid, groups: [{ ...group, occurrenceIds }] }), /occurrences/);
+  }
+  assert.throws(() => validateSet({ ...valid, groups: [group, { ...group, id: 'other', trackIds: ['a'], occurrenceIds: ['first'] }] }), /occurrences/);
+  const cortina = { id: 'c', kind: 'cortina', name: 'Break', trackIds: ['a'], occurrenceIds: ['break'] };
+  assert.doesNotThrow(() => validateSet({ ...valid, groups: [group, cortina], presets: [{ id: 'p', name: 'Reusable', trackIds: ['a'], cortina }] }));
+});
+
+test('removing a recording preserves identities of the remaining repeated placements and preset cortinas', () => {
+  const group = { id: 't', trackIds: ['a', 'b', 'a', 'b'], occurrenceIds: ['a1', 'b1', 'a2', 'b2'] };
+  const state = { tracks: [{ id: 'a' }, { id: 'b' }], groups: [group], presets: [{ id: 'p', trackIds: ['a', 'b'], cortina: group }] };
+  const result = removeTrack(state, 'a');
+  assert.deepEqual(result.groups[0].trackIds, ['b', 'b']);
+  assert.deepEqual(result.groups[0].occurrenceIds, ['b1', 'b2']);
+  assert.deepEqual(result.presets[0].cortina.occurrenceIds, ['b1', 'b2']);
+  assert.deepEqual(group.occurrenceIds, ['a1', 'b1', 'a2', 'b2']);
 });

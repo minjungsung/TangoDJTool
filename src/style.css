@@ -230,3 +230,27 @@ body[data-view] main{scroll-margin-top:20px}
  .group li:has([data-group-action=play-recording])>div{grid-column:2;display:flex;gap:4px}
  .group li:has([data-group-action=play-recording]) button{min-width:44px;min-height:44px}
 }
+
+.performance-tools{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}
+.performance-tools label{display:flex;align-items:center;gap:8px;min-height:44px;line-height:1.5}
+.performance-tools input[type=checkbox]{width:18px;height:18px}
+.live-control{padding:8px 12px;border:1px solid var(--border);border-radius:8px}
+.live-control.active{border-color:var(--accent);background:rgba(215,168,96,.12)}
+.program-runtime{font-size:14px;line-height:1.7;color:var(--muted);overflow-wrap:anywhere}
+.preview-routing{margin:24px 0;padding:18px 0;border-top:1px solid var(--border)}
+.preview-routing h3{margin:0 0 10px}.preview-routing select{width:100%;margin:8px 0 12px;min-width:0}
+.preview-routing label{display:block;line-height:1.6}.preview-routing input[type=range]{width:100%;margin-top:10px}
+.recording-cues{border:1px solid var(--border);padding:16px;margin:18px 0;border-radius:8px;min-width:0}
+.recording-cues legend{padding:0 8px}.recording-cues .hint{margin-top:0}.recording-cues .form-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+#performance-dialog{width:680px;max-width:calc(100vw - 32px)}
+.check-issue{border:1px solid var(--border);border-radius:8px;padding:14px;margin:12px 0;overflow-wrap:anywhere}
+.check-issue.error{border-color:#d98575}.check-issue strong{font-size:13px;color:var(--accent)}
+.check-recording{display:block;margin-top:8px}.check-issue p{line-height:1.6;margin:8px 0 0}
+.session-tools{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0;line-height:1.6}
+.session-tools>span{min-width:0;overflow-wrap:anywhere}.session-tools button{min-height:44px}
+.session-entry{display:grid;gap:8px;padding:14px 0;border-bottom:1px solid var(--border);line-height:1.5;overflow-wrap:anywhere}
+.session-entry span,.session-entry small{color:var(--muted)}
+.history-filter{display:flex;align-items:center;gap:8px;margin:12px 24px;min-height:44px;line-height:1.5}
+.played-badge{display:inline-block;margin:6px 0 0;color:var(--accent);font-size:12px}
+#track-gap{width:72px;min-width:60px}
+@media(max-width:699px){.performance-tools{display:grid;grid-template-columns:minmax(0,1fr)}.performance-tools button{width:100%}.recording-cues .form-row{grid-template-columns:minmax(0,1fr)}}
