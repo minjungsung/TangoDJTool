@@ -6,7 +6,7 @@ Keep the existing product name, Tango DJ Studio. The initial Android build uses 
 
 The installable web manifest and service worker cache the application shell after a successful online launch. Imported audio remains in IndexedDB. YouTube playback still requires a network connection. Updates wait for a later app launch rather than reloading a running set.
 
-The provisional Android application ID is `app.tangodj.studio`; confirm its availability before first publication. Compile and target SDK are Android 16 / API 36. The launcher opens `https://tangodjtool.vercel.app/` in any orientation. Full-screen trusted launch requires Digital Asset Links at that origin for the Play app-signing certificate. Until that verification passes, the browser may show a Custom Tab toolbar.
+The existing Play Console app was confirmed with Android application ID `app.tangodj.studio` on November 9, 2026. Compile and target SDK are Android 16 / API 36. The launcher opens `https://tangodjtool.vercel.app/` in any orientation. Full-screen trusted launch requires Digital Asset Links at that origin for the Play app-signing certificate. Until that verification passes, the browser may show a Custom Tab toolbar.
 
 ## Work sequence
 
@@ -38,7 +38,7 @@ TANGO_APP_SIGNING_SHA256='AA:BB:...' node scripts/android-assetlinks.mjs
 npm run build
 ```
 
-Use the full 32-byte fingerprint, not the illustrative abbreviated value. Deploy the resulting JSON at the HTTPS app origin with a successful JSON response and no redirect. Never substitute an upload certificate for the Play distribution certificate.
+Use the full 32-byte fingerprint, not the illustrative abbreviated value. The generator preserves other existing statements and certificate fingerprints. Deploy the resulting JSON at the HTTPS app origin with a successful JSON response and no redirect. Never substitute an upload certificate for the Play distribution certificate. The genuine statement was deployed and anonymously verified on November 9, 2026; see the [certificate and deployment evidence](readiness.md#deployed-digital-asset-links).
 
 Run `npm run android:preflight` after the web and Android builds. It checks bundle signature integrity, the local Digital Asset Links statement against `TANGO_APP_SIGNING_SHA256`, image dimensions, screenshot source/image hashes, listing length, and the cached web shell. Run `npm run android:preflight -- --check-site` after deploying the genuine statement to verify the HTTPS response. The command exits unsuccessfully while signing or the provider certificate is missing. A passing result does not establish that the upload certificate matches Play Console, that device testing passed, or that Google approved or published the release.
 

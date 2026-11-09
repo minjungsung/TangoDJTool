@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.tangodj.studio",
+      "sha256_cert_fingerprints": [
+        "31:B2:FC:8A:C0:3D:9D:8A:A5:E1:9B:8B:76:85:12:8E:59:E1:61:BE:B4:EF:AE:61:BE:F8:2F:34:C8:46:AE:29"
+      ]
+    }
+  }
+]
