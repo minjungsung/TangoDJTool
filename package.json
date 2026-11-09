@@ -13,7 +13,8 @@
     "test:review": "npm run build && playwright test --config playwright.review.config.js",
     "test:devices": "playwright test --config playwright.devices.config.js",
     "test:install": "npm run build && playwright test --config playwright.install.config.js",
-    "android:assetlinks": "node scripts/android-assetlinks.mjs"
+    "android:assetlinks": "node scripts/android-assetlinks.mjs",
+    "android:preflight": "node scripts/android-release-preflight.mjs"
   },
   "dependencies": {
     "hash-wasm": "^4.12.0",

@@ -20,7 +20,7 @@ The provisional Android application ID is `app.tangodj.studio`; confirm its avai
 
 ## Build
 
-Install JDK 17 and an Android SDK with API 36 and Build Tools 36.0.0. Configure `JAVA_HOME` and `ANDROID_HOME` in your environment; do not commit `local.properties` or workstation paths.
+Install JDK 17 and an Android SDK with API 36. Android Gradle Plugin 8.13.0 selects Build Tools 35.0.0 by default; Gradle can install the selected package when its license has already been accepted. Configure `JAVA_HOME` and `ANDROID_HOME` in your environment; do not commit `local.properties` or workstation paths.
 
 ```sh
 npm ci
@@ -39,6 +39,8 @@ npm run build
 ```
 
 Use the full 32-byte fingerprint, not the illustrative abbreviated value. Deploy the resulting JSON at the HTTPS app origin with a successful JSON response and no redirect. Never substitute an upload certificate for the Play distribution certificate.
+
+Run `npm run android:preflight` after the web and Android builds. It checks bundle signature integrity, the local Digital Asset Links statement against `TANGO_APP_SIGNING_SHA256`, image dimensions, screenshot source/image hashes, listing length, and the cached web shell. Run `npm run android:preflight -- --check-site` after deploying the genuine statement to verify the HTTPS response. The command exits unsuccessfully while signing or the provider certificate is missing. A passing result does not establish that the upload certificate matches Play Console, that device testing passed, or that Google approved or published the release.
 
 ## Review limits and required inputs
 

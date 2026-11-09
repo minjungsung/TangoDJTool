@@ -12,7 +12,7 @@ Prepare tango tandas, set cortina cues, and play your own recordings.
 
 Prepare a tango set on your phone or tablet with Tango DJ Studio.
 
-Add your own recordings, organize them into tandas, and choose start and end cues for cortinas. Use Music, Set, and Play to move from preparation to playback without crowding the phone screen.
+Add your own recordings, collect candidates in sets, organize them into tandas, and set cortina start and end times. Use Music, Sets, Tandas, and Playback to move from preparation to playback without crowding the phone screen.
 
 - Import local audio and edit title, orchestra, singer, year, style, and BPM.
 - Search your library and arrange tandas and cortinas.

@@ -13,6 +13,8 @@ npm run dev
 
 Open the local URL printed by Vite. For a production build, run `npm run build`; `npm run preview` serves that build locally. The app can be hosted as a static site. Use a stable HTTPS origin when deploying, since browser storage belongs to that origin.
 
+For Android packaging and Google Play submission, see the [release plan](docs/release/google-play-plan.md) and [current release readiness](docs/release/readiness.md). `npm run android:preflight` checks local release prerequisites; add `-- --check-site` after deploying Digital Asset Links with the genuine Play app-signing certificate.
+
 ## Phone, tablet, and computer workflows
 
 On a first visit, the example set is already prepared and the Playback work area opens. Press Play to start the examples; YouTube requires a connection. Saved workspaces, including deliberately cleared sets, are preserved.
@@ -85,7 +87,7 @@ YouTube audio is played through the official IFrame API. Videos are not download
 - RMS and peak are measured over the decoded recording. Suggested gain targets approximately -18 dBFS RMS, caps peak at -1 dBFS, and limits gain to ±12 dB. This is not integrated LUFS normalization or a limiter.
 - Analysis decodes one full recording at a time and may use substantial memory for long files.
 - Browser storage can run out or be cleared/evicted. Keep original recordings and export sets. JSON exports contain metadata and group order, not audio.
-- An already-open app can play, edit, save, and export local recordings without a connection. Opening the app from scratch while offline is not guaranteed; there is no service-worker installation yet.
+- After a successful online launch installs the cached application shell, local playback, editing, saving, and export can work offline. A first launch, cleared or evicted browser storage, and YouTube sources require a connection.
 - No account, backend upload, or cross-device sync is required. YouTube and optional web fonts make external network requests.
 
 ## Validation

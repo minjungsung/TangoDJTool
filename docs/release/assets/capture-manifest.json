@@ -1,0 +1,47 @@
+{
+  "capturedAt": "2026-11-09T08:32:10.561794+00:00",
+  "source": {
+    "kind": "local-production-web-build",
+    "gitHead": "29d2a19899dc352d54c51a0ea4a8762f780e08ac",
+    "appSourceSha256": "1f6d53a1880ee4257b07894c8c417c6e5e1bd63785849bac792ef5a25324991c",
+    "sourceDigestRule": "SHA-256 of sorted repository-relative path, NUL, file SHA-256, newline for src JavaScript/CSS, index.html, vite.config.js and package-lock.json."
+  },
+  "browser": "Chromium 156.0.8078.4",
+  "viewportCssPixels": {
+    "width": 405,
+    "height": 720
+  },
+  "deviceScaleFactor": 3,
+  "workspace": "Actual default curated example workspace, English UI, playback paused; no audio or provider mock.",
+  "images": [
+    {
+      "path": "phone-1.jpg",
+      "workArea": "Music",
+      "width": 1215,
+      "height": 2160,
+      "sha256": "f60ba3aea4120c030a38453428e2d5190d3197b03f77cc424274a5a3c7c2228c"
+    },
+    {
+      "path": "phone-2.jpg",
+      "workArea": "Playback",
+      "width": 1215,
+      "height": 2160,
+      "sha256": "cc68c8dd443d627d306c0c7cb33bd012f6cadda056dea2c0ec24320d81d13fb1"
+    },
+    {
+      "path": "phone-3.jpg",
+      "workArea": "Sets",
+      "width": 1215,
+      "height": 2160,
+      "sha256": "6770bbf0f0f28eeb42ec0d60acd303b0677ba740badb1dcc9c42208647a4fe68"
+    },
+    {
+      "path": "phone-4.jpg",
+      "workArea": "Tandas",
+      "width": 1215,
+      "height": 2160,
+      "sha256": "82c893f06c2617bd7586690146a50d785ed15a7de0bf95b69e244c4154ef0faa"
+    }
+  ],
+  "limits": "Phone viewport captures of the production web UI do not establish native installation, audio playback, or verified Trusted Web Activity launch."
+}
