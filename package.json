@@ -19,7 +19,7 @@
     "test:backlog": "playwright test --config playwright.backlog.config.js"
   },
   "dependencies": {
-    "hash-wasm": "^4.12.0",
+    "hash-wasm": "^4.13.0",
     "music-metadata": "^12.2.1"
   },
   "devDependencies": {
